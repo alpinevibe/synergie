@@ -1,0 +1,24 @@
+# ============================================================================
+#  Synergie — application de réorganisation de service
+#  Service local (127.0.0.1) ; l'accès public passe par le vhost nginx
+#  synergie.alpinevibe.fr (proxy inverse).
+# ============================================================================
+[Unit]
+Description=Synergie — réorganisation de service (trames + avis)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/synergie
+Environment=SYNERGIE_PORT=8077
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ubuntu/synergie-venv/bin/python /home/ubuntu/synergie/serveur.py --hote 127.0.0.1 --port 8077
+Restart=always
+RestartSec=4
+StandardOutput=append:/home/ubuntu/synergie/donnees/synergie.log
+StandardError=append:/home/ubuntu/synergie/donnees/synergie.log
+
+[Install]
+WantedBy=multi-user.target

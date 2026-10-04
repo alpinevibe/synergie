@@ -1,0 +1,7 @@
+# Données produites (projets, boîte à trames, générations) : jamais versionnées.
+donnees/projets/
+donnees/boite/
+donnees/generations/
+donnees/*.log
+__pycache__/
+*.pyc
