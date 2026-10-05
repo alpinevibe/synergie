@@ -175,6 +175,16 @@ def api_importer_hermes():
 # ====================================================================================
 # ATELIER COLLABORATIF — thèmes de réflexion, tableau blanc, documents, décisions
 # ====================================================================================
+def _qui() -> str:
+    """Le prénom de la personne qui agit : envoyé par la page dans l'en-tête
+    « X-Synergie-Nom ». Il sert à journaliser les actions (demande du 05/10/2026)."""
+    nom = (request.headers.get("X-Synergie-Nom") or "").strip()
+    if not nom:
+        corps = request.get_json(silent=True) or {}
+        nom = (corps.get("auteur") or corps.get("qui") or "").strip()
+    return nom[:60] or "Anonyme"
+
+
 def _theme(identifiant: str) -> dict:
     theme = m_atelier.lire_theme(identifiant)
     if not theme:
@@ -196,7 +206,7 @@ def api_themes():
             return jsonify({"erreur": "Le titre est obligatoire."}), 400
         theme = m_atelier.creer_theme(titre, corps.get("description", ""),
                                       corps.get("couleur", ""), corps.get("projet", ""),
-                                      corps.get("auteur", ""))
+                                      _qui())
         return jsonify(theme), 201
     return jsonify({"themes": m_atelier.lister_themes()})
 
@@ -209,23 +219,27 @@ def api_theme(identifiant):
         return jsonify({"ok": True})
     if request.method == "PUT":
         _theme(identifiant)
-        return jsonify(m_atelier.maj_theme(identifiant, request.get_json(silent=True) or {}))
-    return jsonify(m_atelier.resume(identifiant))
+        return jsonify(m_atelier.maj_theme(identifiant, request.get_json(silent=True) or {},
+                                           _qui()))
+    return jsonify(m_atelier.resume(identifiant, _qui()))
 
 
 @app.route("/api/themes/<identifiant>/notes", methods=["POST"])
 def api_note_creer(identifiant):
     _theme(identifiant)
-    return jsonify(m_atelier.creer_note(identifiant, request.get_json(silent=True) or {})), 201
+    corps = request.get_json(silent=True) or {}
+    corps["auteur"] = corps.get("auteur") or _qui()
+    return jsonify(m_atelier.creer_note(identifiant, corps)), 201
 
 
 @app.route("/api/themes/<identifiant>/notes/<note>", methods=["PUT", "DELETE"])
 def api_note(identifiant, note):
     _theme(identifiant)
     if request.method == "DELETE":
-        m_atelier.supprimer_note(identifiant, note)
+        m_atelier.supprimer_note(identifiant, note, _qui())
         return jsonify({"ok": True})
-    resultat = m_atelier.maj_note(identifiant, note, request.get_json(silent=True) or {})
+    resultat = m_atelier.maj_note(identifiant, note, request.get_json(silent=True) or {},
+                                  _qui())
     if resultat is None:
         return jsonify({"erreur": "Note inconnue"}), 404
     return jsonify(resultat)
@@ -239,20 +253,33 @@ def api_decision_creer(identifiant):
         return jsonify({"erreur": "L'intitulé est obligatoire."}), 400
     return jsonify(m_atelier.creer_decision(identifiant, corps.get("intitule"),
                                             corps.get("detail", ""),
-                                            corps.get("auteur", ""))), 201
+                                            corps.get("auteur") or _qui())), 201
 
 
 @app.route("/api/themes/<identifiant>/decisions/<decision>", methods=["PUT", "DELETE"])
 def api_decision(identifiant, decision):
     _theme(identifiant)
     if request.method == "DELETE":
-        m_atelier.supprimer_decision(identifiant, decision)
+        m_atelier.supprimer_decision(identifiant, decision, _qui())
         return jsonify({"ok": True})
     resultat = m_atelier.maj_decision(identifiant, decision,
-                                      request.get_json(silent=True) or {})
+                                      request.get_json(silent=True) or {}, _qui())
     if resultat is None:
         return jsonify({"erreur": "Décision inconnue"}), 404
     return jsonify(resultat)
+
+
+@app.route("/api/themes/<identifiant>/decisions/<decision>/votes", methods=["POST"])
+def api_voter(identifiant, decision):
+    """Vote ANONYME sur une décision : une seule fois par personne. Le nom n'est jamais
+    enregistré — seul le serveur peut reconnaître « cette personne a déjà voté »."""
+    _theme(identifiant)
+    corps = request.get_json(silent=True) or {}
+    try:
+        resultat = m_atelier.voter(identifiant, decision, _qui(), corps.get("valeur", ""))
+    except ValueError as erreur:
+        return jsonify({"erreur": str(erreur)}), 400
+    return jsonify(resultat), (200 if resultat.get("ok") else 409)
 
 
 @app.route("/api/themes/<identifiant>/documents", methods=["POST"])
@@ -264,7 +291,7 @@ def api_document_ajouter(identifiant):
     try:
         document = m_atelier.ajouter_document(
             identifiant, depot.filename, depot.read(), depot.mimetype or "",
-            request.form.get("note", ""), request.form.get("auteur", ""))
+            request.form.get("note", ""), request.form.get("auteur") or _qui())
     except ValueError as erreur:
         return jsonify({"erreur": str(erreur)}), 413
     return jsonify(document), 201
@@ -285,7 +312,7 @@ def api_document_fichier(identifiant, document):
 @app.route("/api/themes/<identifiant>/documents/<document>", methods=["DELETE"])
 def api_document_supprimer(identifiant, document):
     _theme(identifiant)
-    m_atelier.supprimer_document(identifiant, document)
+    m_atelier.supprimer_document(identifiant, document, _qui())
     return jsonify({"ok": True})
 
 

@@ -184,6 +184,30 @@ def test_atelier():
     m_atelier.desabonner(theme["id"], numero)
     verifie(m_atelier.participants(theme["id"]) == [], "le participant est retiré à la déconnexion")
 
+    # --- journal des actions ---
+    lignes = m_atelier.lister_journal(theme["id"])
+    actions = {l["action"] for l in lignes}
+    verifie({"theme_cree", "note_creee", "decision_proposee"} <= actions,
+            "le journal enregistre qui a fait quoi (thème, note, décision)")
+    verifie(any(l["qui"] == "Tests" for l in lignes), "les actions portent le prénom de la personne")
+
+    # --- votes anonymes, une seule fois par personne ---
+    premier = m_atelier.voter(theme["id"], decision["id"], "Camille", "pour")
+    verifie(premier.get("ok") and premier["comptes"]["pour"] == 1, "premier vote enregistré")
+    second = m_atelier.voter(theme["id"], decision["id"], "Camille", "contre")
+    verifie(second.get("ok") is False and second.get("deja"),
+            "la même personne ne peut pas voter deux fois")
+    autre = m_atelier.voter(theme["id"], decision["id"], "Dominique", "contre")
+    verifie(autre["comptes"] == {"pour": 1, "contre": 1, "neutre": 0, "total": 2},
+            "les votes des autres s'additionnent (pour 1, contre 1)")
+    with m_atelier.connexion() as base:
+        colonnes = {l[1] for l in base.execute("pragma table_info(votes)")}
+    verifie("empreinte" in colonnes and not ({"nom", "qui", "votant"} & colonnes),
+            "le nom de la personne n'est JAMAIS écrit dans les votes (anonymat)")
+    verifie(m_atelier.decisions_votees(theme["id"], "Camille") == [decision["id"]]
+            and m_atelier.decisions_votees(theme["id"], "Inconnu") == [],
+            "chacun sait s'il a déjà voté, sans apprendre les votes des autres")
+
     m_atelier.supprimer_theme(theme["id"])
     verifie(m_atelier.lire_theme(theme["id"]) is None, "thème supprimé avec tout son contenu")
 

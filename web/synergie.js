@@ -18,6 +18,9 @@
   let decisions = [];
   let documents = [];
   let participants = [];
+  let journal = [];                      // journal des actions du thème
+  let votes = {};                        // décompte des votes par décision
+  let mesVotes = [];                     // décisions sur lesquelles j'ai déjà voté
   let selection = null;                  // note en cours d'édition
   let flux = null;                       // flux temps réel
   let vue = { x: 40, y: 40, z: 1 };      // déplacement et zoom du tableau
@@ -31,6 +34,8 @@
   // ---------------------------------------------------------------- appels au serveur
   async function appel(chemin, { methode = 'GET', corps = null, donnees = null } = {}) {
     const options = { method: methode, headers: {} };
+    // Le prénom accompagne chaque appel : le serveur journalise ainsi qui agit.
+    if (monNom()) options.headers['X-Synergie-Nom'] = monNom();
     if (corps !== null) {
       options.headers['Content-Type'] = 'application/json';
       options.body = JSON.stringify(corps);
@@ -87,6 +92,8 @@
     const donnees = await appel('/api/themes/' + encodeURIComponent(identifiant));
     theme = donnees.theme; notes = donnees.notes || []; decisions = donnees.decisions || [];
     documents = donnees.documents || []; participants = donnees.participants || [];
+    journal = donnees.journal || []; votes = donnees.votes || {};
+    mesVotes = donnees.mes_votes || [];
     $('#vue-themes').classList.add('cache');
     $('#vue-theme').classList.remove('cache');
     $('#titre-theme').value = theme.titre || '';
@@ -95,6 +102,7 @@
     dessinerNotes();
     afficherDocuments();
     afficherDecisions();
+    afficherJournal();
     afficherOutils();
     brancherFlux();
     if (pousser && location.hash !== '#t=' + identifiant) {
@@ -105,6 +113,7 @@
   function fermerTheme() {
     if (flux) { flux.close(); flux = null; }
     theme = null; notes = []; decisions = []; documents = []; participants = [];
+    journal = []; votes = {}; mesVotes = [];
     $('#vue-theme').classList.add('cache');
     $('#vue-themes').classList.remove('cache');
     history.replaceState(null, '', location.pathname);
@@ -119,6 +128,17 @@
                  description: $('#description-theme').value.trim() } });
       theme.titre = $('#titre-theme').value.trim();
     } catch (erreur) { alert('Enregistrement impossible : ' + erreur.message); }
+  }
+
+  /** Après un changement de prénom : journal et « ai-je déjà voté » sont rafraîchis. */
+  async function chargerJournalEtVotes() {
+    if (!theme) return;
+    try {
+      const donnees = await appel('/api/themes/' + theme.id);
+      journal = donnees.journal || []; votes = donnees.votes || {};
+      mesVotes = donnees.mes_votes || [];
+      afficherJournal(); afficherDecisions();
+    } catch (erreur) { /* sans conséquence */ }
   }
 
   // ================================================================ TEMPS RÉEL
@@ -174,6 +194,15 @@
         break;
       case 'curseur':
         signalerCurseur(evenement.qui, evenement.note);
+        break;
+      case 'journal':
+        journal.unshift(evenement.entree);
+        if (journal.length > 300) journal.pop();
+        afficherJournal();
+        break;
+      case 'vote':
+        votes = Object.assign({}, votes, { [evenement.decision]: evenement.comptes });
+        afficherDecisions();
         break;
       case 'theme_supprime':
         fermerTheme();
@@ -247,31 +276,66 @@
   function construireNote(note) {
     const noeud = element('div', { classe: 'note' });
     noeud.dataset.id = note.id;
+
     const barre = element('div', { classe: 'note-barre' });
-    const poignee = element('span', { classe: 'poignee', texte: '⠿' });
-    poignee.title = 'Faire glisser la note';
     const auteur = element('span', { classe: 'note-auteur' });
+    const crayon = element('button', { classe: 'crayon', texte: '✏️' });
+    crayon.title = 'Modifier ce qui est écrit';
     const supprimer = element('button', { classe: 'note-suppr', texte: '×' });
     supprimer.title = 'Supprimer la note';
-    barre.append(poignee, auteur, supprimer);
+    poser(barre, auteur, crayon, supprimer);
+
     const texte = element('div', { classe: 'note-texte' });
-    texte.contentEditable = 'true';
     texte.spellcheck = false;
     const poigneeTaille = element('span', { classe: 'poignee-taille' });
-    noeud.append(barre, texte, poigneeTaille);
+    poigneeTaille.title = 'Redimensionner';
+    poser(noeud, barre, texte, poigneeTaille);
 
-    // écrire
-    texte.addEventListener('focus', () => {
+    let enEdition = false;
+
+    /** On écrit dans la note : le texte devient modifiable (demande du 05/10/2026). */
+    function modifier(invitation) {
+      enEdition = true;
+      texte.contentEditable = 'true';
+      noeud.classList.add('en-edition');
       selectionner(note.id);
       envoyerCurseur(note.id);
+      texte.focus();
+      if (invitation && textoVide(texte)) texte.textContent = '';
+      // le curseur se place à la fin du texte existant
+      const plage = document.createRange();
+      plage.selectNodeContents(texte);
+      plage.collapse(false);
+      const choix = window.getSelection();
+      choix.removeAllRanges();
+      choix.addRange(plage);
+    }
+
+    /** On arrête d'écrire : la note redevient une note que l'on déplace. */
+    function terminer() {
+      if (!enEdition) return;
+      enEdition = false;
+      texte.contentEditable = 'false';
+      noeud.classList.remove('en-edition');
+      envoyerCurseur(null);
+      const courante = notes.find((n) => n.id === note.id);
+      if (courante) courante.texte = texte.textContent;
+      sauver(note.id, { texte: texte.textContent });
+    }
+
+    crayon.addEventListener('click', (evenement) => {
+      evenement.stopPropagation();
+      if (enEdition) terminer(); else modifier();
     });
-    texte.addEventListener('blur', () => envoyerCurseur(null));
+    texte.addEventListener('blur', terminer);
+    texte.addEventListener('keydown', (evenement) => {
+      if (evenement.key === 'Escape') { evenement.preventDefault(); texte.blur(); }
+    });
     texte.addEventListener('input', () => {
       const courante = notes.find((n) => n.id === note.id);
       if (courante) courante.texte = texte.textContent;
       programmer(note.id, () => sauver(note.id, { texte: texte.textContent }, 'texte'), 700);
     });
-    texte.addEventListener('pointerdown', (evenement) => evenement.stopPropagation());
 
     supprimer.addEventListener('click', (evenement) => {
       evenement.stopPropagation();
@@ -279,50 +343,66 @@
       appel('/api/themes/' + theme.id + '/notes/' + note.id, { methode: 'DELETE' });
     });
 
-    // déplacer (on suit la souris et on enregistre au relâchement)
-    poignee.addEventListener('pointerdown', (evenement) => {
+    // ---- déplacer : en cliquant N'IMPORTE OÙ sur la note (hors crayon, croix et coin) ----
+    noeud.addEventListener('pointerdown', (evenement) => {
+      if (enEdition || evenement.target.closest('.crayon, .note-suppr, .poignee-taille')) return;
       evenement.preventDefault();
-      poignee.setPointerCapture(evenement.pointerId);
-      const depart = { x: evenement.clientX, y: evenement.clientY,
-                       ox: note.x, oy: note.y };
-      const bouger = (e) => {
-        note.x = depart.ox + (e.clientX - depart.x) / vue.z;
-        note.y = depart.oy + (e.clientY - depart.y) / vue.z;
+      selectionner(note.id);
+      noeud.setPointerCapture(evenement.pointerId);
+      const depart = { x: evenement.clientX, y: evenement.clientY, ox: note.x, oy: note.y };
+      let bouge = false;
+      const deplacer = (e) => {
+        const dx = (e.clientX - depart.x) / vue.z, dy = (e.clientY - depart.y) / vue.z;
+        if (!bouge && Math.abs(dx) + Math.abs(dy) < 3) return;   // simple appui : rien
+        bouge = true;
+        noeud.classList.add('deplacee');
+        note.x = depart.ox + dx;
+        note.y = depart.oy + dy;
         noeud.style.left = note.x + 'px';
         noeud.style.top = note.y + 'px';
         programmer('pos-' + note.id, () => sauver(note.id, { x: note.x, y: note.y }), 350);
       };
       const relacher = () => {
-        poignee.removeEventListener('pointermove', bouger);
-        poignee.removeEventListener('pointerup', relacher);
-        sauver(note.id, { x: note.x, y: note.y });
+        noeud.removeEventListener('pointermove', deplacer);
+        noeud.removeEventListener('pointerup', relacher);
+        noeud.removeEventListener('pointercancel', relacher);
+        noeud.classList.remove('deplacee');
+        if (bouge) sauver(note.id, { x: note.x, y: note.y });
       };
-      poignee.addEventListener('pointermove', bouger);
-      poignee.addEventListener('pointerup', relacher);
+      noeud.addEventListener('pointermove', deplacer);
+      noeud.addEventListener('pointerup', relacher);
+      noeud.addEventListener('pointercancel', relacher);
     });
 
-    // redimensionner
+    // un double-appui écrit directement dans la note
+    noeud.addEventListener('dblclick', (evenement) => {
+      evenement.stopPropagation();
+      if (!enEdition) modifier();
+    });
+
+    // ---- redimensionner ----
     poigneeTaille.addEventListener('pointerdown', (evenement) => {
       evenement.preventDefault(); evenement.stopPropagation();
       poigneeTaille.setPointerCapture(evenement.pointerId);
       const depart = { x: evenement.clientX, largeur: note.largeur };
-      const bouger = (e) => {
+      const etirer = (e) => {
         note.largeur = Math.max(160, depart.largeur + (e.clientX - depart.x) / vue.z);
         noeud.style.width = note.largeur + 'px';
         programmer('larg-' + note.id, () => sauver(note.id, { largeur: note.largeur }), 350);
       };
       const relacher = () => {
-        poigneeTaille.removeEventListener('pointermove', bouger);
+        poigneeTaille.removeEventListener('pointermove', etirer);
         poigneeTaille.removeEventListener('pointerup', relacher);
         sauver(note.id, { largeur: note.largeur });
       };
-      poigneeTaille.addEventListener('pointermove', bouger);
+      poigneeTaille.addEventListener('pointermove', etirer);
       poigneeTaille.addEventListener('pointerup', relacher);
     });
 
-    noeud.addEventListener('pointerdown', () => selectionner(note.id));
     return noeud;
   }
+
+  function textoVide(noeud) { return !(noeud.textContent || '').trim(); }
 
   function dessinerNotes() {
     $('#monde').innerHTML = '';
@@ -395,8 +475,8 @@
     notes.push(note);
     poserNote(note);
     selectionner(note.id);
-    const texte = document.querySelector(`.note[data-id="${note.id}"] .note-texte`);
-    if (texte) { texte.focus(); }
+    const crayon = document.querySelector(`.note[data-id="${note.id}"] .crayon`);
+    if (crayon) crayon.click();          // la note neuve s'ouvre en écriture
     return note;
   }
 
@@ -540,6 +620,29 @@
             `Proposée par ${decision.auteur || 'quelqu\'un'} ${quand(decision.cree_le)}` +
             (decision.decide_le ? ` · ${libelle(decision.statut)} ${quand(decision.decide_le)}${decision.decide_par ? ' par ' + decision.decide_par : ''}` : '') })
         );
+
+        // ---- les votes : tout le monde vote une fois, et les votes sont anonymes ----
+        const comptes = votes[decision.id] || { pour: 0, contre: 0, neutre: 0, total: 0 };
+        poser(carte, element('div', { classe: 'votes' },
+          element('span', { classe: 'etiquette', texte: 'Votes anonymes' }),
+          element('span', { classe: 'compteur pour', texte: 'Pour ' + comptes.pour }),
+          element('span', { classe: 'compteur contre', texte: 'Contre ' + comptes.contre }),
+          element('span', { classe: 'compteur neutre', texte: 'Neutre ' + comptes.neutre }),
+          element('span', { classe: 'meta', texte: comptes.total
+            ? comptes.total + ' vote(s) — personne ne sait qui a voté quoi'
+            : 'aucun vote pour le moment' })));
+        if (mesVotes.includes(decision.id)) {
+          carte.append(element('p', { classe: 'meta deja-vote',
+            texte: '✓ Vous avez voté (votre vote reste anonyme).' }));
+        } else {
+          const barreVote = element('div', { classe: 'barre-boutons barre-vote' });
+          [['pour', 'Pour'], ['contre', 'Contre'], ['neutre', 'Neutre']].forEach(([valeur, mot]) => {
+            const bouton = element('button', { classe: 'petit', texte: mot });
+            bouton.addEventListener('click', () => voter(decision, valeur));
+            barreVote.append(bouton);
+          });
+          carte.append(barreVote);
+        }
         const boutons = element('div', { classe: 'barre-boutons' });
         [['adoptee', 'Adopter'], ['rejetee', 'Rejeter'], ['en attente', 'En attente']].forEach(([statut, texte]) => {
           const bouton = element('button', { classe: 'petit ' + (statut === 'adoptee' ? 'principal' : 'discret'),
@@ -556,6 +659,49 @@
         poser(carte, boutons);
         zone.append(carte);
       });
+  }
+
+  /** Vote ANONYME : une seule fois par personne. Le serveur ne garde jamais le nom. */
+  async function voter(decision, valeur) {
+    try {
+      const resultat = await appel(
+        `/api/themes/${theme.id}/decisions/${decision.id}/votes`,
+        { methode: 'POST', corps: { valeur } });
+      if (resultat && resultat.ok) {
+        mesVotes = mesVotes.concat([decision.id]);
+        votes = Object.assign({}, votes, { [decision.id]: resultat.comptes });
+        afficherDecisions();
+      }
+    } catch (erreur) {
+      alert(erreur.message || 'Le vote n\'a pas pu être enregistré.');
+    }
+  }
+
+  const ACTIONS = {
+    theme_cree: 'a créé le thème', theme_modifie: 'a modifié le thème',
+    note_creee: 'a écrit une note', note_modifiee: 'a modifié une note',
+    note_deplacee: 'a déplacé une note', note_supprimee: 'a supprimé une note',
+    decision_proposee: 'a proposé une décision', decision_modifiee: 'a modifié une décision',
+    decision_tranchee: 'a tranché une décision', decision_supprimee: 'a supprimé une décision',
+    vote: 'a voté', document_depose: 'a déposé un document',
+    document_supprime: 'a supprimé un document', arrivee: 'est arrivé dans le thème'
+  };
+
+  function afficherJournal() {
+    const zone = $('#liste-journal');
+    if (!zone) return;
+    zone.innerHTML = '';
+    if (!journal.length) {
+      zone.append(element('p', { classe: 'vide', texte: 'Aucune action enregistrée pour le moment.' }));
+      return;
+    }
+    journal.forEach((entree) => {
+      poser(zone, element('div', { classe: 'carte entree-journal' },
+        element('span', { classe: 'qui', texte: entree.qui || 'Quelqu\'un' }),
+        element('span', { classe: 'quoi', texte: ACTIONS[entree.action] || entree.action }),
+        entree.details ? element('span', { classe: 'details', texte: '« ' + entree.details + ' »' }) : null,
+        element('span', { classe: 'quand', texte: quand(entree.quand) })));
+    });
   }
 
   function libelle(statut) {
@@ -613,12 +759,13 @@
     return parent;
   }
 
-  function element(balise, { classe = '', texte = '', style = '', attrs = {} } = {}) {
+  function element(balise, { classe = '', texte = '', style = '', attrs = {} } = {}, ...enfants) {
     const noeud = document.createElement(balise);
     if (classe) noeud.className = classe;
     if (texte !== '') noeud.textContent = texte;
     if (style) noeud.setAttribute('style', style);
     Object.entries(attrs).forEach(([cle, valeur]) => noeud.setAttribute(cle, valeur));
+    poser(noeud, ...enfants);
     return noeud;
   }
 
@@ -638,8 +785,10 @@
   function brancher() {
     $('#mon-nom').value = monNom();
     $('#mon-nom').addEventListener('change', (e) => {
-      retenirNom(e.target.value);
-      if (theme) brancherFlux();          // on se présente à nouveau aux autres
+      const valeur = (e.target.value || '').trim();
+      if (!valeur) { e.target.value = monNom(); return; }   // un prénom vide n'a pas de sens
+      retenirNom(valeur);
+      if (theme) { brancherFlux(); chargerJournalEtVotes(); }
     });
 
     $('#btn-nouveau-theme').addEventListener('click', async () => {
@@ -763,12 +912,40 @@
   }
 
   // ================================================================ DÉMARRAGE
+  /** À l'ouverture : on demande le prénom (demande du 05/10/2026). Tant qu'il n'est pas
+      donné, on n'entre pas dans l'atelier — car toute action est journalisée. */
+  function demanderPrenom() {
+    const voile = $('#accueil-nom');
+    const champ = $('#prenom');
+    voile.classList.remove('cache');
+    setTimeout(() => champ.focus(), 200);
+
+    function valider() {
+      const valeur = (champ.value || '').trim();
+      if (!valeur) { champ.classList.add('manquant'); champ.focus(); return; }
+      retenirNom(valeur);
+      $('#mon-nom').value = valeur;
+      voile.classList.add('cache');
+      entrerDansLAtelier();
+    }
+    $('#btn-prenom').addEventListener('click', valider);
+    champ.addEventListener('keydown', (evenement) => {
+      if (evenement.key === 'Enter') valider();
+    });
+    champ.addEventListener('input', () => champ.classList.remove('manquant'));
+  }
+
+  async function entrerDansLAtelier() {
+    await chargerThemes();
+    const cible = (location.hash.match(/#t=(.+)/) || [])[1];
+    if (cible) { try { await ouvrirTheme(cible, { pousser: false }); } catch (e) { /* inconnu */ } }
+  }
+
   async function demarrer() {
     brancher();
     appliquerVue();
-    await chargerThemes();
-    const cible = (location.hash.match(/#t=(.+)/) || [])[1];
-    if (cible) { try { await ouvrirTheme(cible, { pousser: false }); } catch (e) { /* thème inconnu */ } }
+    if (!monNom()) { demanderPrenom(); return; }   // le prénom d'abord
+    await entrerDansLAtelier();
   }
 
   document.addEventListener('DOMContentLoaded', demarrer);

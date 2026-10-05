@@ -21,6 +21,21 @@
   <a class="lien-outils" href="outils.html" title="Générateur de trames et avis">Outils de réorganisation</a>
 </header>
 
+<!-- ======================= QUI ÊTES-VOUS ? ======================= -->
+<!-- Demandé à l'ouverture (05/10/2026) : toutes les actions du travail commun sont
+     journalisées, il faut donc savoir qui agit. Le prénom reste sur l'appareil. -->
+<div id="accueil-nom" class="voile cache">
+  <div class="boite-nom">
+    <div class="logo-nom">✷</div>
+    <h2>Bienvenue dans Synergie</h2>
+    <p class="aide">Indiquez votre <strong>prénom</strong> : tout ce qui se fait dans
+      l'atelier est journalisé — qui écrit une note, qui propose une décision, qui vote.
+      Il reste enregistré sur cet appareil, vous ne le saisirez qu'une fois.</p>
+    <input id="prenom" placeholder="Votre prénom" autocomplete="given-name" maxlength="40">
+    <button id="btn-prenom" class="principal">Entrer dans l'atelier</button>
+  </div>
+</div>
+
 <!-- ======================= LISTE DES THÈMES ======================= -->
 <main id="vue-themes">
   <div class="entete-vue">
@@ -51,6 +66,7 @@
     <button data-onglet="tableau" class="actif">Tableau blanc</button>
     <button data-onglet="documents">Documents</button>
     <button data-onglet="decisions">Décisions</button>
+    <button data-onglet="journal">Journal</button>
     <button data-onglet="outils">Outils</button>
   </nav>
 
@@ -123,6 +139,16 @@
     <div id="liste-decisions" class="liste-decisions"></div>
   </section>
 
+  <!-- ---- le journal des actions ---- -->
+  <section id="onglet-journal" class="onglet cache">
+    <div class="carte">
+      <h3>Journal du thème</h3>
+      <p class="aide">Qui a fait quoi, et quand. Rien ne s'efface : c'est la mémoire du
+        travail commun.</p>
+    </div>
+    <div id="liste-journal" class="liste-journal"></div>
+  </section>
+
   <!-- ---- les outils (dont le générateur de trames) ---- -->
   <section id="onglet-outils" class="onglet cache">
     <div class="carte">
@@ -130,10 +156,25 @@
       <p class="aide">Le générateur de trames, la boîte à trames et la synthèse des avis sont
         des outils : ils servent le thème, ils ne le remplacent pas. Chaque thème peut être
         relié à un projet.</p>
-      <div id="outils-lies" class="outils-lies"></div>
-      <div class="barre-boutons">
-        <a class="principal petit" href="outils.html">Ouvrir les outils (trames, avis, synthèse)</a>
+      <div class="outils-liens">
+        <a class="lien-outil principal" href="boite-trame.html">
+          <span class="icone-outil">🧩</span>
+          <span>
+            <b>Boîte à trames</b>
+            <em>Décrivez la profession, l'effectif et les postes : l'outil calcule les ETP
+              nécessaires et propose jusqu'à 3 trames, vérifiées par rapport à la
+              réglementation du travail.</em>
+          </span>
+        </a>
+        <a class="lien-outil" href="outils.html">
+          <span class="icone-outil">📋</span>
+          <span>
+            <b>Avis et synthèse</b>
+            <em>Recueillir les souhaits de chacun et voir le résultat d'ensemble.</em>
+          </span>
+        </a>
       </div>
+      <div id="outils-lies" class="outils-lies"></div>
     </div>
   </section>
 </main>

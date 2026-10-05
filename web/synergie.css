@@ -151,12 +151,23 @@ textarea { margin-top: 8px; resize: vertical; }
 }
 .note.trouvee { outline: 3px solid #e8b93a; }
 .note.estompee { opacity: .35; }
-.note-barre { display: flex; align-items: center; gap: 6px; opacity: .5; }
-.note:hover .note-barre { opacity: 1; }
-.poignee { cursor: grab; font-size: 14px; color: #6b7a90; }
-.note-auteur { font-size: 11px; color: #6b7a90; flex: 1; }
-.note-suppr { border: none; background: transparent; color: #6b7a90; font-size: 15px; padding: 0 4px; }
+/* Une note se déplace en la tirant N'IMPORTE OÙ ; le crayon (au survol) sert à écrire
+   dedans (demande de l'utilisateur, 05/10/2026). */
+.note { cursor: grab; touch-action: none; }   /* le glissement au doigt doit marcher */
+.note.deplacee { cursor: grabbing; box-shadow: 0 10px 24px rgba(30, 42, 58, .22); }
+.note.en-edition { cursor: text; outline: 2px solid var(--accent); outline-offset: 1px; }
+.note-barre { display: flex; align-items: center; gap: 4px; min-height: 22px; }
+.note-auteur { font-size: 11px; color: #6b7a90; flex: 1; opacity: .75;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crayon, .note-suppr { border: none; background: transparent; font-size: 14px; padding: 0 4px;
+  opacity: 0; transition: opacity .12s ease; }
+.note:hover .crayon, .note:hover .note-suppr, .note.en-edition .crayon { opacity: .75; }
+.crayon:hover, .note-suppr:hover { opacity: 1; }
+.note-suppr { color: #6b7a90; font-size: 16px; }
 .note-suppr:hover { color: var(--danger); }
+.note-texte[contenteditable="true"] { cursor: text; }
+.note-texte[contenteditable="true"]:empty::before {
+  content: 'Écrivez ici…'; color: #93a1b5; }
 .note-texte { flex: 1; outline: none; white-space: pre-wrap; word-break: break-word; padding: 4px 2px;
   line-height: 1.35; }
 .poignee-taille { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px;
@@ -190,3 +201,47 @@ a.principal.petit { display: inline-block; text-decoration: none; }
   main { padding: 14px; }
   .plateau { height: calc(100vh - 380px); }
 }
+
+
+/* ---- demander le prénom à l'ouverture (05/10/2026) ---- */
+.voile { position: fixed; inset: 0; background: #1e2a3acc; display: grid; place-items: center;
+  z-index: 50; padding: 20px; }
+.boite-nom { background: var(--carte); border-radius: 18px; padding: 26px 24px; max-width: 460px;
+  width: 100%; text-align: center; box-shadow: 0 20px 60px rgba(0, 0, 0, .3); }
+.logo-nom { font-size: 34px; color: var(--accent); }
+.boite-nom h2 { margin: 6px 0 10px; }
+.boite-nom input { width: 100%; margin: 14px 0 12px; padding: 12px 14px; font-size: 16px;
+  border: 1px solid var(--bord); border-radius: 10px; text-align: center; }
+.boite-nom input.manquant { border-color: var(--danger); background: #fdf5f4; }
+.boite-nom button { width: 100%; padding: 12px; }
+
+/* ---- votes anonymes sur une décision ---- */
+.votes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px;
+  padding-top: 10px; border-top: 1px dashed var(--bord); }
+.compteur { font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+.compteur.pour { background: #e9f9ee; color: #14664a; }
+.compteur.contre { background: #fdeceb; color: #8f2b22; }
+.compteur.neutre { background: #eef1f6; color: #556173; }
+.barre-vote { margin-top: 8px; }
+.deja-vote { color: var(--accent-2); font-weight: 600; }
+
+/* ---- journal des actions ---- */
+.liste-journal .entree-journal { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 10px 14px; margin-bottom: 8px; font-size: 13.5px; }
+.entree-journal .qui { font-weight: 700; color: var(--accent); }
+.entree-journal .quoi { color: var(--encre); }
+.entree-journal .details { color: var(--doux); font-style: italic; }
+.entree-journal .quand { margin-left: auto; color: #93a1b5; font-size: 12px; }
+
+/* ---- les outils du thème (dont la boîte à trames) ---- */
+.outils-liens { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px; margin: 12px 0; }
+.lien-outil { display: flex; gap: 12px; align-items: flex-start; text-decoration: none;
+  color: var(--encre); background: var(--carte); border: 1px solid var(--bord);
+  border-radius: var(--rayon); padding: 14px 16px; box-shadow: var(--ombre); }
+.lien-outil:hover { border-color: var(--accent); }
+.lien-outil.principal { border-left: 5px solid var(--accent); }
+.lien-outil b { display: block; font-size: 15px; }
+.lien-outil em { display: block; font-style: normal; font-size: 12.5px; color: var(--doux);
+  margin-top: 3px; }
+.icone-outil { font-size: 22px; }
