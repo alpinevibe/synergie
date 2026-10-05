@@ -189,7 +189,10 @@ def analyser(description: dict) -> dict:
         + eff["fixes_nuit"] * 1.0 + eff["dispensees_nuit"] * 1.0, 2)
 
     ecart = round(etp_disponibles - etp_necessaires, 2)
-    if ecart >= 0:
+    if abs(ecart) < 0.05:
+        phrase = "L'effectif disponible correspond au besoin."
+        etat = "juste"
+    elif ecart > 0:
         phrase = f"Il reste {_fr(ecart)} ETP disponible" + ("s" if ecart > 1 else "")
         etat = "surplus"
     else:

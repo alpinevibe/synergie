@@ -18,6 +18,7 @@ RACINE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, RACINE)
 
 from moteur import atelier as m_atelier                 # noqa: E402
+from moteur import boite_trame as m_boite_trame         # noqa: E402
 from moteur import avis as m_avis                       # noqa: E402
 from moteur import boite as m_boite                     # noqa: E402
 from moteur import projet as m_projet                   # noqa: E402
@@ -195,6 +196,25 @@ def _theme(identifiant: str) -> dict:
 @app.route("/api/atelier/sante")
 def api_atelier_sante():
     return jsonify(m_atelier.sante())
+
+
+@app.route("/api/boite-trame/analyser", methods=["POST"])
+def api_boite_trame_analyser():
+    """Boîte à trames : ce que la description du service demande (heures, ETP, écart)."""
+    try:
+        return jsonify(m_boite_trame.analyser(request.get_json(silent=True) or {}))
+    except Exception as erreur:                    # description incomplète : on le dit
+        return jsonify({"erreur": str(erreur)}), 400
+
+
+@app.route("/api/boite-trame/generer", methods=["POST"])
+def api_boite_trame_generer():
+    """Boîte à trames : jusqu'à 3 trames proposées, avec leur conformité."""
+    maxi = request.args.get("trames", 3, type=int)
+    try:
+        return jsonify(m_boite_trame.generer(request.get_json(silent=True) or {}, maxi))
+    except Exception as erreur:
+        return jsonify({"erreur": str(erreur)}), 400
 
 
 @app.route("/api/themes", methods=["GET", "POST"])

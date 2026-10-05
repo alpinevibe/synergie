@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boîte à trames — Synergie</title>
+<link rel="stylesheet" href="boite-trame.css">
+<!--
+  LA BOÎTE À TRAMES — page unique (simple, lisible sur téléphone comme sur ordinateur).
+
+  LA PAGE APPELLE DEUX ROUTES, que l'on branche côté serveur :
+    POST /api/boite-trame/analyser
+         corps  : la description (profession, effectif, postes, réglages)
+         retour : les heures hebdomadaires, les ETP nécessaires et disponibles,
+                  la comparaison et la couverture de nuit.
+    POST /api/boite-trame/generer
+         corps  : la description
+         retour : jusqu'à 3 trames avec, pour chacune, sa grille, ses compteurs
+                  et son verdict de conformité.
+
+  Si ces routes ne répondent pas encore, la description d'exemple est déjà remplie.
+  Le calcul des heures et des ETP est alors fait directement dans la page (secours),
+  et un message clair invite à brancher le serveur pour générer les trames.
+  La page n'est jamais blanche.
+-->
+</head>
+<body>
+<header>
+  <div class="titre">
+    <h1>La boîte à trames</h1>
+    <p>Décrire un service, voir combien de personnes sont nécessaires, et proposer des
+       trames de travail conformes à la réglementation.</p>
+  </div>
+</header>
+
+<main>
+  <p id="message" class="message" role="status" hidden></p>
+
+  <!-- ============ 1. CE QUE L'ON DÉCRIT ============ -->
+  <section class="carte" aria-labelledby="titre-decrire">
+    <h2 id="titre-decrire">1 · Ce que l'on décrit</h2>
+    <p class="aide">Renseignez la profession, l'effectif disponible et les postes de travail
+       à couvrir. Les réglages sont déjà pré-remplis avec des valeurs habituelles.</p>
+
+    <div class="grille-champs">
+      <label>Profession
+        <select id="profession">
+          <option value="AS">Aide-soignant(e) — AS</option>
+          <option value="IDE" selected>Infirmier(ère) — IDE</option>
+          <option value="SAGE-FEMME">Sage-femme</option>
+          <option value="ASH">Agent de service hospitalier — ASH</option>
+          <option value="REEDUCATEUR">Masseur-kinésithérapeute</option>
+          <option value="AUTRE">Autre métier</option>
+        </select>
+      </label>
+    </div>
+
+    <h3>L'effectif (nombre de personnes)</h3>
+    <div class="grille-champs">
+      <label>À 100 %<input id="eff-temps-plein" type="number" min="0" value="4"></label>
+      <label>À 80 %<input id="eff-80" type="number" min="0" value="1"></label>
+      <label>Fixes de nuit<input id="eff-nuit" type="number" min="0" value="2"></label>
+      <label>Dispensées de nuit<input id="eff-dispense" type="number" min="0" value="0"></label>
+    </div>
+    <p class="aide">« Fixes de nuit » : ne travaillent que la nuit. « Dispensées de nuit » :
+       jamais la nuit. Les personnes à 80 % travaillent 4 jours par semaine, sur des postes
+       de jour.</p>
+
+    <h3>Les postes de travail</h3>
+    <div id="postes"></div>
+    <button type="button" id="btn-ajouter-poste" class="discret">+ Ajouter un poste</button>
+
+    <h3>Les réglages</h3>
+    <div class="grille-champs">
+      <label>Heures légales par semaine (h)
+        <input id="reg-heures" type="number" min="1" step="0.5" value="35"></label>
+      <label>Marge de remplacement (%)
+        <input id="reg-coef" type="number" min="0" step="1" value="10"></label>
+      <label>Durée du cycle (semaines)
+        <select id="reg-cycle">
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4" selected>4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+        </select>
+      </label>
+      <label>Jours travaillés à 100 %
+        <input id="reg-jours-plein" type="number" min="1" max="6" value="5"></label>
+      <label>Jours travaillés à 80 %
+        <input id="reg-jours-80" type="number" min="1" max="6" value="4"></label>
+    </div>
+
+    <div class="actions">
+      <button type="button" id="btn-calculer" class="principal">Calculer</button>
+      <button type="button" id="btn-generer" class="principal">Générer les trames</button>
+    </div>
+  </section>
+
+  <!-- ============ 2. CE QUE ÇA DONNE ============ -->
+  <section class="carte" aria-labelledby="titre-resultats">
+    <h2 id="titre-resultats">2 · Ce que ça donne</h2>
+    <div id="resultats">
+      <p class="aide">Renseignez la description, puis appuyez sur <strong>Calculer</strong>.</p>
+    </div>
+  </section>
+
+  <!-- ============ 3. LES TRAMES PROPOSÉES ============ -->
+  <section class="carte" aria-labelledby="titre-trames">
+    <h2 id="titre-trames">3 · Les trames proposées</h2>
+    <div id="trames">
+      <p class="aide">Appuyez sur <strong>Générer les trames</strong> pour obtenir jusqu'à
+         3 propositions, chacune avec son verdict de conformité.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span>Synergie — boîte à trames · calcul de conformité d'après le Code du travail et les
+    règles de la Fonction Publique Hospitalière.</span>
+</footer>
+
+<script src="boite-trame.js"></script>
+</body>
+</html>

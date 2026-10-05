@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Synergie — outils de réorganisation</title>
+<title>Synergie — avis et synthèse</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -68,25 +68,12 @@
   <!-- 2. BOÎTE À TRAMES --------------------------------------------------------- -->
   <section id="onglet-boite" hidden>
     <div class="carte">
-      <h2>Générer les trames</h2>
-      <p class="aide">Le générateur produit, par profil de temps de travail, une trame de
-        N semaines rejouée en boucle (N = effectif du profil). Deux agents aux mêmes
-        critères partagent la même trame : la couverture est identique chaque semaine.</p>
-      <div class="actions">
-        <label class="en-ligne">Minimiser la couverture
-          <select id="t-genre"><option value="projet">Projet entier</option></select>
-        </label>
-        <button id="btn-generer" class="principal">Générer les trames</button>
-        <button id="btn-hermes" class="discret">Importer les trames d'Hermes Planning</button>
-        <span id="etat-boite" class="etat"></span>
-      </div>
-    </div>
-    <div id="liste-trames"></div>
-    <div class="carte">
-      <h2>La boîte à trames — catalogue</h2>
-      <p class="aide">Toute trame produite est rangée sous son code et devient réutilisable
-        par un autre projet.</p>
-      <div id="catalogue"><em>Chargement…</em></div>
+      <h2>La boîte à trames a son propre outil</h2>
+      <p class="aide">Le générateur de trames a été entièrement repensé pour être simple :
+        vous décrivez la profession, l'effectif et les postes (heures de début et de fin,
+        nombre de personnes), et l'outil calcule les ETP nécessaires puis propose jusqu'à
+        trois trames — chacune vérifiée par rapport à la réglementation du travail.</p>
+      <p><a class="bouton principal" href="boite-trame.html">Ouvrir la boîte à trames</a></p>
     </div>
   </section>
 

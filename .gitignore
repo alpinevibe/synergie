@@ -5,3 +5,10 @@ donnees/generations/
 donnees/*.log
 __pycache__/
 *.pyc
+
+# Base de l'atelier : donnée de travail, jamais versionnée (les fichiers -wal et -shm sont
+# des fichiers temporaires de SQLite, ils n'ont rien à faire dans le dépôt).
+donnees/atelier.db
+donnees/atelier.db-shm
+donnees/atelier.db-wal
+donnees/documents/

@@ -26,7 +26,8 @@ document.querySelectorAll(".onglets button").forEach((b) => {
     ["projet", "boite", "avis", "synthese"].forEach((o) => {
       $("#onglet-" + o).hidden = o !== b.dataset.onglet;
     });
-    if (b.dataset.onglet === "boite") chargerCatalogue();
+    // L'onglet « Boîte à trames » renvoie vers le nouvel outil (une seule page) :
+    // plus rien à calculer ici.
   };
 });
 

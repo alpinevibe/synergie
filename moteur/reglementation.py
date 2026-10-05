@@ -144,6 +144,14 @@ def _index_par_libelle(postes: list[dict]) -> dict:
 
 
 # --- Cœur du vérificateur ------------------------------------------------------------
+# Repères annuels pour la compensation des heures au-delà de 35 h par semaine :
+#   • une personne travaille environ 46 semaines par an (52 semaines moins 5 semaines de
+#     congés annuels et les jours fériés) ;
+#   • un jour de réduction du temps de travail vaut 7 heures (35 h réparties sur 5 jours).
+SEMAINES_TRAVAILLEES_AN = 46.0
+HEURES_JOURNEE_REFERENCE = 7.0
+
+
 def verifier_trame(trame: dict, regles: dict | None = None) -> dict:
     """Contrôle une trame et rend verdict + manquements + compteurs."""
     r = dict(REGLES_DEFAUT)
@@ -239,12 +247,28 @@ def verifier_trame(trame: dict, regles: dict | None = None) -> dict:
                        f"deux dimanches travaillés consécutifs "
                        f"(au moins un dimanche complet de repos tous les {pas})")
 
-        # --- règle 5 : durée hebdomadaire moyenne ≤ 35 h (L3121-27) -----------------
+        # --- règle 5 : durée hebdomadaire moyenne ----------------------------------
+        # La durée légale est de 35 h par semaine (L3121-27). Mais dans la fonction
+        # publique hospitalière, les postes font souvent plus de 7 h : la semaine dépasse
+        # alors 35 h et l'excédent est COMPENSÉ SUR L'ANNÉE par des jours de réduction du
+        # temps de travail. Un dépassement n'est donc PAS un manquement : c'est une
+        # INFORMATION, et l'outil calcule le nombre de jours à prévoir dans l'année.
+        #   Référence annuelle : 1607 h (soit 35 h sur ~46 semaines travaillées, congés
+        #   annuels et jours fériés déduits) — Source : Code du travail, article L3121-27
+        #   et statut de la fonction publique hospitalière.
         limite_moyenne = float(r["duree_moyenne_max_h"]) * quotite
         if heures_semaine > limite_moyenne + 1e-9:
-            manque(nom, "cycle", "durée hebdomadaire moyenne",
-                   f"{heures_semaine:g} h par semaine en moyenne "
-                   f"(maximum {limite_moyenne:g} h)")
+            surplus_semaine = heures_semaine - limite_moyenne
+            surplus_annuel = surplus_semaine * SEMAINES_TRAVAILLEES_AN
+            jours_reduction = surplus_annuel / HEURES_JOURNEE_REFERENCE
+            informations.append({
+                "personne": nom, "regle": "durée hebdomadaire moyenne",
+                "detail": f"{heures_semaine:g} h par semaine au lieu de "
+                          f"{limite_moyenne:g} h : le surplus ("
+                          f"{surplus_semaine:g} h par semaine, soit environ "
+                          f"{surplus_annuel:.0f} h par an) est à compenser par des jours de "
+                          f"réduction du temps de travail — comptez environ "
+                          f"{jours_reduction:.1f} jour(s) de 7 h par an."})
 
         # --- règle 6 : jamais plus de 48 h sur une semaine (L3121-20) ----------------
         for w in range(semaines):
