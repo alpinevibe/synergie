@@ -189,6 +189,77 @@ def test_fixes_de_nuit_jamais_de_jour():
 # ====================================================================================
 # Exécution
 # ====================================================================================
+# ====================================================================================
+# 5. Amplitude de 12 h et horaires VARIÉS (7 h 30 et 12 h mêlés)
+# ====================================================================================
+def _exemple_horaires_varies():
+    """Service mêlant des journées de 7 h 30 et des journées de 12 h, de jour comme de
+    nuit : c'est le cas que l'utilisateur veut pouvoir tester (05/10/2026)."""
+    return {
+        "profession": "IDE",
+        "effectif": {"temps_plein": 6, "partiel_80": 0,
+                     "fixes_nuit": 2, "dispensees_nuit": 0},
+        "postes": [
+            {"libelle": "Matin 7h30", "debut": "06:30", "fin": "14:00",
+             "personnes": 2, "jours": [1, 1, 1, 1, 1, 1, 1]},
+            {"libelle": "Journée 12h", "debut": "07:30", "fin": "19:30",
+             "personnes": 1, "jours": [1, 1, 1, 1, 1, 1, 1]},
+            {"libelle": "Nuit 12h", "debut": "19:30", "fin": "07:30",
+             "personnes": 1, "jours": [1, 1, 1, 1, 1, 1, 1]},
+        ],
+        "reglages": {"heures_legales_semaine": 35, "coefficient_remplacement": 0.10,
+                     "cycle_semaines": 2},
+    }
+
+
+def test_amplitude_12h_acceptee():
+    """Une journée de 12 h est possible (dérogation signalée), une journée de 13 h non."""
+    description = _exemple_horaires_varies()
+    postes = {p["libelle"]: p for p in bt.normaliser(description)["postes"]}
+    assert postes["Journée 12h"]["duree"] == 12.0
+    assert postes["Journée 12h"]["code"] == "J13", "une journée longue doit être codée J13"
+    assert postes["Matin 7h30"]["code"] == "M03", "un matin doit être codé M03"
+    assert postes["Nuit 12h"]["code"] == "N02", "une nuit doit être codée N02"
+    assert postes["Matin 7h30"]["couleur_fond"] == "#ffff99", "couleur du matin (Hermes)"
+    assert postes["Nuit 12h"]["couleur_fond"] == "#800080", "couleur de la nuit (Hermes)"
+
+    trame = {"semaines": 1,
+             "postes": [{"libelle": "Journée 12h", "debut": "07:30", "fin": "19:30"}],
+             "agents": [
+                 {"nom": "A", "quotite": 1.0,
+                  "jours": ["Journée 12h"] + ["Repos"] * 6}]}
+    verdict = reg.verifier_trame(trame)
+    assert verdict["conforme"], "12 h ne doit pas être un manquement"
+    assert any("dérogation" in i["regle"] for i in verdict["informations"]), \
+        "au-delà de 10 h, la dérogation doit être signalée"
+
+    trame["postes"] = [{"libelle": "Journée 13h", "debut": "07:00", "fin": "20:00"}]
+    trame["agents"][0]["jours"] = ["Journée 13h"] + ["Repos"] * 6
+    verdict = reg.verifier_trame(trame)
+    assert not verdict["conforme"], "13 h doit être refusé (au-delà de 12 h)"
+
+
+def test_horaires_varies_couverture_et_conformite():
+    """Avec des 7 h 30 et des 12 h mêlés, la trame couvre exactement et reste conforme."""
+    description = _exemple_horaires_varies()
+    generation = bt.generer(description, max_trames=1, duree_max_s=25.0)
+    assert generation["nb_trames"] >= 1, "aucune trame produite avec des horaires variés"
+    trame = generation["trames"][0]
+    assert trame["verdict"]["conforme"], \
+        f"trame non conforme : {trame['verdict']['manquements'][:3]}"
+    for poste in description["postes"]:
+        for wd in range(7):
+            cible = poste["personnes"]
+            for w in range(trame["semaines"]):
+                presents = sum(1 for a in trame["agents"]
+                               if a["jours"][w * 7 + wd] == poste["libelle"])
+                assert presents == cible, (f"{poste['libelle']} jour {wd + 1} semaine "
+                                           f"{w + 1} : {presents} au lieu de {cible}")
+    # Les couleurs d'Hermes voyagent avec la trame, pour peindre la grille.
+    assert trame["couleurs"]["Matin 7h30"]["code"] == "M03"
+    assert trame["couleurs"]["Repos"]["fond"] == "#00ff00"
+
+
 def principal():
     tests = [
         test_heures_et_etp,
@@ -196,6 +267,8 @@ def principal():
         test_verificateur_detecte_repos_insuffisant,
         test_verificateur_valide_trame_conforme,
         test_fixes_de_nuit_jamais_de_jour,
+        test_amplitude_12h_acceptee,
+        test_horaires_varies_couverture_et_conformite,
     ]
     tout_ok = True
     for test in tests:

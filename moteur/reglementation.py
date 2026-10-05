@@ -39,10 +39,14 @@ LIBELLES_REPOS = {"repos", "rh", "ds", "", "repos hebdomadaire", "repos domicile
 # --- Valeurs de référence des règles (par défaut) -----------------------------------
 # Chaque règle : valeur par défaut + source. Modifiables via ``regles``.
 REGLES_DEFAUT: dict = {
-    # Amplitude journalière : la durée entre le début et la fin d'une journée de travail
-    # ne peut pas dépasser 10 heures de travail effectif.
-    #   Valeur : 10 h — Source : Code du travail, article L3121-18.
-    "amplitude_max_h": 10.0,
+    # Amplitude journalière : 10 heures de droit commun, 12 heures au maximum par
+    # dérogation (accord d'entreprise ou autorisation de l'inspection du travail).
+    #   Valeurs : 12 h au maximum absolu ; au-delà de 10 h, l'outil SIGNALE qu'une
+    #   dérogation est nécessaire (information, jamais un manquement) — c'est ce qui permet
+    #   de tester des trames mêlant des journées de 7 h 30 et de 12 h.
+    #   Source : Code du travail, articles L3121-18 et L3121-19.
+    "amplitude_max_h": 12.0,
+    "amplitude_vigilance_h": 10.0,
 
     # Repos quotidien : entre la fin d'un poste et le début du suivant, une personne doit
     # bénéficier d'au moins 11 heures consécutives de repos.
@@ -199,7 +203,9 @@ def verifier_trame(trame: dict, regles: dict | None = None) -> dict:
         total_heures_toutes += heures_cycle
         total_nuits += nuits
 
-        # --- règle 1 : amplitude journalière ≤ 10 h (L3121-18) ---------------------
+        # --- règle 1 : amplitude journalière ---------------------------------------
+        # Au-delà de 12 h, c'est un manquement. Entre 10 h et 12 h, la journée reste
+        # possible : elle suppose une dérogation, on le signale sans compter un manquement.
         for t, poste in enumerate(seq):
             if poste is None:
                 continue
@@ -208,6 +214,13 @@ def verifier_trame(trame: dict, regles: dict | None = None) -> dict:
                 manque(nom, _libelle_jour(t), "amplitude journalière",
                        f"{poste.get('libelle')} dure {duree:g} h "
                        f"(maximum {r['amplitude_max_h']:g} h)")
+            elif duree > float(r.get("amplitude_vigilance_h", 10.0)) + 1e-9:
+                informations.append({
+                    "personne": nom, "jour": _libelle_jour(t),
+                    "regle": "amplitude journalière (dérogation)",
+                    "detail": f"{poste.get('libelle')} dure {duree:g} h : au-delà de "
+                              f"10 h, une dérogation (accord d'entreprise ou autorisation "
+                              f"de l'inspection du travail) est nécessaire."})
 
         # --- règle 2 : repos quotidien ≥ 11 h (L3131-1) -----------------------------
         for t, poste in enumerate(seq):

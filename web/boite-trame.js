@@ -35,6 +35,28 @@ const EXEMPLE = {
 
 const $ = (selecteur) => document.querySelector(selecteur);
 
+/* Codes et couleurs des horaires, EXACTEMENT ceux du planning d'Hermes : le matin est
+   jaune, l'après-midi cyan, la nuit violet, une journée longue magenta, les repos verts.
+   Le serveur renvoie la même table ; celle-ci sert à colorer la page avant l'échange. */
+const CODES_HERMES = {
+  M03: { fond: "#ffff99", texte: "#000000", libelle: "Matin" },
+  S03: { fond: "#00ffff", texte: "#000000", libelle: "Après-midi" },
+  J13: { fond: "#ff00ff", texte: "#000000", libelle: "Journée longue" },
+  N02: { fond: "#800080", texte: "#ffffff", libelle: "Nuit" },
+  RH:  { fond: "#00ff00", texte: "#000000", libelle: "Repos hebdomadaire" },
+  DS:  { fond: "#ffffff", texte: "#000000", libelle: "Disponibilité" },
+  FEJ: { fond: "#ff99cc", texte: "#000000", libelle: "Férié" },
+  RTT: { fond: "#ccffcc", texte: "#000000", libelle: "Réduction du temps de travail" },
+};
+
+/** Le code qu'Hermes donnerait à ce poste : nuit, journée longue, matin ou après-midi. */
+function codeHermes(poste) {
+  if (poste.code) return poste.code;
+  if (estPosteNuit(poste)) return "N02";
+  if (dureePoste(poste) >= 10 - 1e-9) return "J13";
+  return minutes(poste.debut) < 12 * 60 ? "M03" : "S03";
+}
+
 function esc(texte) {
   return String(texte == null ? "" : texte)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -156,6 +178,10 @@ function ajouterPoste(poste) {
       <button type="button" class="petit danger" data-action="supprimer">Supprimer</button>
     </div>
     <div class="ligne-postes">
+      <label>Code (couleur d'Hermes)<select data-champ="code">${
+        Object.entries(CODES_HERMES).map(([code, info]) =>
+          `<option value="${code}"${codeHermes(poste) === code ? " selected" : ""}>` +
+          `${code} — ${esc(info.libelle)}</option>`).join("")}</select></label>
       <label>Libellé<input data-champ="libelle" value="${esc(poste.libelle)}"
         placeholder="Matin, Après-midi, Nuit…"></label>
       <label>Heure de début<input data-champ="debut" type="time" value="${esc(poste.debut)}"></label>
@@ -174,6 +200,7 @@ function lecturePostes() {
     const jours = Array.from(bloc.querySelectorAll("[data-jour]")).map((c) => (c.checked ? 1 : 0));
     return {
       libelle: champ("libelle").value.trim(),
+      code: champ("code") ? champ("code").value : "",   // couleur d'Hermes choisie
       debut: champ("debut").value || "08:00",
       fin: champ("fin").value || "16:00",
       personnes: parseInt(champ("personnes").value, 10) || 0,
@@ -287,23 +314,50 @@ function renderResultats(analyse, local) {
 /* ==================================================================================
    Affichage : les trames
    ================================================================================== */
-function classePoste(libelle, postes) {
-  const index = postes.findIndex((p) => p.libelle === libelle);
-  const poste = index >= 0 ? postes[index] : null;
-  if (poste && estPosteNuit(poste)) return "cellule poste nuit";
-  return `cellule poste p${((index >= 0 ? index : 0) % 5) + 1}`;
+function couleursTrame(trame) {
+  if (trame.couleurs) return trame.couleurs;
+  const table = { Repos: { fond: CODES_HERMES.RH.fond, texte: CODES_HERMES.RH.texte,
+                           code: "RH" } };
+  (trame.postes || []).forEach((poste) => {
+    const code = codeHermes(poste);
+    table[poste.libelle] = { fond: CODES_HERMES[code].fond, texte: CODES_HERMES[code].texte,
+                             code };
+  });
+  return table;
 }
 
-function cellule(libelle, postes) {
-  if (!libelle || libelle === "Repos") return '<span class="cellule repos">Repos</span>';
-  return `<span class="${classePoste(libelle, postes)}">${esc(libelle)}</span>`;
+/** Une case de la grille, peinte comme dans Hermes : le CODE sur sa couleur. */
+function cellule(libelle, trame) {
+  const table = couleursTrame(trame);
+  const nom = libelle || "Repos";
+  const info = table[nom] || table.Repos;
+  const poste = (trame.postes || []).find((p) => p.libelle === nom);
+  const titre = poste ? `${poste.libelle} — ${poste.debut} à ${poste.fin}`
+                      : "Repos hebdomadaire";
+  return `<span class="cellule" style="background:${info.fond};color:${info.texte}" ` +
+         `title="${esc(titre)}">${esc(info.code || nom)}</span>`;
+}
+
+/** La légende des couleurs, sous la grille : ce que veut dire chaque code. */
+function legende(trame) {
+  const table = couleursTrame(trame);
+  const morceaux = [];
+  (trame.postes || []).forEach((poste) => {
+    const info = table[poste.libelle];
+    morceaux.push(`<span class="case-legende" style="background:${info.fond};` +
+      `color:${info.texte}">${esc(info.code)}</span> ${esc(poste.libelle)} ` +
+      `<small>${esc(poste.debut)} – ${esc(poste.fin)}</small>`);
+  });
+  morceaux.push(`<span class="case-legende" style="background:${CODES_HERMES.RH.fond};` +
+    `color:${CODES_HERMES.RH.texte}">RH</span> Repos hebdomadaire`);
+  return `<div class="legende">${morceaux.join("")}</div>`;
 }
 
 function tableauSemaine(trame, semaine) {
   const entete = JOURS_LONGS.map((j) => `<th>${j.slice(0, 3)}</th>`).join("");
   const lignes = trame.agents.map((agent) => {
     const cellules = agent.semaines[semaine]
-      .map((libelle) => `<td>${cellule(libelle, trame.postes)}</td>`).join("");
+      .map((libelle) => `<td>${cellule(libelle, trame)}</td>`).join("");
     return `<tr><td class="nom">${esc(agent.nom)} <small>(${esc(agent.profil)})</small></td>${cellules}</tr>`;
   }).join("");
   return `<div class="roll">
@@ -380,6 +434,7 @@ function renderTrame(trame) {
       ${groupes}
       ${remarques}
       ${semaines.join("")}
+      ${legende(trame)}
       ${renderCompteurs(trame)}
     </div>`;
 }

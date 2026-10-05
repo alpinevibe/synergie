@@ -150,6 +150,13 @@ table.trame-table th.nom, table.trame-table td.nom { text-align: left; }
 .cellule { border-radius: 6px; padding: 3px 6px; display: inline-block; min-width: 34px;
   font-size: 12.5px; }
 .cellule.repos { background: #eef1f6; color: #8a97a8; }
+/* La grille reprend les COULEURS D'HERMES : elles sont posées dans la page (couleur de
+   fond et couleur de texte de chaque code), il n'y a donc rien à figer ici. */
+.legende { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 4px; font-size: 12.5px;
+  color: #5b6b81; align-items: center; }
+.legende small { color: #93a1b5; }
+.case-legende { display: inline-block; min-width: 34px; text-align: center; border-radius: 6px;
+  padding: 3px 6px; font-weight: 700; font-size: 12px; }
 .cellule.poste { background: #dfe8fb; color: #21365e; font-weight: 600; }
 .cellule.poste.p1 { background: #dfe8fb; color: #21365e; }
 .cellule.poste.p2 { background: #fbe6d7; color: #7a3c12; }

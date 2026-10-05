@@ -45,7 +45,10 @@ from .reglementation import (
 JOURS = JOURS_COURTS
 REPOS = "Repos"
 MAX_TRAMES = 3
-DUREE_SOLVEUR_S = 6.0
+# Temps accordé au solveur par trame. Les configurations mêlant des journées de 7 h 30
+# et de 12 h demandent plus de recherche qu'un horaire unique : sans cela, le
+# solveur rend une première solution valable mais mal répartie (05/10/2026).
+DUREE_SOLVEUR_S = 25.0
 CYCLE_MIN, CYCLE_MAX = 2, 8
 
 # Libellés des catégories de personnel (affichés tels quels, sans jargon).
@@ -64,9 +67,16 @@ REGLAGES_DEFAUT = {
 }
 
 # Poids de l'objectif (recherche).
+# Priorités (dans l'ordre) : couvrir chaque poste EXACTEMENT, puis approcher les heures
+# légales de chacun, puis l'équité. Les écarts d'heures se comptent en MINUTES : 3 par
+# minute représente 180 par heure, très en dessous de la mise en trop d'une personne, pour
+# que la couverture reste exacte dans tous les cas.
 _P_SOUS = 1_000_000       # ne jamais laisser un poste non couvert
-_P_TROP = 60              # éviter de mettre du monde en trop
-_P_DEFICIT = 8            # approcher au mieux le nombre de jours par personne
+_P_TROP = 20_000          # ne jamais mettre quelqu'un en trop
+_P_HEURES_BAS = 3         # éviter de passer sous les heures légales
+_P_HEURES_HAUT = 1        # limiter les heures au-delà (compensées en jours de réduction)
+_P_EQUITE_HEURES = 2      # resserrer l'écart d'heures entre la personne qui travaille
+                          # le plus et celle qui travaille le moins (par minute)
 _P_EQUITE = 3             # répartir équitablement les week-ends travaillés
 _P_EQUITE_TRAVAIL = 2     # répartir équitablement le nombre de jours travaillés
 _P_PARTAGE = 25           # faire suivre la même trame au plus grand nombre
@@ -75,6 +85,34 @@ _P_PARTAGE = 25           # faire suivre la même trame au plus grand nombre
 # ====================================================================================
 # Normalisation de la description
 # ====================================================================================
+# --- Codes et couleurs des horaires, repris d'Hermes --------------------------------
+# Ce sont EXACTEMENT les couleurs du planning d'Hermes : le matin est jaune, l'après-midi
+# cyan, la nuit violet (texte blanc), une journée longue magenta, les repos verts, une
+# journée sans affectation blanche. Le code d'un poste est déduit de son heure de début et
+# de sa durée ; on peut le changer, la couleur suit le code choisi.
+CODES_HERMES = {
+    "M03": {"fond": "#ffff99", "texte": "#000000", "libelle": "Matin"},
+    "S03": {"fond": "#00ffff", "texte": "#000000", "libelle": "Après-midi"},
+    "J13": {"fond": "#ff00ff", "texte": "#000000", "libelle": "Journée longue"},
+    "N02": {"fond": "#800080", "texte": "#ffffff", "libelle": "Nuit"},
+    "RH":  {"fond": "#00ff00", "texte": "#000000", "libelle": "Repos hebdomadaire"},
+    "DS":  {"fond": "#ffffff", "texte": "#000000", "libelle": "Disponibilité"},
+    "FEJ": {"fond": "#ff99cc", "texte": "#000000", "libelle": "Férié"},
+    "RTT": {"fond": "#ccffcc", "texte": "#000000", "libelle": "Réduction du temps de travail"},
+}
+
+
+def code_hermes_poste(poste: dict, seuil_journee_h: float = 10.0) -> str:
+    """Déduit le code d'Hermes d'un poste : nuit, journée longue, matin ou après-midi."""
+    if poste.get("est_nuit"):
+        return "N02"
+    if float(poste.get("duree") or 0) >= seuil_journee_h - 1e-9:
+        return "J13"
+    if int(poste.get("_debut_min") or 0) < 12 * 60:
+        return "M03"
+    return "S03"
+
+
 def _entier(valeur, defaut=0) -> int:
     try:
         return max(0, int(valeur))
@@ -119,6 +157,12 @@ def normaliser(description: dict | None) -> dict:
         poste["est_nuit"] = est_poste_nuit(poste)
         poste["_debut_min"] = minutes(poste["debut"])
         poste["_duree_min"] = int(round(poste["duree"] * 60))
+        # Code et couleurs d'Hermes : déduits du poste, ou choisis par la personne
+        # (`code` dans la description). Un code inconnu retombe sur la disponibilité.
+        code = str(brut.get("code") or "").strip().upper()
+        poste["code"] = code if code in CODES_HERMES else code_hermes_poste(poste)
+        poste["couleur_fond"] = CODES_HERMES[poste["code"]]["fond"]
+        poste["couleur_texte"] = CODES_HERMES[poste["code"]]["texte"]
         postes.append(poste)
 
     effectif_brut = description.get("effectif") or {}
@@ -173,6 +217,9 @@ def analyser(description: dict) -> dict:
             "libelle": poste["libelle"],
             "debut": poste["debut"],
             "fin": poste["fin"],
+            "code": poste["code"],
+            "couleur_fond": poste["couleur_fond"],
+            "couleur_texte": poste["couleur_texte"],
             "duree_heures": round(poste["duree"], 2),
             "personnes": poste["personnes"],
             "jours_par_semaine": jours_semaine,
@@ -258,28 +305,30 @@ def _construire_personnes(description: dict) -> tuple[list[dict], list[dict]]:
     else:
         cible_nuit = 0
 
+    # La cible n'est PAS un nombre de jours mais un nombre d'HEURES par semaine (les
+    # heures légales, au prorata de la quotité). C'est ce qui permet de mélanger des
+    # journées de 7 h 30 et de 12 h : cinq journées courtes ou trois longues reviennent au
+    # même. Le nombre de jours affiché n'est qu'une conséquence, donné à titre indicatif.
+    def cible_heures(quotite):
+        return legales * quotite * 60.0
+
     personnes = []
     for _ in range(eff["temps_plein"]):
         personnes.append({"profil": PROFIL_TEMPS_PLEIN, "quotite": 1.0,
                           "categorie": "jour", "postes": list(index_jour),
-                          "cible_jours": int(reglages["jours_temps_plein"]),
-                          "fixer_jours": True})
+                          "cible_heures_min": cible_heures(1.0)})
     for _ in range(eff["partiel_80"]):
         personnes.append({"profil": PROFIL_QUATRE_VINGT, "quotite": 0.8,
                           "categorie": "jour", "postes": list(index_jour),
-                          "cible_jours": int(reglages["jours_80"]),
-                          "fixer_jours": True})
+                          "cible_heures_min": cible_heures(0.8)})
     for _ in range(eff["fixes_nuit"]):
-        # Les personnes de nuit ne visent pas un nombre fixe : on les laisse couvrir
-        # exactement les nuits nécessaires, réparties équitablement (35 h en moyenne).
         personnes.append({"profil": PROFIL_NUIT, "quotite": 1.0,
                           "categorie": "nuit", "postes": list(index_nuit),
-                          "cible_jours": cible_nuit, "fixer_jours": False})
+                          "cible_heures_min": cible_heures(1.0)})
     for _ in range(eff["dispensees_nuit"]):
         personnes.append({"profil": PROFIL_DISPENSE, "quotite": 1.0,
                           "categorie": "jour", "postes": list(index_jour),
-                          "cible_jours": int(reglages["jours_temps_plein"]),
-                          "fixer_jours": True})
+                          "cible_heures_min": cible_heures(1.0)})
 
     for i, personne in enumerate(personnes):
         personne["nom"] = f"Personne {i + 1}"
@@ -334,20 +383,23 @@ def _resoudre(description: dict, semaines: int, seed: int,
                 sous.append(s)
                 trop.append(tr)
 
-    # --- Nombre de jours de travail par semaine (au plus la cible pour les équipes de
-    #     jour ; les nuits suivent la couverture pour tenir 35 h en moyenne) ----------
-    deficits = []
+    # --- Heures travaillées par semaine : on vise les heures légales ------------------
+    # Aucun nombre de jours n'est imposé : c'est la somme des heures qui compte. Une
+    # personne travaille ainsi 5 journées de 7 h, ou 3 journées de 12 h, ou un mélange des
+    # deux — n'importe quelle configuration est acceptée.
+    heures_bas, heures_haut = [], []
     for a, personne in enumerate(personnes):
-        if not personne.get("fixer_jours"):
+        if not personne["postes"]:
             continue
-        cible_jours = int(personne["cible_jours"])
+        cible = int(round(personne["cible_heures_min"]))
         for w in range(semaines):
-            travail = [x[(a, t, pi)] for t in range(w * 7, w * 7 + 7)
-                       for pi in personne["postes"]]
-            somme = sum(travail) if travail else 0
-            manque = m.NewIntVar(0, cible_jours, f"def_{a}_{w}")
-            m.Add(somme + manque == cible_jours)
-            deficits.append(manque)
+            heures = sum(postes[pi]["_duree_min"] * x[(a, t, pi)]
+                         for t in range(w * 7, w * 7 + 7) for pi in personne["postes"])
+            haut = m.NewIntVar(0, max(0, 48 * 60 - cible), f"haut_{a}_{w}")
+            bas = m.NewIntVar(0, cible, f"bas_{a}_{w}")
+            m.Add(heures - cible == haut - bas)
+            heures_haut.append(haut)
+            heures_bas.append(bas)
 
     # --- Jamais plus de 48 h sur une semaine (Code du travail, art. L3121-20) --------
     for a, personne in enumerate(personnes):
@@ -425,6 +477,27 @@ def _resoudre(description: dict, semaines: int, seed: int,
         m.Add(var >= we_min)
         m.Add(var <= we_max)
 
+    # --- Équité des HEURES travaillées ----------------------------------------------
+    # Sans cela, un horaire varié (7 h 30 et 12 h mêlés) laisse les heures très inégales
+    # d'une personne à l'autre. On resserre l'écart entre celle qui travaille le plus et
+    # celle qui travaille le moins, sur tout le cycle.
+    heures_personne = []
+    for a, personne in enumerate(personnes):
+        if not personne["postes"]:
+            continue
+        total = sum(postes[pi]["_duree_min"] * x[(a, t, pi)]
+                    for t in range(T) for pi in personne["postes"])
+        heures_personne.append(total)
+    if len(heures_personne) > 1:
+        h_max = m.NewIntVar(0, 48 * 60 * semaines, "hmax")
+        h_min = m.NewIntVar(0, 48 * 60 * semaines, "hmin")
+        for total in heures_personne:
+            m.Add(total <= h_max)
+            m.Add(total >= h_min)
+        ecart_heures = h_max - h_min
+    else:
+        ecart_heures = m.NewConstant(0)
+
     # --- Équité du nombre total de jours travaillés ---------------------------------
     totals = []
     for a, personne in enumerate(personnes):
@@ -467,7 +540,9 @@ def _resoudre(description: dict, semaines: int, seed: int,
 
     # --- Objectif -------------------------------------------------------------------
     m.Minimize(_P_SOUS * sum(sous) + _P_TROP * sum(trop)
-               + _P_DEFICIT * sum(deficits) + _P_EQUITE * (we_max - we_min)
+               + _P_HEURES_BAS * sum(heures_bas) + _P_HEURES_HAUT * sum(heures_haut)
+               + _P_EQUITE_HEURES * ecart_heures
+               + _P_EQUITE * (we_max - we_min)
                + _P_EQUITE_TRAVAIL * (tot_max - tot_min)
                - _P_PARTAGE * sum(partages))
 
@@ -528,8 +603,18 @@ def _habiller(d: dict, personnes: list[dict], jours: list[list[str]],
 
     trame = {
         "semaines": semaines,
-        "postes": [{"libelle": p["libelle"], "debut": p["debut"], "fin": p["fin"]}
+        "postes": [{"libelle": p["libelle"], "debut": p["debut"], "fin": p["fin"],
+                    "code": p["code"], "couleur_fond": p["couleur_fond"],
+                    "couleur_texte": p["couleur_texte"], "duree": p["duree"]}
                    for p in postes],
+        # Couleurs pour la grille : un libellé de poste → sa couleur, plus les repos
+        # (verts, comme « RH » dans Hermes).
+        "couleurs": dict({p["libelle"]: {"fond": p["couleur_fond"],
+                                         "texte": p["couleur_texte"], "code": p["code"]}
+                          for p in postes},
+                         Repos={"fond": CODES_HERMES["RH"]["fond"],
+                                "texte": CODES_HERMES["RH"]["texte"], "code": "RH"}),
+        "codes_hermes": CODES_HERMES,
         "agents": agents,
     }
     verdict = verifier_trame(trame)
@@ -537,10 +622,14 @@ def _habiller(d: dict, personnes: list[dict], jours: list[list[str]],
     # Remarques utiles (postes longs, personnel sans poste affecté…).
     remarques = []
     for poste in postes:
-        if poste["duree"] > 10.0 + 1e-9:
+        if poste["duree"] > 12.0 + 1e-9:
             remarques.append(f"Le poste « {poste['libelle']} » dure {poste['duree']:g} h : "
-                             "il dépasse l'amplitude maximale de 10 h et sera signalé "
-                             "comme non conforme.")
+                             "au-delà de 12 h, la journée n'est pas conforme à la "
+                             "réglementation.")
+        elif poste["duree"] > 10.0 + 1e-9:
+            remarques.append(f"Le poste « {poste['libelle']} » dure {poste['duree']:g} h : "
+                             "c'est possible, mais une dérogation est nécessaire au-delà "
+                             "de 10 h.")
     for personne in personnes:
         if not personne["postes"]:
             remarques.append(f"Les personnes « {personne['profil']} » n'ont aucun poste à "
@@ -554,8 +643,18 @@ def _habiller(d: dict, personnes: list[dict], jours: list[list[str]],
     return {
         "semaines": semaines,
         "statut_solveur": statut,
-        "postes": [{"libelle": p["libelle"], "debut": p["debut"], "fin": p["fin"]}
+        # Les postes portent leur CODE et leurs COULEURS d'Hermes : la page n'a plus qu'à
+        # peindre la grille comme le planning habituel.
+        "postes": [{"libelle": p["libelle"], "debut": p["debut"], "fin": p["fin"],
+                    "code": p["code"], "couleur_fond": p["couleur_fond"],
+                    "couleur_texte": p["couleur_texte"], "duree": p["duree"]}
                    for p in postes],
+        "couleurs": dict({p["libelle"]: {"fond": p["couleur_fond"],
+                                         "texte": p["couleur_texte"], "code": p["code"]}
+                          for p in postes},
+                         Repos={"fond": CODES_HERMES["RH"]["fond"],
+                                "texte": CODES_HERMES["RH"]["texte"], "code": "RH"}),
+        "codes_hermes": CODES_HERMES,
         "agents": agents,
         "couverture": couverture,
         "verdict": {
