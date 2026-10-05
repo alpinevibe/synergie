@@ -278,6 +278,12 @@ function blocResultat(valeur, etiquette, classe) {
     </div>`;
 }
 
+/** Les remarques utiles à l'analyse (une journée au-delà de 10 h suppose une dérogation). */
+function renderRemarques(remarques) {
+  if (!remarques || !remarques.length) return "";
+  return `<div class="remarques">${remarques.map((r) => `<p>${esc(r)}</p>`).join("")}</div>`;
+}
+
 function renderResultats(analyse, local) {
   const lignes = analyse.detail_postes.map((p) => `
     <tr>
@@ -308,6 +314,7 @@ function renderResultats(analyse, local) {
         <th>Jours/sem.</th><th>Heures/sem.</th></tr></thead>
       <tbody>${lignes}</tbody>
     </table></div>
+    ${renderRemarques(analyse.remarques)}
     ${local ? '<p class="aide">Heures et ETP calculés directement dans la page.</p>' : ""}`;
 }
 

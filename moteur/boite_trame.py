@@ -280,6 +280,16 @@ def analyser(description: dict) -> dict:
             "phrase": phrase_nuit,
         },
         "detail_postes": detail_postes,
+        # Ce qu'il faut savoir sur les postes décrits : au-delà de 10 h une dérogation est
+        # nécessaire, au-delà de 12 h la journée n'est pas conforme. Autant le dire tout de
+        # suite, dès l'analyse.
+        "remarques": [
+            f"Le poste « {p['libelle']} » dure {p['duree']:g} h : "
+            + ("au-delà de 12 h, la journée n'est pas conforme à la réglementation."
+               if p["duree"] > 12.0 + 1e-9 else
+               "c'est possible, mais une dérogation est nécessaire au-delà de 10 h.")
+            for p in postes if p["duree"] > 10.0 + 1e-9
+        ],
         "effectif": eff,
         "reglages": reglages,
     }
