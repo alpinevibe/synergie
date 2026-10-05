@@ -20,9 +20,32 @@ collaboratif.** Le générateur de trames devient un outil parmi d'autres, rang�
 - **Décisions** : proposées par une personne, adoptées / rejetées / en attente par une
   autre, avec auteur et date conservés.
 
-### Les outils (inchangés, rangés dans un thème)
-- Générateur de **trames** (OR-Tools CP-SAT), **boîte à trames**, import **Hermes**,
-  **avis** des professionnels, **synthèse** harmonieuse. Page dédiée : `outils.html`.
+### Le suivi du travail commun
+- **Prénom demandé à l'ouverture** : rien ne se fait sans savoir qui agit.
+- **Journal du thème** : qui a fait quoi, et quand (note écrite ou modifiée, décision
+  proposée ou tranchée, document déposé, vote). Mis à jour en direct.
+- **Votes anonymes sur les décisions** : POUR / CONTRE / NEUTRE, **une seule fois par
+  personne**. Le nom n'est jamais enregistré — seul un calcul permet au serveur de
+  reconnaître « cette personne a déjà voté » ; le journal note « un vote a été déposé »,
+  jamais par qui. Chacun voit le décompte et sait s'il a déjà voté.
+- **Post-its faciles à manier** : on les déplace en les tirant **n'importe où** (plus de
+  petit point à viser) ; un **crayon** apparaît au survol pour modifier le texte, et le
+  double-appui écrit directement. Le texte redevient inerte quand on a fini.
+
+### Les outils (rangés dans un thème)
+- **Boîte à trames — repensée, sur une seule page** (`boite-trame.html`) : on décrit la
+  profession (AS, IDE…), l'effectif (temps plein, 80 %, fixes de nuit, dispensés de nuit)
+  et les postes (libellé, début, fin, nombre de personnes, jours couverts) ; l'outil
+  calcule les **heures hebdomadaires** et les **ETP nécessaires** (avec le coefficient de
+  remplacement habituel dans la FPH, expliqué), les compare aux ETP disponibles, puis
+  propose **jusqu'à 3 trames**, chacune vérifiée par un **contrôleur de réglementation**
+  (amplitude ≤ 10 h, repos quotidien ≥ 11 h, 2 jours de repos par semaine dont un dimanche
+  sur deux, 48 h maximum sur une semaine, 6 jours d'affilée au maximum, 5 nuits d'affilée,
+  pause dès 6 h) avec ses **compteurs**. Le dépassement des 35 h par semaine n'est pas un
+  manquement : dans la FPH il se compense sur l'année, et l'outil calcule le nombre de
+  **jours de réduction** à prévoir. Seules les règles **collectives** sont prises en
+  compte, aucune règle individuelle.
+- **Avis et synthèse** : recueil des souhaits, résultat d'ensemble (`outils.html`).
 
 ### Technique
 - Base **SQLite** (`donnees/atelier.db`, mode WAL) : plusieurs personnes écrivent en même
@@ -62,6 +85,11 @@ Vérifications en navigateur (Playwright, sur le site en ligne, avec deux partic
 
 ## Journal
 
+- **05/10/2026 (soir)** — Prénom demandé à l'ouverture et **journal des actions** ; **votes
+  anonymes** (une fois par personne) sur les décisions ; post-its déplaçables d'un simple
+  glissement et modifiables au crayon ; **boîte à trames repensée** : une seule page, par
+  profession, calcul des ETP avec le coefficient de remplacement FPH, 3 trames proposées et
+  **contrôleur de réglementation** avec compteurs.
 - **05/10/2026** — Synergie repensé : atelier collaboratif (thèmes, tableau blanc sans
   limites, documents, décisions) avec travail en direct à plusieurs ; le générateur de
   trames devient un outil du thème. Base SQLite, diffusion SSE, 53 tests conformes.
