@@ -245,3 +245,98 @@ a.principal.petit { display: inline-block; text-decoration: none; }
 .lien-outil em { display: block; font-style: normal; font-size: 12.5px; color: var(--doux);
   margin-top: 3px; }
 .icone-outil { font-size: 22px; }
+
+/* ==================================================================================
+   L'ÉQUIPE : comptes, discussions, pages, cadre de travail, fiches de poste
+   ================================================================================== */
+
+/* ---- entête : bouton « Mon compte » ---- */
+header button.clair { background: rgba(255, 255, 255, .18); border: none; color: #fff;
+  padding: 9px 13px; border-radius: 9px; font-weight: 600; }
+header button.clair:hover { background: rgba(255, 255, 255, .3); }
+
+/* ---- formulaires du compte et cases à cocher ---- */
+.boite-nom.large { max-width: 620px; text-align: left; }
+.boite-nom .etiquette-champ { display: block; margin: 10px 0 4px; font-size: 13px;
+  color: var(--doux); font-weight: 600; }
+.boite-nom .etiquette-champ input { width: 100%; margin-top: 4px; }
+.case { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin: 10px 0;
+  cursor: pointer; }
+.case input { width: auto; margin: 0; }
+.abonnements { display: flex; flex-direction: column; gap: 2px; margin: 8px 0;
+  max-height: 220px; overflow: auto; }
+.abonnements .case { margin: 0; }
+
+/* ---- cadre de travail ---- */
+.carte.cadre { border-left: 5px solid var(--accent); }
+.carte.cadre textarea { width: 100%; }
+
+/* ---- discussions ---- */
+.fil { max-height: 340px; overflow: auto; background: #f7f9fd; border: 1px solid var(--bord);
+  border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.message { background: var(--carte); border: 1px solid var(--bord); border-radius: 12px;
+  padding: 6px 10px; max-width: 78%; font-size: 14px; }
+.message.moi { align-self: flex-end; background: #e8f0ff; border-color: #cfdcf7; }
+.message .qui { font-weight: 700; font-size: 12px; color: var(--accent); margin-right: 6px; }
+.message .quand { font-size: 11px; color: #93a1b5; margin-left: 8px; }
+.ligne-chat { display: flex; gap: 8px; margin-top: 10px; }
+.ligne-chat input { flex: 1; border: 1px solid var(--bord); border-radius: 9px; padding: 9px 11px;
+  font: inherit; }
+
+/* ---- pages de travail ---- */
+.pages { display: grid; grid-template-columns: 240px 1fr; gap: 14px; }
+.liste-pages { display: flex; flex-direction: column; gap: 8px; }
+.page-carte { padding: 10px 12px; margin: 0; cursor: pointer; }
+.page-carte h4 { margin: 0 0 2px; font-size: 14px; }
+.page-carte.ouverte { border-color: var(--accent); box-shadow: 0 0 0 2px #dbe4ff; }
+.barre-editeur { display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--bord); padding-bottom: 8px; margin-bottom: 8px; }
+.barre-editeur .espace { flex: 1; }
+.barre-editeur button { padding: 5px 9px; font-size: 13px; }
+.titre-page { flex: 1; min-width: 180px; border: none; font-size: 17px; font-weight: 700;
+  background: transparent; }
+.titre-page:focus { outline: none; }
+.contenu-page { min-height: 340px; padding: 6px 2px; font-size: 15px; line-height: 1.55;
+  outline: none; }
+.contenu-page h3 { margin: 14px 0 6px; }
+.contenu-page ul, .contenu-page ol { margin: 6px 0 6px 22px; }
+
+/* ---- codes horaires et fiches de poste ---- */
+.liste-codes { display: grid; grid-template-columns: auto 1fr 1fr auto auto auto auto;
+  gap: 6px 8px; align-items: center; }
+.ligne-code { display: contents; }
+.case-code { display: inline-block; min-width: 46px; text-align: center; border-radius: 6px;
+  padding: 4px 8px; font-weight: 700; font-size: 12px; border: 1px solid rgba(0, 0, 0, .08); }
+.champ-court, .champ-long, .champ-code { border: 1px solid var(--bord); border-radius: 7px;
+  padding: 5px 7px; font: inherit; font-size: 13px; }
+.champ-court { width: 88px; }
+.champ-long { width: 100%; }
+.champ-code { width: 62px; font-weight: 700; text-align: center; }
+.champs-code { display: flex; gap: 6px; }
+.separateur { grid-column: 1 / -1; border-bottom: 1px dashed var(--bord); }
+.liste-fiches { display: flex; flex-direction: column; gap: 14px; }
+.fiche { border-left: 5px solid #d9dfe9; }
+.fiche.proposee { border-left-color: #e8b93a; }
+.fiche.validee { border-left-color: var(--accent-2); background: #f6fcf9; }
+.entete-fiche { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.entete-fiche h3 { margin: 0; font-size: 17px; }
+.statut { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+  background: #eef1f6; color: #556173; }
+.statut.proposee { background: #fdf3d9; color: #7a5a00; }
+.statut.validee { background: #e2f6ec; color: #14664a; }
+.finalite { font-size: 14px; color: var(--encre); background: #f7f9fd; border-radius: 10px;
+  padding: 8px 10px; }
+.charges { display: flex; flex-wrap: wrap; gap: 8px; }
+.charge { font-size: 12.5px; font-weight: 700; background: #eef1f6; color: #445; padding: 3px 9px;
+  border-radius: 999px; }
+.table-taches { width: 100%; border-collapse: collapse; margin-top: 10px; }
+.table-taches th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em;
+  color: #93a1b5; text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--bord); }
+.table-taches td { padding: 3px 6px; vertical-align: middle; }
+.cadre-outil { width: 100%; height: 1200px; border: 1px solid var(--bord); border-radius: var(--rayon);
+  background: #fff; }
+
+@media (max-width: 800px) {
+  .pages { grid-template-columns: 1fr; }
+  .table-taches { font-size: 12px; }
+}

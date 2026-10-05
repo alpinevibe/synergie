@@ -3,6 +3,12 @@
 **Repensé le 05/10/2026 : le cœur de Synergie n'est plus le planning, c'est le travail
 collaboratif.** Le générateur de trames devient un outil parmi d'autres, rangé dans un thème.
 
+## Deux thèmes toujours présents
+- **Rythme de travail** (fixe, non supprimable) : s'ouvre directement sur la **boîte à
+  trames**.
+- **Fiches de poste** (fixe, non supprimable) : s'ouvre sur les **fiches de poste** et le
+  **référentiel des codes horaires**.
+
 ## Ce qui existe et fonctionne
 
 ### L'atelier collaboratif (le cœur)
@@ -31,6 +37,27 @@ collaboratif.** Le générateur de trames devient un outil parmi d'autres, rang�
 - **Post-its faciles à manier** : on les déplace en les tirant **n'importe où** (plus de
   petit point à viser) ; un **crayon** apparaît au survol pour modifier le texte, et le
   double-appui écrit directement. Le texte redevient inerte quand on a fini.
+
+### L'équipe (05/10/2026)
+- **Comptes** : prénom + courriel, enregistrés dans la base du serveur, retrouvés par un
+  jeton gardé par le navigateur.
+- **Discussions** : un **chat général** et un **chat par thème**, en direct.
+- **Cadre de travail** (menu général) : le **contexte** du projet en quelques phrases et les
+  **comptes rendus de réunion**.
+- **Pages de travail** : pages blanches avec **traitement de texte simple**, enregistrées
+  automatiquement.
+- **Responsables par thème** : ils reçoivent une **alerte par courriel** quand le thème
+  change ; chacun **règle ses notifications** (thèmes suivis ou tout). Alertes regroupées
+  (au plus une par thème toutes les 10 minutes). Envoi par msmtp — **un essai a été envoyé
+  avec succès** le 05/10/2026.
+
+### Les fiches de poste (thème « Fiches de poste »)
+Organisation retenue : **1)** le vocabulaire d'abord (référentiel des **codes horaires**,
+couleurs d'Hermes, installé au départ : M03, S03, J13, N02, RH, DS, FEJ, RTT) ; **2)** les
+**fiches** se lisent **par tranche horaire** (libellé, code, début, fin, durée, fréquence,
+qui, remarque) ; **3)** chaque fiche a un état **à l'étude → proposée → validée** (qui,
+quand) ; **4)** la **charge par code** est calculée et affichée ; **5)** on **duplique** une
+fiche pour créer une nouvelle version, sans perdre l'ancienne.
 
 ### Les outils (rangés dans un thème)
 - **Boîte à trames — repensée, sur une seule page** (`boite-trame.html`) : on décrit la
@@ -93,6 +120,12 @@ Vérifications en navigateur (Playwright, sur le site en ligne, avec deux partic
 
 ## Journal
 
+- **05/10/2026 (nuit)** — Deux thèmes fixes (Rythme de travail, Fiches de poste) ; comptes
+  (prénom + courriel) en base ; chat général et chat par thème ; cadre de travail (contexte
+  et comptes rendus de réunion) ; pages de travail avec traitement de texte simple ;
+  responsables par thème avec alertes par courriel et réglage des notifications ; fiches de
+  poste par tranche horaire avec référentiel des codes horaires, charge par code,
+  duplication et validation.
 - **05/10/2026 (soir)** — Prénom demandé à l'ouverture et **journal des actions** ; **votes
   anonymes** (une fois par personne) sur les décisions ; post-its déplaçables d'un simple
   glissement et modifiables au crayon ; **boîte à trames repensée** : une seule page, par

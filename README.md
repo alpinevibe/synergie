@@ -72,12 +72,52 @@ On propose une décision, on en discute sur le tableau, puis on la marque **adop
 **rejetée** ou **en attente**. L'auteur de la proposition, l'auteur de la décision et la
 date sont conservés.
 
-### 5. Les outils (dont le générateur de trames)
+### 5. Les deux thèmes toujours présents
+
+Deux thèmes ne peuvent pas être supprimés, parce qu'ils portent l'essentiel :
+
+- **Rythme de travail** : il s'ouvre directement sur la **boîte à trames** ;
+- **Fiches de poste** : il s'ouvre sur les **fiches de poste** et le **référentiel des
+  codes horaires**.
+
+### 6. Le travail sur les fiches de poste (thème « Fiches de poste »)
+
+L'organisation retenue, dans cet ordre :
+
+1. **Le vocabulaire d'abord** — on se met d'accord sur les **codes horaires** de la
+   profession : ce que veut dire M03, S03, J13, N02…, à quelles heures, et à quoi cela
+   correspond dans la journée. Les couleurs sont celles du planning habituel.
+2. **Ensuite les fiches** — une fiche de poste se lit **par tranche horaire** : pour chaque
+   code, quelles tâches sont prévues, combien de temps, à quelle fréquence, et par qui.
+   Autrement dit une **fiche de tâches**, pas un texte général.
+3. **On valide** — chaque fiche a un état : **à l'étude**, **proposée**, **validée** (avec
+   qui et quand). La validation se fait après discussion dans le thème.
+4. **On mesure** — pour chaque code horaire, l'outil additionne les durées des tâches et
+   affiche la **charge** : on voit si une tranche est surchargée ou creuse.
+5. **On part de l'existant** — on **duplique** une fiche pour créer une nouvelle version,
+   sans perdre l'ancienne.
+
+### 7. Les outils (dont le générateur de trames)
 
 Depuis le thème : le générateur de trames, la boîte à trames, les avis et la synthèse. Un
 thème peut être **relié à un projet** pour que les deux se répondent.
 
 ---
+
+## Le travail à plusieurs
+
+- **Comptes** : à l'ouverture, chacun donne son **prénom** et son **courriel**. Le compte est
+  enregistré dans la base du serveur ; un **jeton** gardé par le navigateur permet de le
+  retrouver ensuite. Le courriel ne sert qu'aux alertes.
+- **Discussions** : un **chat général** (tout le projet) et un **chat par thème**.
+- **Cadre de travail** : le **contexte** du projet en quelques phrases, et les **comptes
+  rendus de réunion** déposés au même endroit, au-dessus des thèmes.
+- **Pages de travail** : des pages blanches avec un **traitement de texte simple** (gras,
+  italique, souligné, listes, titres), enregistrées automatiquement.
+- **Responsables d'un thème** : on les désigne dans le thème. Ce sont eux qui reçoivent une
+  **alerte par courriel** quand le thème change, et **chacun règle ses notifications**
+  (thèmes suivis, ou toutes les nouveautés). Les alertes sont **regroupées** : au plus une
+  par thème toutes les dix minutes.
 
 ## Le temps réel, comment ça marche
 
@@ -99,6 +139,8 @@ SSE, et la page écoute avec `EventSource`.
 ```
 serveur.py            API + interface (Flask)
 moteur/atelier.py     atelier collaboratif : thèmes, notes, décisions, documents, diffusion
+moteur/equipe.py      comptes, discussions, pages de travail, cadre général, alertes
+moteur/fiches.py      codes horaires et fiches de poste, tranche horaire par tranche horaire
 moteur/trames.py      générateur de trames (OR-Tools CP-SAT)   ← OUTIL
 moteur/boite.py       boîte à trames réutilisable              ← OUTIL
 moteur/avis.py        recueil et pesée des avis                ← OUTIL
@@ -109,7 +151,7 @@ web/synergie.js       logique de l'atelier et du temps réel
 web/synergie.css      habillage de l'atelier
 web/outils.html       la page des outils (trames, boîte, avis, synthèse)
 web/app.js            logique des outils
-donnees/atelier.db    base SQLite (thèmes, notes, décisions, documents)
+donnees/atelier.db    base SQLite (thèmes, notes, décisions, documents, comptes, fiches)
 donnees/documents/    fichiers déposés
 ```
 
@@ -160,8 +202,9 @@ se sauvegarde comme n'importe quel fichier.
 /home/ubuntu/synergie-venv/bin/python tests/tester_synergie.py
 ```
 
-53 contrôles : règles génériques, moteur de trames, généricité, avis, boîte à trames, et
-l'atelier (thèmes, notes et leur mise en forme, décisions, documents, diffusion temps réel).
+79 contrôles : règles génériques, moteur de trames, généricité, avis, boîte à trames,
+l'atelier (thèmes, notes et mise en forme, décisions, documents, votes anonymes, diffusion)
+et l'équipe (comptes, discussions, pages, cadre de travail, alertes, fiches de poste).
 
 ---
 

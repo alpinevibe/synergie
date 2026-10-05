@@ -14,35 +14,90 @@
     <h1>Synergie</h1>
     <p>Tous les avis comptent : on réfléchit ensemble, on décide ensemble.</p>
   </div>
-  <label class="moi">
-    <span>Je suis</span>
-    <input id="mon-nom" placeholder="votre nom" autocomplete="name">
-  </label>
   <a class="lien-outils" href="boite-trame.html" title="Décrire le service et proposer des trames">Boîte à trames</a>
+  <button id="btn-compte" class="discret clair">Mon compte</button>
 </header>
 
 <!-- ======================= QUI ÊTES-VOUS ? ======================= -->
-<!-- Demandé à l'ouverture (05/10/2026) : toutes les actions du travail commun sont
-     journalisées, il faut donc savoir qui agit. Le prénom reste sur l'appareil. -->
 <div id="accueil-nom" class="voile cache">
   <div class="boite-nom">
     <div class="logo-nom">✷</div>
     <h2>Bienvenue dans Synergie</h2>
-    <p class="aide">Indiquez votre <strong>prénom</strong> : tout ce qui se fait dans
-      l'atelier est journalisé — qui écrit une note, qui propose une décision, qui vote.
-      Il reste enregistré sur cet appareil, vous ne le saisirez qu'une fois.</p>
+    <p class="aide">Pour travailler ensemble, il faut savoir qui fait quoi : indiquez votre
+      <strong>prénom</strong> et votre <strong>adresse de courriel</strong> (elle sert
+      uniquement à vous prévenir quand un thème dont vous êtes responsable change).</p>
     <input id="prenom" placeholder="Votre prénom" autocomplete="given-name" maxlength="40">
+    <input id="email-compte" type="email" placeholder="Votre adresse de courriel"
+      autocomplete="email" maxlength="120">
+    <label class="case"><input type="checkbox" id="notifier-tout">
+      Me prévenir par courriel de toutes les nouveautés</label>
     <button id="btn-prenom" class="principal">Entrer dans l'atelier</button>
   </div>
 </div>
 
-<!-- ======================= LISTE DES THÈMES ======================= -->
-<main id="vue-themes">
+<!-- ======================= MON COMPTE ======================= -->
+<div id="vue-compte" class="voile cache">
+  <div class="boite-nom large">
+    <h2>Mon compte</h2>
+    <p class="aide">Votre compte est enregistré sur le serveur de Synergie. Il sert à savoir
+      qui agit, et à vous prévenir par courriel.</p>
+    <label class="etiquette-champ">Prénom<input id="c-prenom"></label>
+    <label class="etiquette-champ">Adresse de courriel<input id="c-email" type="email"></label>
+    <label class="case"><input type="checkbox" id="c-tout">
+      Recevoir une alerte pour TOUTES les nouveautés</label>
+    <h3>Thèmes que je veux suivre</h3>
+    <div id="c-abonnements" class="abonnements"></div>
+    <p id="c-etat" class="aide"></p>
+    <div class="barre-boutons">
+      <button id="c-enregistrer" class="principal">Enregistrer</button>
+      <button id="c-essai" class="discret">Envoyer un courriel d'essai</button>
+      <button id="c-fermer" class="discret">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= ACCUEIL : CADRE, CHAT, THÈMES ======================= -->
+<main id="vue-accueil">
+  <section class="carte cadre">
+    <h2>Cadre de travail</h2>
+    <p class="aide">Le contexte du projet, en quelques phrases : pourquoi nous nous
+      réunissons, ce que nous cherchons à améliorer, les contraintes à garder en tête.
+      Tout le monde le lit avant de travailler sur un thème.</p>
+    <textarea id="cadre-contexte" rows="5"
+      placeholder="Exemple : le service doit absorber une hausse d'activité sans effectif supplémentaire ; les tournées du matin sont trop lourdes ; les équipes demandent plus de week-ends complets…"></textarea>
+    <div class="barre-boutons">
+      <button id="cadre-enregistrer" class="principal petit">Enregistrer le contexte</button>
+      <span id="cadre-etat" class="aide"></span>
+    </div>
+
+    <h3>Comptes rendus de réunion</h3>
+    <p class="aide">Déposez ici les comptes rendus : ils restent au même endroit, au-dessus
+      des thèmes, pour que chacun retrouve l'historique des réunions.</p>
+    <div class="ligne-depot">
+      <input type="file" id="cadre-fichier" multiple>
+      <input id="cadre-note" class="recherche" placeholder="Un mot (date, objet)…">
+      <button id="cadre-deposer" class="principal petit">Déposer</button>
+    </div>
+    <p id="cadre-depot-etat" class="aide"></p>
+    <div id="cadre-documents" class="liste-documents"></div>
+  </section>
+
+  <section class="carte chat-general">
+    <h2>Discussion générale</h2>
+    <p class="aide">Le fil de discussion de tout le projet : annonces, questions, points
+      d'étape.</p>
+    <div id="chat-general" class="fil"></div>
+    <form id="chat-general-form" class="ligne-chat">
+      <input id="chat-general-texte" placeholder="Écrire un message…" autocomplete="off">
+      <button class="principal petit" type="submit">Envoyer</button>
+    </form>
+  </section>
+
   <div class="entete-vue">
     <h2>Thèmes de réflexion</h2>
-    <p class="aide">Un thème = un sujet sur lequel l'équipe travaille. Dedans, un tableau
-      blanc sans limites pour écrire tout ce qui passe par la tête, les documents de travail,
-      et les décisions prises ensemble.</p>
+    <p class="aide">Un thème = un sujet sur lequel l'équipe travaille : un tableau blanc,
+      des pages, une discussion, des documents et des décisions. « Rythme de travail » et
+      « Fiches de poste » sont toujours là ; les autres se créent et se suppriment.</p>
   </div>
   <button id="btn-nouveau-theme" class="principal">+ Nouveau thème de réflexion</button>
   <div id="liste-themes" class="grille-themes"></div>
@@ -56,22 +111,30 @@
     <input id="titre-theme" class="titre-theme" placeholder="Titre du thème">
     <input id="description-theme" class="description-theme" placeholder="En une phrase, de quoi parle ce thème ?">
     <div class="presents">
-      <span class="etiquette">En ligne maintenant</span>
+      <span class="etiquette">En ligne</span>
       <span id="participants" class="participants">—</span>
+      <span class="etiquette">Responsables</span>
+      <span id="responsables" class="participants">personne</span>
+      <button id="btn-responsables" class="discret petit">Définir</button>
     </div>
     <button id="btn-supprimer-theme" class="discret danger" title="Supprimer ce thème">Supprimer</button>
   </div>
 
-  <nav class="onglets">
-    <button data-onglet="tableau" class="actif">Tableau blanc</button>
-    <button data-onglet="documents">Documents</button>
-    <button data-onglet="decisions">Décisions</button>
-    <button data-onglet="journal">Journal</button>
-    <button data-onglet="outils">Boîte à trames</button>
-  </nav>
+  <div id="zone-responsables" class="carte cache">
+    <h3>Responsables de ce thème</h3>
+    <p class="aide">Ce sont eux qui reçoivent une alerte par courriel quand le thème change.
+      Chacun doit avoir créé son compte (prénom + courriel) pour figurer ici.</p>
+    <div id="liste-comptes" class="abonnements"></div>
+    <div class="barre-boutons">
+      <button id="responsables-enregistrer" class="principal petit">Enregistrer</button>
+      <button id="responsables-fermer" class="discret petit">Fermer</button>
+    </div>
+  </div>
+
+  <nav class="onglets" id="onglets-theme"></nav>
 
   <!-- ---- le tableau blanc ---- -->
-  <section id="onglet-tableau" class="onglet">
+  <section id="onglet-tableau" class="onglet cache">
     <div class="barre-tableau">
       <button id="btn-note" class="principal petit">+ Nouvelle note</button>
       <input id="recherche-notes" class="recherche" placeholder="Repérer une note…">
@@ -82,8 +145,6 @@
       <button id="btn-recentrer" class="discret" title="Revenir au départ">Recentrer</button>
       <button id="btn-organiser" class="discret" title="Ranger les notes en colonnes">Ranger</button>
     </div>
-
-    <!-- Formatage : s'applique à la note sélectionnée -->
     <div id="barre-format" class="barre-format cache">
       <span class="etiquette">Mise en forme</span>
       <button data-format="taille-moins" title="Plus petit">A−</button>
@@ -102,11 +163,56 @@
       <button data-format="devant" title="Mettre au premier plan">▲</button>
       <button data-format="supprimer" class="danger" title="Supprimer la note">🗑</button>
     </div>
-
     <div id="plateau" class="plateau">
       <div id="monde" class="monde"></div>
       <div class="aide-tableau">Cliquez sur une note pour l'écrire · faites glisser le fond
         pour vous déplacer · la molette déplace, Ctrl + molette agrandit</div>
+    </div>
+  </section>
+
+  <!-- ---- la discussion du thème ---- -->
+  <section id="onglet-chat" class="onglet cache">
+    <div class="carte">
+      <h3>Discussion du thème</h3>
+      <p class="aide">Échangez ici : c'est le fil du sujet, il reste attaché au thème.</p>
+      <div id="fil-theme" class="fil"></div>
+      <form id="chat-theme-form" class="ligne-chat">
+        <input id="chat-theme-texte" placeholder="Écrire un message…" autocomplete="off">
+        <button class="principal petit" type="submit">Envoyer</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ---- les pages de travail ---- -->
+  <section id="onglet-pages" class="onglet cache">
+    <div class="carte">
+      <h3>Pages de travail</h3>
+      <p class="aide">Des pages blanches avec un traitement de texte simple : comptes rendus,
+        notes de travail, procédures. Chacun peut les modifier, tout le monde voit.</p>
+      <div class="barre-boutons">
+        <input id="nouvelle-page-titre" class="recherche" placeholder="Titre de la nouvelle page">
+        <button id="btn-page" class="principal petit">+ Créer la page</button>
+      </div>
+    </div>
+    <div class="pages">
+      <div id="liste-pages" class="liste-pages"></div>
+      <div id="page-editeur" class="carte cache">
+        <div class="barre-editeur">
+          <input id="page-titre" class="titre-page" placeholder="Titre de la page">
+          <span class="espace"></span>
+          <button data-edition="bold" title="Gras"><b>G</b></button>
+          <button data-edition="italic" title="Italique"><i>I</i></button>
+          <button data-edition="underline" title="Souligné"><u>S</u></button>
+          <button data-edition="insertUnorderedList" title="Liste à puces">•</button>
+          <button data-edition="insertOrderedList" title="Liste numérotée">1.</button>
+          <button data-edition="formatBlock:h3" title="Titre de section">T</button>
+          <button data-edition="removeFormat" title="Effacer la mise en forme">⌫</button>
+          <button id="page-enregistrer" class="principal petit">Enregistrer</button>
+          <button id="page-supprimer" class="discret danger petit">Supprimer</button>
+        </div>
+        <div id="page-contenu" class="contenu-page" contenteditable="true"></div>
+        <p id="page-etat" class="aide"></p>
+      </div>
     </div>
   </section>
 
@@ -130,8 +236,8 @@
   <section id="onglet-decisions" class="onglet cache">
     <div class="carte">
       <h3>Proposer une décision</h3>
-      <p class="aide">On écrit la décision, on discute sur le tableau blanc, puis on la
-        marque « adoptée » ou « rejetée ». Chacun voit qui a décidé quoi.</p>
+      <p class="aide">On écrit la décision, on discute, puis on la marque « adoptée » ou
+        « rejetée ». Chacun vote une fois, et les votes restent anonymes.</p>
       <input id="intitule-decision" class="champ-large" placeholder="La décision en une phrase">
       <textarea id="detail-decision" rows="2" placeholder="Pourquoi, comment (facultatif)"></textarea>
       <button id="btn-decision" class="principal petit">Proposer</button>
@@ -139,7 +245,7 @@
     <div id="liste-decisions" class="liste-decisions"></div>
   </section>
 
-  <!-- ---- le journal des actions ---- -->
+  <!-- ---- le journal ---- -->
   <section id="onglet-journal" class="onglet cache">
     <div class="carte">
       <h3>Journal du thème</h3>
@@ -149,26 +255,53 @@
     <div id="liste-journal" class="liste-journal"></div>
   </section>
 
-  <!-- ---- les outils (dont le générateur de trames) ---- -->
-  <section id="onglet-outils" class="onglet cache">
+  <!-- ---- la boîte à trames (thème « Rythme de travail ») ---- -->
+  <section id="onglet-boite" class="onglet cache">
     <div class="carte">
       <h3>Boîte à trames</h3>
-      <p class="aide">La boîte à trames sert le thème : elle traduit les idées en
-        organisation concrète (effectif, postes, horaires, conformité à la réglementation).
-        Elle ne remplace pas la réflexion commune, elle la prolonge.</p>
-      <div class="outils-liens">
-        <a class="lien-outil principal" href="boite-trame.html">
-          <span class="icone-outil">🧩</span>
-          <span>
-            <b>Boîte à trames</b>
-            <em>Décrivez la profession, l'effectif et les postes : l'outil calcule les ETP
-              nécessaires et propose jusqu'à 3 trames, vérifiées par rapport à la
-              réglementation du travail.</em>
-          </span>
-        </a>
+      <p class="aide">Décrivez la profession, l'effectif et les postes : l'outil calcule les
+        ETP nécessaires et propose jusqu'à trois trames, vérifiées par rapport à la
+        réglementation du travail.</p>
+      <div class="barre-boutons">
+        <a class="principal petit" href="boite-trame.html" target="_blank">Ouvrir en plein écran</a>
       </div>
-      <div id="outils-lies" class="outils-lies"></div>
     </div>
+    <iframe id="cadre-trame" class="cadre-outil" src="boite-trame.html" title="Boîte à trames"></iframe>
+  </section>
+
+  <!-- ---- les codes horaires (thème « Fiches de poste ») ---- -->
+  <section id="onglet-codes" class="onglet cache">
+    <div class="carte">
+      <h3>Référentiel des codes horaires</h3>
+      <p class="aide">On commence par se mettre d'accord sur le vocabulaire : ce que veut
+        dire chaque code, à quelles heures, et à quoi il correspond dans la journée. C'est la
+        base des fiches de poste, et les couleurs sont celles du planning habituel.</p>
+      <div id="liste-codes" class="liste-codes"></div>
+      <div class="barre-boutons">
+        <button id="btn-code" class="principal petit">+ Ajouter un code horaire</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---- les fiches de poste ---- -->
+  <section id="onglet-fiches" class="onglet cache">
+    <div class="carte">
+      <h3>Fiches de poste, par tranche horaire</h3>
+      <p class="aide">Une fiche se lit par code horaire : pour chaque tranche, quelles tâches
+        sont prévues, combien de temps, à quelle fréquence et par qui. On part de l'existant,
+        on duplique, on retravaille, puis on valide ensemble.</p>
+      <div class="barre-boutons">
+        <select id="fiche-profession">
+          <option value="IDE">Infirmier(ère)</option>
+          <option value="AS">Aide-soignant(e)</option>
+          <option value="ASH">Agent de service hospitalier</option>
+          <option value="Autre">Autre métier</option>
+        </select>
+        <input id="fiche-intitule" class="recherche" placeholder="Intitulé de la fiche">
+        <button id="btn-fiche" class="principal petit">+ Créer la fiche</button>
+      </div>
+    </div>
+    <div id="liste-fiches" class="liste-fiches"></div>
   </section>
 </main>
 

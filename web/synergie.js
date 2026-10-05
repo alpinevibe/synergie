@@ -34,7 +34,9 @@
   // ---------------------------------------------------------------- appels au serveur
   async function appel(chemin, { methode = 'GET', corps = null, donnees = null } = {}) {
     const options = { method: methode, headers: {} };
-    // Le prénom accompagne chaque appel : le serveur journalise ainsi qui agit.
+    // Le jeton du compte accompagne chaque appel : le serveur sait ainsi qui agit (et
+    // retrouve le courriel pour les alertes). Le prénom sert de secours.
+    if (monJeton()) options.headers['X-Synergie-Jeton'] = monJeton();
     if (monNom()) options.headers['X-Synergie-Nom'] = monNom();
     if (corps !== null) {
       options.headers['Content-Type'] = 'application/json';
@@ -51,7 +53,15 @@
   }
 
   // ---------------------------------------------------------------- mon nom
+  let compte = null;                     // mon compte (prénom, courriel, notifications)
+
+  function monJeton() { return localStorage.getItem('synergie.jeton') || ''; }
+  function retenirJeton(valeur) {
+    if (valeur) localStorage.setItem('synergie.jeton', valeur);
+  }
+
   function monNom() {
+    if (compte && compte.prenom) return compte.prenom;
     return (localStorage.getItem('synergie.nom') || '').trim();
   }
   function retenirNom(valeur) {
@@ -88,13 +98,53 @@
   }
 
   // ================================================================ UN THÈME
+  // Les onglets ne sont pas les mêmes selon le thème : « Rythme de travail » ouvre sur la
+  // boîte à trames, « Fiches de poste » sur les fiches et les codes horaires.
+  const ONGLETS = {
+    libre: [['tableau', 'Tableau blanc'], ['pages', 'Pages'], ['chat', 'Discussion'],
+            ['documents', 'Documents'], ['decisions', 'Décisions'], ['journal', 'Journal']],
+    rythme: [['boite', 'Boîte à trames'], ['tableau', 'Tableau blanc'], ['pages', 'Pages'],
+             ['chat', 'Discussion'], ['documents', 'Documents'], ['decisions', 'Décisions'],
+             ['journal', 'Journal']],
+    fiches: [['fiches', 'Fiches de poste'], ['codes', 'Codes horaires'],
+             ['tableau', 'Tableau blanc'], ['pages', 'Pages'], ['chat', 'Discussion'],
+             ['documents', 'Documents'], ['decisions', 'Décisions'], ['journal', 'Journal']]
+  };
+
+  function construireOnglets(type) {
+    const barre = $('#onglets-theme');
+    barre.innerHTML = '';
+    const liste = ONGLETS[type] || ONGLETS.libre;
+    liste.forEach(([cle, libelle], rang) => {
+      const bouton = element('button', { texte: libelle });
+      bouton.dataset.onglet = cle;
+      if (rang === 0) bouton.classList.add('actif');
+      bouton.addEventListener('click', () => montrerOnglet(cle));
+      barre.append(bouton);
+    });
+    document.querySelectorAll('.onglet').forEach((onglet) => onglet.classList.add('cache'));
+    montrerOnglet(liste[0][0]);
+  }
+
+  function montrerOnglet(cle) {
+    document.querySelectorAll('#onglets-theme button').forEach((bouton) =>
+      bouton.classList.toggle('actif', bouton.dataset.onglet === cle));
+    document.querySelectorAll('.onglet').forEach((onglet) =>
+      onglet.classList.toggle('cache', onglet.id !== 'onglet-' + cle));
+    if (cle === 'chat') chargerChatTheme();
+    if (cle === 'pages') chargerPages();
+    if (cle === 'codes') chargerCodes();
+    if (cle === 'fiches') chargerFiches();
+    if (cle === 'journal') afficherJournal();
+  }
+
   async function ouvrirTheme(identifiant, { pousser = true } = {}) {
     const donnees = await appel('/api/themes/' + encodeURIComponent(identifiant));
     theme = donnees.theme; notes = donnees.notes || []; decisions = donnees.decisions || [];
     documents = donnees.documents || []; participants = donnees.participants || [];
     journal = donnees.journal || []; votes = donnees.votes || {};
     mesVotes = donnees.mes_votes || [];
-    $('#vue-themes').classList.add('cache');
+    $('#vue-accueil').classList.add('cache');
     $('#vue-theme').classList.remove('cache');
     $('#titre-theme').value = theme.titre || '';
     $('#description-theme').value = theme.description || '';
@@ -103,7 +153,12 @@
     afficherDocuments();
     afficherDecisions();
     afficherJournal();
-    afficherOutils();
+    afficherResponsables();
+    const fixe = Boolean(theme.fixe);
+    $('#btn-supprimer-theme').classList.toggle('cache', fixe);
+    $('#zone-responsables').classList.add('cache');
+    construireOnglets(theme.type || 'libre');
+    chargerChatTheme();
     brancherFlux();
     if (pousser && location.hash !== '#t=' + identifiant) {
       history.replaceState(null, '', '#t=' + identifiant);
@@ -115,7 +170,7 @@
     theme = null; notes = []; decisions = []; documents = []; participants = [];
     journal = []; votes = {}; mesVotes = [];
     $('#vue-theme').classList.add('cache');
-    $('#vue-themes').classList.remove('cache');
+    $('#vue-accueil').classList.remove('cache');
     history.replaceState(null, '', location.pathname);
     chargerThemes();
   }
@@ -139,6 +194,21 @@
       mesVotes = donnees.mes_votes || [];
       afficherJournal(); afficherDecisions();
     } catch (erreur) { /* sans conséquence */ }
+  }
+
+  // ---- flux général : discussion générale et cadre de travail ----
+  let fluxGeneral = null;
+  function brancherFluxGeneral() {
+    if (fluxGeneral) return;
+    fluxGeneral = new EventSource('/api/evenements?nom=' + encodeURIComponent(monNom() || 'Anonyme'));
+    fluxGeneral.onmessage = (message) => {
+      try {
+        const evenement = JSON.parse(message.data);
+        if (evenement.type === 'message') chargerChatGeneral();
+        if (evenement.type === 'cadre') chargerCadre();
+      } catch (erreur) { /* événement illisible */ }
+    };
+    fluxGeneral.onerror = () => { /* le navigateur retente tout seul */ };
   }
 
   // ================================================================ TEMPS RÉEL
@@ -203,6 +273,32 @@
       case 'vote':
         votes = Object.assign({}, votes, { [evenement.decision]: evenement.comptes });
         afficherDecisions();
+        break;
+      case 'message':
+        if (evenement.message.theme === theme.id) chargerChatTheme();
+        break;
+      case 'responsables':
+        theme.responsables = evenement.responsables || [];
+        afficherResponsables();
+        break;
+      case 'page_creee':
+      case 'page_maj':
+      case 'page_supprimee':
+        chargerPages();
+        if (pageOuverte && evenement.page && pageOuverte.id === evenement.page.id
+            && document.activeElement !== $('#page-contenu')) {
+          $('#page-contenu').innerHTML = evenement.page.contenu || '';
+          pageOuverte = evenement.page;
+        }
+        break;
+      case 'code_horaire':
+      case 'code_horaire_supprime':
+        chargerCodes();
+        break;
+      case 'fiche_creee':
+      case 'fiche_maj':
+      case 'fiche_supprimee':
+        chargerFiches();
         break;
       case 'theme_supprime':
         fermerTheme();
@@ -721,35 +817,529 @@
     $('#intitule-decision').value = ''; $('#detail-decision').value = '';
   }
 
-  // ================================================================ OUTILS
-  async function afficherOutils() {
-    const zone = $('#outils-lies');
-    zone.innerHTML = '';
-    let projets = [];
-    try { projets = (await appel('/api/projets')).projets || []; } catch (e) { projets = []; }
-    if (!projets.length) {
-      zone.append(element('p', { classe: 'aide', texte:
-        'Aucun projet de trames pour le moment : créez-en un dans les outils, puis revenez le relier à ce thème.' }));
-    } else {
-      const choix = element('select', { classe: 'champ-large' });
-      choix.append(element('option', { texte: '— relier ce thème à un projet —', attrs: { value: '' } }));
-      projets.forEach((projet) => choix.append(element('option', {
-        texte: projet.nom || projet.identifiant, attrs: { value: projet.identifiant } })));
-      if (theme && theme.projet) choix.value = theme.projet;
-      choix.addEventListener('change', async () => {
-        await appel('/api/themes/' + theme.id, { methode: 'PUT', corps: { projet: choix.value } });
-        theme.projet = choix.value;
-        afficherOutils();
-      });
-      zone.append(element('p', { classe: 'aide', texte:
-        'Le thème peut s\'appuyer sur un projet de trames : c\'est un outil au service de la réflexion.' }), choix);
-      const projet = projets.find((p) => p.identifiant === (theme && theme.projet));
-      if (projet) {
-        zone.append(element('p', { classe: 'meta', texte:
-          `Projet relié : ${projet.nom} · ${(projet.metiers || []).length} métier(s) · ` +
-          `${(projet.agents || []).length} agent(s)` }));
-      }
+  // ================================================================ MON COMPTE
+  // Chaque personne a un compte enregistré sur le serveur (prénom + courriel). Le jeton
+  // gardé par le navigateur permet de le retrouver, et le courriel sert aux alertes.
+
+  async function creerMonCompte() {
+    const prenom = ($('#prenom').value || '').trim();
+    if (!prenom) { $('#prenom').classList.add('manquant'); $('#prenom').focus(); return false; }
+    const donnees = await appel('/api/comptes', { methode: 'POST', corps: {
+      prenom,
+      email: ($('#email-compte').value || '').trim(),
+      notifier_tout: $('#notifier-tout').checked,
+      jeton: monJeton() || null } });
+    compte = donnees.compte;
+    retenirJeton(donnees.jeton);
+    retenirNom(compte.prenom);
+    return true;
+  }
+
+  async function chargerMonCompte() {
+    if (!monJeton()) return null;
+    try {
+      const donnees = await appel('/api/comptes/moi');
+      compte = donnees.compte;
+      compte.abonnements = donnees.abonnements || [];
+      compte.responsable_de = donnees.responsable_de || [];
+      if (compte && compte.prenom) retenirNom(compte.prenom);
+      return compte;
+    } catch (erreur) {
+      localStorage.removeItem('synergie.jeton');       // jeton périmé : on redemandera
+      return null;
     }
+  }
+
+  async function ouvrirMonCompte() {
+    if (!compte) { demanderPrenom(); return; }
+    $('#c-prenom').value = compte.prenom || '';
+    $('#c-email').value = compte.email || '';
+    $('#c-tout').checked = Boolean(compte.notifier_tout);
+    await chargerListeAbonnements();
+    $('#c-etat').textContent = compte.responsable_de && compte.responsable_de.length
+      ? 'Vous êtes responsable de ' + compte.responsable_de.length + ' thème(s).'
+      : '';
+    $('#vue-compte').classList.remove('cache');
+  }
+
+  async function chargerListeAbonnements() {
+    const zone = $('#c-abonnements');
+    zone.innerHTML = '';
+    let liste = themes;
+    if (!liste.length) {
+      const donnees = await appel('/api/themes');
+      liste = donnees.themes || [];
+    }
+    const abonnes = new Set(compte.abonnements || []);
+    liste.forEach((theme) => {
+      const ligne = element('label', { classe: 'case' });
+      const case_ = element('input', { attrs: { type: 'checkbox' } });
+      case_.checked = abonnes.has(theme.id);
+      case_.dataset.theme = theme.id;
+      poser(ligne, case_, element('span', { texte: theme.titre }));
+      zone.append(ligne);
+    });
+    if (!liste.length) zone.append(element('p', { classe: 'aide', texte: 'Aucun thème.' }));
+  }
+
+  async function enregistrerMonCompte() {
+    const abonnements = [...document.querySelectorAll('#c-abonnements input:checked')]
+      .map((c) => c.dataset.theme);
+    try {
+      const donnees = await appel('/api/comptes/moi', { methode: 'PUT', corps: {
+        prenom: $('#c-prenom').value.trim(), email: $('#c-email').value.trim(),
+        notifier_tout: $('#c-tout').checked, abonnements } });
+      compte = Object.assign(compte, donnees.compte);
+      compte.abonnements = donnees.abonnements;
+      compte.responsable_de = donnees.responsable_de;
+      retenirNom(compte.prenom);
+      $('#c-etat').textContent = 'Enregistré.';
+      if (theme) brancherFlux();
+    } catch (erreur) {
+      $('#c-etat').textContent = 'Enregistrement impossible : ' + erreur.message;
+    }
+  }
+
+  // ================================================================ CADRE DE TRAVAIL
+  async function chargerCadre() {
+    try {
+      const cadre = await appel('/api/cadre');
+      if (document.activeElement !== $('#cadre-contexte')) {
+        $('#cadre-contexte').value = cadre.contexte || '';
+      }
+      $('#cadre-etat').textContent = cadre.maj_le
+        ? 'Dernière modification par ' + (cadre.maj_par || 'quelqu\'un') + ' ' + quand(cadre.maj_le)
+        : '';
+      const donnees = await appel('/api/cadre/documents');
+      afficherComptesRendus(donnees.documents || []);
+    } catch (erreur) { /* sans conséquence */ }
+  }
+
+  function afficherComptesRendus(documents) {
+    const zone = $('#cadre-documents');
+    zone.innerHTML = '';
+    if (!documents.length) {
+      zone.append(element('p', { classe: 'aide', texte: 'Aucun compte rendu déposé.' }));
+      return;
+    }
+    documents.forEach((document) => {
+      const ligne = element('div', { classe: 'carte document' });
+      poser(ligne,
+        element('a', { classe: 'nom', texte: document.nom,
+          attrs: { href: `/api/cadre/documents/${document.id}/fichier` } }),
+        element('span', { classe: 'meta', texte:
+          `${poids(document.taille)} · déposé par ${document.auteur || 'quelqu\'un'} ${quand(document.cree_le)}` }),
+        document.note ? element('span', { classe: 'note-doc', texte: document.note }) : null);
+      const supprimer = element('button', { classe: 'discret danger petit', texte: 'Supprimer' });
+      supprimer.addEventListener('click', async () => {
+        if (!confirm('Supprimer ce document ?')) return;
+        await appel(`/api/cadre/documents/${document.id}`, { methode: 'DELETE' });
+        chargerCadre();
+      });
+      poser(ligne, supprimer);
+      zone.append(ligne);
+    });
+  }
+
+  async function enregistrerCadre() {
+    $('#cadre-etat').textContent = 'Enregistrement…';
+    await appel('/api/cadre', { methode: 'PUT', corps: { contexte: $('#cadre-contexte').value } });
+    await chargerCadre();
+  }
+
+  async function deposerComptesRendus() {
+    const champ = $('#cadre-fichier');
+    if (!champ.files || !champ.files.length) {
+      $('#cadre-depot-etat').textContent = 'Choisissez un fichier.';
+      return;
+    }
+    for (const fichier of champ.files) {
+      const donnees = new FormData();
+      donnees.append('fichier', fichier);
+      donnees.append('note', $('#cadre-note').value);
+      donnees.append('auteur', monNom() || 'Anonyme');
+      $('#cadre-depot-etat').textContent = 'Envoi de ' + fichier.name + '…';
+      await appel('/api/cadre/documents', { methode: 'POST', donnees });
+    }
+    champ.value = ''; $('#cadre-note').value = '';
+    $('#cadre-depot-etat').textContent = 'Document(s) déposé(s).';
+    chargerCadre();
+  }
+
+  // ================================================================ DISCUSSIONS
+  // Un chat général (tout le projet) et un chat par thème. Les messages arrivent en direct.
+
+  function afficherFil(zone, messages, sujet) {
+    const proche = zone.scrollHeight - zone.scrollTop - zone.clientHeight < 80;
+    zone.innerHTML = '';
+    if (!messages.length) {
+      zone.append(element('p', { classe: 'aide', texte: 'Aucun message pour le moment.' }));
+      return;
+    }
+    messages.forEach((message) => {
+      const ligne = element('div', { classe: 'message' + (message.qui === monNom() ? ' moi' : '') });
+      poser(ligne,
+        element('span', { classe: 'qui', texte: message.qui || 'Quelqu\'un' }),
+        element('span', { classe: 'texte', texte: message.texte }),
+        element('span', { classe: 'quand', texte: quand(message.cree_le) }));
+      zone.append(ligne);
+    });
+    if (proche) zone.scrollTop = zone.scrollHeight;
+  }
+
+  async function chargerChatGeneral() {
+    try {
+      const donnees = await appel('/api/messages');
+      afficherFil($('#chat-general'), donnees.messages || []);
+    } catch (erreur) { /* sans conséquence */ }
+  }
+
+  async function chargerChatTheme() {
+    if (!theme) return;
+    try {
+      const donnees = await appel('/api/themes/' + theme.id + '/messages');
+      afficherFil($('#fil-theme'), donnees.messages || []);
+    } catch (erreur) { /* sans conséquence */ }
+  }
+
+  async function envoyerChat(themeId, champ, recharger) {
+    const texte = (champ.value || '').trim();
+    if (!texte) return;
+    champ.value = '';
+    const chemin = themeId ? `/api/themes/${themeId}/messages` : '/api/messages';
+    try {
+      await appel(chemin, { methode: 'POST', corps: { texte } });
+      await recharger();
+    } catch (erreur) { alert('Message non envoyé : ' + erreur.message); }
+  }
+
+  // ================================================================ PAGES DE TRAVAIL
+  let pages = [];
+  let pageOuverte = null;
+  let minuteurPage = null;
+
+  async function chargerPages() {
+    if (!theme) return;
+    const donnees = await appel('/api/themes/' + theme.id + '/pages');
+    pages = donnees.pages || [];
+    afficherPages();
+  }
+
+  function afficherPages() {
+    const zone = $('#liste-pages');
+    zone.innerHTML = '';
+    if (!pages.length) {
+      zone.append(element('p', { classe: 'aide',
+        texte: 'Aucune page pour le moment. Créez-en une : c\'est une page blanche à remplir.' }));
+      return;
+    }
+    pages.forEach((page) => {
+      const carte = element('div', { classe: 'carte page-carte'
+        + (pageOuverte && pageOuverte.id === page.id ? ' ouverte' : '') });
+      poser(carte,
+        element('h4', { texte: page.titre }),
+        element('p', { classe: 'meta', texte:
+          (page.auteur ? 'créée par ' + page.auteur + ' · ' : '') + quand(page.maj_le) }));
+      carte.addEventListener('click', () => ouvrirPage(page.id));
+      zone.append(carte);
+    });
+  }
+
+  async function creerPage() {
+    const titre = ($('#nouvelle-page-titre').value || '').trim() || 'Page sans titre';
+    const page = await appel('/api/themes/' + theme.id + '/pages',
+      { methode: 'POST', corps: { titre } });
+    $('#nouvelle-page-titre').value = '';
+    pages.unshift({ id: page.id, theme: page.theme, titre: page.titre, auteur: page.auteur,
+                    cree_le: page.cree_le, maj_le: page.maj_le });
+    afficherPages();
+    ouvrirPage(page.id);
+  }
+
+  async function ouvrirPage(identifiant) {
+    const page = await appel('/api/themes/' + theme.id + '/pages/' + identifiant);
+    pageOuverte = page;
+    $('#page-editeur').classList.remove('cache');
+    $('#page-titre').value = page.titre;
+    $('#page-contenu').innerHTML = page.contenu || '';
+    $('#page-etat').textContent = 'Modifiée ' + quand(page.maj_le);
+    afficherPages();
+  }
+
+  async function enregistrerPage(silencieux) {
+    if (!pageOuverte) return;
+    try {
+      await appel('/api/themes/' + theme.id + '/pages/' + pageOuverte.id, { methode: 'PUT',
+        corps: { titre: $('#page-titre').value.trim() || 'Page sans titre',
+                 contenu: $('#page-contenu').innerHTML } });
+      if (!silencieux) $('#page-etat').textContent = 'Enregistrée.';
+      const dansListe = pages.find((p) => p.id === pageOuverte.id);
+      if (dansListe) { dansListe.titre = $('#page-titre').value.trim(); }
+      afficherPages();
+    } catch (erreur) {
+      $('#page-etat').textContent = 'Enregistrement impossible : ' + erreur.message;
+    }
+  }
+
+  function programmerPage() {
+    clearTimeout(minuteurPage);
+    $('#page-etat').textContent = 'Modifications en cours…';
+    minuteurPage = setTimeout(() => enregistrerPage(true), 1500);
+  }
+
+  function mettreEnForme(ordre) {
+    const [commande, valeur] = ordre.split(':');
+    document.execCommand(commande, false, valeur || null);
+    $('#page-contenu').focus();
+    programmerPage();
+  }
+
+  // ================================================================ CODES HORAIRES
+  async function chargerCodes() {
+    if (!theme) return;
+    const donnees = await appel('/api/themes/' + theme.id + '/codes');
+    afficherCodes(donnees.codes || []);
+  }
+
+  function afficherCodes(codes) {
+    const zone = $('#liste-codes');
+    zone.innerHTML = '';
+    codes.forEach((code) => {
+      const ligne = element('div', { classe: 'ligne-code' });
+      const pastille = element('span', { classe: 'case-code',
+        style: `background:${code.couleur || '#eef1f6'}` , texte: code.code });
+      const champs = element('div', { classe: 'champs-code' });
+      const saisies = {};
+      [['libelle', 'Libellé', code.libelle], ['debut', 'Début', code.debut],
+       ['fin', 'Fin', code.fin]].forEach(([cle, etiquette, valeur]) => {
+        const champ = element('input', { classe: 'champ-court' });
+        champ.value = valeur || '';
+        champ.placeholder = etiquette;
+        saisies[cle] = champ;
+        champs.append(champ);
+      });
+      const definition = element('input', { classe: 'champ-long' });
+      definition.value = code.definition || '';
+      definition.placeholder = 'À quoi correspond ce code dans la journée ?';
+      saisies.definition = definition;
+      const duree = element('span', { classe: 'meta', texte: code.duree_min
+        ? (code.duree_min / 60).toFixed(1).replace('.', ',') + ' h' : '—' });
+      const enregistrer = element('button', { classe: 'discret petit', texte: 'Enregistrer' });
+      enregistrer.addEventListener('click', async () => {
+        await appel('/api/themes/' + theme.id + '/codes', { methode: 'POST', corps: {
+          code: code.code, libelle: saisies.libelle.value, debut: saisies.debut.value,
+          fin: saisies.fin.value, definition: saisies.definition.value,
+          couleur: code.couleur, ordre: code.ordre } });
+        chargerCodes();
+      });
+      const supprimer = element('button', { classe: 'discret danger petit', texte: 'Supprimer' });
+      supprimer.addEventListener('click', async () => {
+        if (!confirm('Supprimer le code ' + code.code + ' ?')) return;
+        await appel('/api/themes/' + theme.id + '/codes/' + code.id, { methode: 'DELETE' });
+        chargerCodes();
+      });
+      poser(zone, pastille, champs, definition, duree, enregistrer, supprimer);
+      zone.append(element('div', { classe: 'separateur' }));
+    });
+    if (!codes.length) zone.append(element('p', { classe: 'aide', texte: 'Aucun code défini.' }));
+  }
+
+  async function ajouterCode() {
+    const code = prompt('Nouveau code horaire (par exemple M03, S03, une lettre…)');
+    if (!code) return;
+    const libelle = prompt('Que veut dire ce code ? (par exemple « Matin »)') || '';
+    const debut = prompt('Heure de début (par exemple 06:30) — laissez vide si sans objet') || '';
+    const fin = prompt('Heure de fin (par exemple 14:00)') || '';
+    await appel('/api/themes/' + theme.id + '/codes', { methode: 'POST',
+      corps: { code, libelle, debut, fin } });
+    chargerCodes();
+  }
+
+  // ================================================================ FICHES DE POSTE
+  async function chargerFiches() {
+    if (!theme) return;
+    const donnees = await appel('/api/themes/' + theme.id + '/fiches');
+    afficherFiches(donnees.fiches || []);
+  }
+
+  function afficherFiches(fiches) {
+    const zone = $('#liste-fiches');
+    zone.innerHTML = '';
+    if (!fiches.length) {
+      zone.append(element('p', { classe: 'aide', texte:
+        'Aucune fiche pour le moment. Créez la première : elle se remplira tâche par tâche, tranche horaire par tranche horaire.' }));
+      return;
+    }
+    fiches.forEach((fiche) => zone.append(carteFiche(fiche)));
+  }
+
+  function carteFiche(fiche) {
+    const carte = element('div', { classe: 'carte fiche ' + fiche.statut });
+    poser(carte,
+      element('div', { classe: 'entete-fiche' },
+        element('h3', { texte: fiche.intitule }),
+        element('span', { classe: 'statut ' + fiche.statut, texte: fiche.statut_libelle })),
+      element('p', { classe: 'meta', texte:
+        (fiche.profession ? fiche.profession + ' · ' : '') + 'version ' + fiche.version +
+        (fiche.auteur ? ' · ouverte par ' + fiche.auteur : '') + ' · ' + quand(fiche.maj_le) }));
+
+    if (fiche.finalite) {
+      carte.append(element('p', { classe: 'finalite', texte: fiche.finalite }));
+    }
+
+    // La charge par code horaire : combien de temps est prévu sur chaque tranche.
+    if (fiche.charge_par_code && fiche.charge_par_code.length) {
+      const charges = element('div', { classe: 'charges' });
+      fiche.charge_par_code.forEach((charge) => {
+        charges.append(element('span', { classe: 'charge', texte:
+          charge.code + ' : ' + (charge.minutes / 60).toFixed(1).replace('.', ',') + ' h' }));
+      });
+      carte.append(element('p', { classe: 'etiquette', texte: 'Temps prévu par code horaire' }), charges);
+    }
+
+    // Le tableau des tâches, une ligne par tâche.
+    const table = element('table', { classe: 'table-taches' });
+    const entete = element('tr');
+    ['Code', 'Tâche', 'Début', 'Fin', 'Durée', 'Fréquence', 'Qui', 'Remarque', ''].forEach((titre) => {
+      entete.append(element('th', { texte: titre }));
+    });
+    table.append(entete);
+    (fiche.taches || []).forEach((tache) => table.append(ligneTache(fiche, tache)));
+    carte.append(table);
+
+    const barre = element('div', { classe: 'barre-boutons' });
+    const ajouter = element('button', { classe: 'discret petit', texte: '+ Ajouter une tâche' });
+    ajouter.addEventListener('click', async () => {
+      await appel(`/api/themes/${theme.id}/fiches/${fiche.id}/taches`, { methode: 'POST',
+        corps: { libelle: 'Nouvelle tâche', code: (fiche.taches[0] || {}).code || '' } });
+      chargerFiches();
+    });
+    const dupliquer = element('button', { classe: 'discret petit', texte: 'Dupliquer (nouvelle version)' });
+    dupliquer.addEventListener('click', async () => {
+      await appel(`/api/themes/${theme.id}/fiches/${fiche.id}/dupliquer`, { methode: 'POST' });
+      chargerFiches();
+    });
+    const supprimer = element('button', { classe: 'discret danger petit', texte: 'Supprimer' });
+    supprimer.addEventListener('click', async () => {
+      if (!confirm('Supprimer cette fiche et ses tâches ?')) return;
+      await appel(`/api/themes/${theme.id}/fiches/${fiche.id}`, { methode: 'DELETE' });
+      chargerFiches();
+    });
+    poser(barre, ajouter, dupliquer, supprimer);
+    carte.append(barre);
+
+    // La validation : à l'étude → proposée → validée.
+    const statuts = element('div', { classe: 'barre-boutons' });
+    statuts.append(element('span', { classe: 'etiquette', texte: 'État de la fiche' }));
+    [['a_l_etude', 'À l\'étude'], ['proposee', 'Proposer'], ['validee', 'Valider']].forEach(([valeur, mot]) => {
+      const bouton = element('button', { classe: 'petit ' + (valeur === 'validee' ? 'principal' : ''),
+        texte: mot });
+      bouton.addEventListener('click', async () => {
+        await appel(`/api/themes/${theme.id}/fiches/${fiche.id}`, { methode: 'PUT',
+          corps: { statut: valeur } });
+        chargerFiches();
+      });
+      statuts.append(bouton);
+    });
+    if (fiche.statut === 'validee' && fiche.validee_par) {
+      statuts.append(element('span', { classe: 'meta', texte:
+        'validée par ' + fiche.validee_par + ' ' + quand(fiche.validee_le) }));
+    }
+    carte.append(statuts);
+    return carte;
+  }
+
+  function ligneTache(fiche, tache) {
+    const ligne = element('tr');
+    const champ = (cle, valeur, classe) => {
+      const noeud = element('input', { classe: classe || 'champ-court' });
+      noeud.value = valeur || '';
+      noeud.dataset.cle = cle;
+      return noeud;
+    };
+    const code = element('input', { classe: 'champ-code' });
+    code.value = tache.code || '';
+    code.title = 'Code horaire (M03, S03, J13, N02…)';
+    const libelle = champ('libelle', tache.libelle, 'champ-long');
+    const debut = champ('debut', tache.debut);
+    const fin = champ('fin', tache.fin);
+    const duree = element('span', { classe: 'meta', texte: tache.duree_min
+      ? (tache.duree_min / 60).toFixed(1).replace('.', ',') + ' h' : '—' });
+    const periodicite = champ('periodicite', tache.periodicite);
+    const qui = champ('qui', tache.qui);
+    const remarque = champ('remarque', tache.remarque, 'champ-long');
+    const actions = element('td');
+    const enregistrer = element('button', { classe: 'discret petit', texte: '✓' });
+    enregistrer.title = 'Enregistrer cette tâche';
+    enregistrer.addEventListener('click', async () => {
+      await appel(`/api/themes/${theme.id}/fiches/${fiche.id}/taches/${tache.id}`, { methode: 'PUT',
+        corps: { code: code.value, libelle: libelle.value, debut: debut.value, fin: fin.value,
+                 periodicite: periodicite.value, qui: qui.value, remarque: remarque.value } });
+      chargerFiches();
+    });
+    const supprimer = element('button', { classe: 'discret danger petit', texte: '×' });
+    supprimer.title = 'Supprimer cette tâche';
+    supprimer.addEventListener('click', async () => {
+      await appel(`/api/themes/${theme.id}/fiches/${fiche.id}/taches/${tache.id}`,
+        { methode: 'DELETE' });
+      chargerFiches();
+    });
+    poser(actions, enregistrer, supprimer);
+    [element('td', {}, code), element('td', {}, libelle), element('td', {}, debut),
+     element('td', {}, fin), element('td', {}, duree), element('td', {}, periodicite),
+     element('td', {}, qui), element('td', {}, remarque), actions].forEach((cellule) => {
+      ligne.append(cellule);
+    });
+    return ligne;
+  }
+
+  async function creerFiche() {
+    const intitule = ($('#fiche-intitule').value || '').trim();
+    if (!intitule) { alert('Donnez un intitulé à la fiche.'); return; }
+    await appel('/api/themes/' + theme.id + '/fiches', { methode: 'POST', corps: {
+      profession: $('#fiche-profession').value, intitule } });
+    $('#fiche-intitule').value = '';
+    chargerFiches();
+  }
+
+  // ================================================================ RESPONSABLES
+  async function ouvrirResponsables() {
+    const zone = $('#liste-comptes');
+    zone.innerHTML = '';
+    $('#zone-responsables').classList.remove('cache');
+    let comptes = [];
+    try { comptes = (await appel('/api/comptes')).comptes || []; } catch (e) { comptes = []; }
+    const actuels = new Set(((theme && theme.responsables) || []).map((r) => r.id));
+    if (!comptes.length) {
+      zone.append(element('p', { classe: 'aide', texte:
+        'Personne n\'a encore créé son compte : chacun doit entrer son prénom et son courriel à l\'ouverture de Synergie.' }));
+      return;
+    }
+    comptes.forEach((compte_) => {
+      const ligne = element('label', { classe: 'case' });
+      const case_ = element('input', { attrs: { type: 'checkbox' } });
+      case_.checked = actuels.has(compte_.id);
+      case_.dataset.compte = compte_.id;
+      poser(ligne, case_, element('span', { texte:
+        compte_.prenom + (compte_.email ? ' — ' + compte_.email : ' (sans courriel : aucune alerte)') }));
+      zone.append(ligne);
+    });
+  }
+
+  async function enregistrerResponsables() {
+    const comptes = [...document.querySelectorAll('#liste-comptes input:checked')]
+      .map((c) => c.dataset.compte);
+    const donnees = await appel('/api/themes/' + theme.id + '/responsables',
+      { methode: 'PUT', corps: { comptes } });
+    theme.responsables = donnees.responsables || [];
+    afficherResponsables();
+    $('#zone-responsables').classList.add('cache');
+  }
+
+  function afficherResponsables() {
+    const zone = $('#responsables');
+    const liste = (theme && theme.responsables) || [];
+    zone.textContent = liste.length ? liste.map((r) => r.prenom).join(' · ') : 'personne';
   }
 
   // ================================================================ OUTILS DE PAGE
@@ -783,13 +1373,50 @@
 
   // ================================================================ BRANCHEMENTS
   function brancher() {
-    $('#mon-nom').value = monNom();
-    $('#mon-nom').addEventListener('change', (e) => {
-      const valeur = (e.target.value || '').trim();
-      if (!valeur) { e.target.value = monNom(); return; }   // un prénom vide n'a pas de sens
-      retenirNom(valeur);
-      if (theme) { brancherFlux(); chargerJournalEtVotes(); }
+    $('#btn-compte').addEventListener('click', ouvrirMonCompte);
+    $('#c-enregistrer').addEventListener('click', enregistrerMonCompte);
+    $('#c-fermer').addEventListener('click', () => $('#vue-compte').classList.add('cache'));
+    $('#c-essai').addEventListener('click', async () => {
+      $('#c-etat').textContent = 'Envoi de l\'essai…';
+      try {
+        const resultat = await appel('/api/alertes/essai', { methode: 'POST', corps: {} });
+        $('#c-etat').textContent = resultat.envoye
+          ? 'Essai envoyé à ' + resultat.email + '.'
+          : 'L\'envoi n\'a pas abouti (voir le journal des alertes).';
+      } catch (erreur) { $('#c-etat').textContent = 'Essai impossible : ' + erreur.message; }
     });
+
+    $('#cadre-enregistrer').addEventListener('click', enregistrerCadre);
+    $('#cadre-deposer').addEventListener('click', deposerComptesRendus);
+    $('#chat-general-form').addEventListener('submit', (evenement) => {
+      evenement.preventDefault();
+      envoyerChat('', $('#chat-general-texte'), chargerChatGeneral);
+    });
+    $('#chat-theme-form').addEventListener('submit', (evenement) => {
+      evenement.preventDefault();
+      envoyerChat(theme ? theme.id : null, $('#chat-theme-texte'), chargerChatTheme);
+    });
+    $('#btn-page').addEventListener('click', creerPage);
+    $('#page-enregistrer').addEventListener('click', () => enregistrerPage(false));
+    $('#page-titre').addEventListener('input', programmerPage);
+    $('#page-contenu').addEventListener('input', programmerPage);
+    $('#page-supprimer').addEventListener('click', async () => {
+      if (!pageOuverte || !confirm('Supprimer cette page ?')) return;
+      await appel('/api/themes/' + theme.id + '/pages/' + pageOuverte.id, { methode: 'DELETE' });
+      pageOuverte = null;
+      $('#page-editeur').classList.add('cache');
+      chargerPages();
+    });
+    document.querySelectorAll('[data-edition]').forEach((bouton) => {
+      bouton.addEventListener('click', () => mettreEnForme(bouton.dataset.edition));
+    });
+    $('#btn-code').addEventListener('click', ajouterCode);
+    $('#btn-fiche').addEventListener('click', creerFiche);
+    $('#btn-responsables').addEventListener('click', ouvrirResponsables);
+    $('#responsables-enregistrer').addEventListener('click', enregistrerResponsables);
+    $('#responsables-fermer').addEventListener('click', () =>
+      $('#zone-responsables').classList.add('cache'));
+
 
     $('#btn-nouveau-theme').addEventListener('click', async () => {
       const titre = prompt('Quel est le sujet de réflexion ?');
@@ -809,13 +1436,6 @@
       fermerTheme();
     });
 
-    document.querySelectorAll('.onglets button').forEach((bouton) => {
-      bouton.addEventListener('click', () => {
-        document.querySelectorAll('.onglets button').forEach((b) => b.classList.toggle('actif', b === bouton));
-        document.querySelectorAll('.onglet').forEach((onglet) =>
-          onglet.classList.toggle('cache', onglet.id !== 'onglet-' + bouton.dataset.onglet));
-      });
-    });
 
     // --- tableau blanc
     $('#btn-note').addEventListener('click', () => creerNote());
@@ -920,23 +1540,30 @@
     voile.classList.remove('cache');
     setTimeout(() => champ.focus(), 200);
 
-    function valider() {
-      const valeur = (champ.value || '').trim();
-      if (!valeur) { champ.classList.add('manquant'); champ.focus(); return; }
-      retenirNom(valeur);
-      $('#mon-nom').value = valeur;
+    async function valider() {
+      try {
+        const pret = await creerMonCompte();
+        if (!pret) return;
+      } catch (erreur) {
+        $('#btn-prenom').textContent = 'Réessayer';
+        alert('Compte non créé : ' + erreur.message);
+        return;
+      }
       voile.classList.add('cache');
       entrerDansLAtelier();
     }
     $('#btn-prenom').addEventListener('click', valider);
-    champ.addEventListener('keydown', (evenement) => {
+    [champ, $('#email-compte')].forEach((noeud) => noeud.addEventListener('keydown', (evenement) => {
       if (evenement.key === 'Enter') valider();
-    });
+    }));
     champ.addEventListener('input', () => champ.classList.remove('manquant'));
   }
 
   async function entrerDansLAtelier() {
     await chargerThemes();
+    chargerCadre();
+    chargerChatGeneral();
+    brancherFluxGeneral();
     const cible = (location.hash.match(/#t=(.+)/) || [])[1];
     if (cible) { try { await ouvrirTheme(cible, { pousser: false }); } catch (e) { /* inconnu */ } }
   }
@@ -944,7 +1571,8 @@
   async function demarrer() {
     brancher();
     appliquerVue();
-    if (!monNom()) { demanderPrenom(); return; }   // le prénom d'abord
+    await chargerMonCompte();                      // le compte d'abord
+    if (!compte || !compte.prenom) { demanderPrenom(); return; }
     await entrerDansLAtelier();
   }
 

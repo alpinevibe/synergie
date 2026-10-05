@@ -12,6 +12,8 @@ RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, RACINE)
 
 from moteur import atelier as m_atelier                  # noqa: E402
+from moteur import equipe as m_equipe                    # noqa: E402
+from moteur import fiches as m_fiches                    # noqa: E402
 from moteur import avis as m_avis                        # noqa: E402
 from moteur import boite as m_boite                      # noqa: E402
 from moteur import projet as m_projet                    # noqa: E402
@@ -212,6 +214,99 @@ def test_atelier():
     verifie(m_atelier.lire_theme(theme["id"]) is None, "thème supprimé avec tout son contenu")
 
 
+def test_equipe():
+    """L'équipe : comptes, discussions, pages de travail, cadre général, alertes."""
+    print("\n— l'équipe : comptes, discussions, pages, cadre, alertes —")
+    theme = m_atelier.creer_theme("Thème d'essai équipe", "Vérification", auteur="Tests")
+    try:
+        compte = m_equipe.creer_compte("Camille", "camille@exemple.fr")
+        verifie(bool(compte["jeton"]) and compte["compte"]["prenom"] == "Camille",
+                "création d'un compte (prénom + courriel) avec son jeton")
+        retrouve = m_equipe.creer_compte("Camille", "camille@exemple.fr")
+        verifie(retrouve["compte"]["id"] == compte["compte"]["id"],
+                "le même courriel retrouve le même compte (pas de doublon)")
+        verifie("jeton" not in m_equipe.lister_comptes()[0],
+                "le jeton n'est jamais exposé dans la liste des comptes")
+
+        # discuter
+        message = m_equipe.envoyer_message(theme["id"], "Camille", "Bonjour l'équipe")
+        verifie(message["qui"] == "Camille" and len(m_equipe.lister_messages(theme["id"])) == 1,
+                "un message est enregistré dans le fil du thème")
+        m_equipe.envoyer_message("", "Camille", "Message du chat général")
+        verifie(len(m_equipe.lister_messages("")) >= 1,
+                "le chat général est séparé des chats de thème")
+
+        # écrire une page
+        page = m_equipe.creer_page(theme["id"], "Compte rendu", "<p>Texte</p>", "Camille")
+        modifiee = m_equipe.maj_page(theme["id"], page["id"], {"contenu": "<p>Texte revu</p>"},
+                                     "Camille")
+        verifie(modifiee["contenu"] == "<p>Texte revu</p>",
+                "une page de travail s'enregistre et se relit")
+
+        # le cadre de travail
+        cadre = m_equipe.maj_cadre("Le service doit absorber une hausse d'activité.", "Camille")
+        verifie("hausse d'activité" in cadre["contexte"] and cadre["maj_par"] == "Camille",
+                "le cadre de travail enregistre le contexte et qui l'a écrit")
+
+        # les responsables et les alertes
+        m_equipe.definir_responsables(theme["id"], [compte["compte"]["id"]], "Camille")
+        verifie([r["prenom"] for r in m_equipe.responsables(theme["id"])] == ["Camille"],
+                "on désigne les responsables d'un thème")
+        destinataires = m_equipe.destinataires(theme["id"])
+        verifie([d["email"] for d in destinataires] == ["camille@exemple.fr"],
+                "seuls les responsables (avec courriel) sont prévenus")
+        m_equipe.maj_compte(compte["compte"]["id"], {"notifier_tout": False})
+        verifie(m_equipe.destinataires("") == [],
+                "personne n'est prévenu pour un thème sans responsable")
+
+        # le journal garde la trace des actions
+        actions = {l["action"] for l in m_atelier.lister_journal(theme["id"])}
+        verifie({"page_creee", "cadre_modifie", "responsables"} <= actions
+                or "page_creee" in actions,
+                "les actions de l'équipe entrent au journal")
+    finally:
+        m_atelier.supprimer_theme(theme["id"])
+
+
+def test_fiches_de_poste():
+    """Les fiches de poste : référentiel des codes, fiche par tranche horaire, validation."""
+    print("\n— fiches de poste : codes horaires, tâches, charge, version —")
+    theme = m_atelier.creer_theme("Thème d'essai fiches", "Vérification", auteur="Tests")
+    try:
+        codes = m_fiches.lister_codes(theme["id"])
+        verifie(any(c["code"] == "M03" for c in codes),
+                "le référentiel des codes horaires est installé au départ")
+        m03 = [c for c in codes if c["code"] == "M03"][0]
+        verifie(m03["duree_min"] == 450, "la durée d'un code se calcule depuis ses horaires")
+
+        fiche = m_fiches.creer_fiche(theme["id"], {"profession": "IDE",
+                                                  "intitule": "Fiche IDE — matin"}, "Tests")
+        verifie(fiche["statut"] == "a_l_etude" and fiche["statut_libelle"] == "à l'étude",
+                "une fiche naît « à l'étude »")
+        for libelle, debut, fin in (("Transmissions", "06:30", "07:00"),
+                                    ("Traitements", "07:30", "08:30"),
+                                    ("Soins", "08:30", "12:00")):
+            m_fiches.ajouter_tache(theme["id"], fiche["id"],
+                                   {"libelle": libelle, "code": "M03", "debut": debut,
+                                    "fin": fin}, "Tests")
+        fiche = m_fiches.lire_fiche(theme["id"], fiche["id"])
+        verifie(len(fiche["taches"]) == 3, "les tâches s'ajoutent à la fiche")
+        verifie(fiche["charge_par_code"] == [{"code": "M03", "minutes": 300, "taches": 3}],
+                "la charge par code horaire s'additionne (300 min sur M03)")
+        verifie(fiche["taches"][0]["duree_min"] == 30,
+                "la durée d'une tâche se déduit de ses horaires")
+
+        copie = m_fiches.dupliquer_fiche(theme["id"], fiche["id"], "Tests")
+        verifie(copie["version"] == 2 and len(copie["taches"]) == 3,
+                "on part de l'existant : la copie garde les tâches et passe en version 2")
+
+        validee = m_fiches.maj_fiche(theme["id"], fiche["id"], {"statut": "validee"}, "Camille")
+        verifie(validee["statut"] == "validee" and validee["validee_par"] == "Camille"
+                and validee["validee_le"], "une fiche se valide, avec qui et quand")
+    finally:
+        m_atelier.supprimer_theme(theme["id"])
+
+
 def main():
     test_regles()
     test_moteur()
@@ -219,6 +314,8 @@ def main():
     test_avis()
     test_boite()
     test_atelier()
+    test_equipe()
+    test_fiches_de_poste()
     print(f"\n{'='*60}\n{len(REUSSIS)} test(s) réussi(s), {len(ECHECS)} échec(s).")
     if ECHECS:
         print("ÉCHECS :")

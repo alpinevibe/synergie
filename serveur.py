@@ -19,6 +19,8 @@ sys.path.insert(0, RACINE)
 
 from moteur import atelier as m_atelier                 # noqa: E402
 from moteur import boite_trame as m_boite_trame         # noqa: E402
+from moteur import equipe as m_equipe                   # noqa: E402
+from moteur import fiches as m_fiches                   # noqa: E402
 from moteur import avis as m_avis                       # noqa: E402
 from moteur import boite as m_boite                     # noqa: E402
 from moteur import projet as m_projet                   # noqa: E402
@@ -179,11 +181,32 @@ def api_importer_hermes():
 def _qui() -> str:
     """Le prénom de la personne qui agit : envoyé par la page dans l'en-tête
     « X-Synergie-Nom ». Il sert à journaliser les actions (demande du 05/10/2026)."""
+    jeton = request.headers.get("X-Synergie-Jeton") or request.args.get("jeton")
+    if jeton:
+        compte = m_equipe.lire_compte(jeton)
+        if compte and compte.get("prenom"):
+            return compte["prenom"][:60]
     nom = (request.headers.get("X-Synergie-Nom") or "").strip()
     if not nom:
         corps = request.get_json(silent=True) or {}
         nom = (corps.get("auteur") or corps.get("qui") or "").strip()
     return nom[:60] or "Anonyme"
+
+
+def _compte(requis: bool = False) -> dict | None:
+    """Le compte de la personne qui agit, retrouvé grâce au jeton du navigateur."""
+    jeton = request.headers.get("X-Synergie-Jeton") or request.args.get("jeton")
+    compte = m_equipe.lire_compte(jeton) if jeton else None
+    if compte is None and requis:
+        abort(401, description="Compte inconnu : créez votre compte dans Synergie.")
+    return compte
+
+
+def _prevenir(identifiant: str, resume: str) -> None:
+    """Prévient par courriel les responsables du thème qu'il vient de changer."""
+    theme = m_atelier.lire_theme(identifiant)
+    if theme:
+        m_equipe.prevenit(identifiant, theme["titre"], resume, _qui())
 
 
 def _theme(identifiant: str) -> dict:
@@ -241,7 +264,9 @@ def api_theme(identifiant):
         _theme(identifiant)
         return jsonify(m_atelier.maj_theme(identifiant, request.get_json(silent=True) or {},
                                            _qui()))
-    return jsonify(m_atelier.resume(identifiant, _qui()))
+    contenu = m_atelier.resume(identifiant, _qui())
+    contenu["responsables"] = m_equipe.responsables(identifiant)
+    return jsonify(contenu)
 
 
 @app.route("/api/themes/<identifiant>/notes", methods=["POST"])
@@ -375,12 +400,288 @@ def api_evenements(identifiant):
                              "Connexion": "keep-alive"})
 
 
+# ====================================================================================
+# L'ÉQUIPE : comptes, discussions, pages de travail, cadre général, fiches de poste
+# ====================================================================================
+@app.route("/api/comptes", methods=["GET", "POST"])
+def api_comptes():
+    """POST : créer (ou retrouver) son compte avec prénom et courriel → rend un jeton.
+    GET : la liste des comptes (pour désigner les responsables d'un thème)."""
+    if request.method == "POST":
+        corps = request.get_json(silent=True) or {}
+        try:
+            resultat = m_equipe.creer_compte(corps.get("prenom", ""), corps.get("email", ""),
+                                             bool(corps.get("notifier_tout")),
+                                             corps.get("jeton"))
+        except ValueError as erreur:
+            return jsonify({"erreur": str(erreur)}), 400
+        return jsonify(resultat), 201
+    return jsonify({"comptes": m_equipe.lister_comptes()})
+
+
+@app.route("/api/comptes/moi", methods=["GET", "PUT"])
+def api_mon_compte():
+    compte = _compte(requis=True)
+    if request.method == "PUT":
+        corps = request.get_json(silent=True) or {}
+        compte = m_equipe.maj_compte(compte["id"], corps) or compte
+        if "abonnements" in corps:
+            for identifiant in m_atelier.lister_themes():
+                m_equipe.abonner(identifiant["id"], compte["id"],
+                                 identifiant["id"] in (corps.get("abonnements") or []))
+    themes_responsable = [t["id"] for t in m_atelier.lister_themes()
+                          if any(r["id"] == compte["id"] for r in m_equipe.responsables(t["id"]))]
+    return jsonify({"compte": compte,
+                    "abonnements": m_equipe.abonnements_du_compte(compte["id"]),
+                    "responsable_de": themes_responsable})
+
+
+@app.route("/api/themes/<identifiant>/responsables", methods=["GET", "PUT"])
+def api_responsables(identifiant):
+    _theme(identifiant)
+    if request.method == "PUT":
+        corps = request.get_json(silent=True) or {}
+        resultat = m_equipe.definir_responsables(identifiant, corps.get("comptes") or [], _qui())
+        _prevenir(identifiant, "Les responsables du thème ont changé.")
+        return jsonify({"responsables": resultat})
+    return jsonify({"responsables": m_equipe.responsables(identifiant)})
+
+
+@app.route("/api/messages")
+def api_messages_generaux():
+    """Le chat général du projet (celui qui n'est rattaché à aucun thème)."""
+    return jsonify({"messages": m_equipe.lister_messages("")})
+
+
+@app.route("/api/messages", methods=["POST"])
+def api_message_general():
+    corps = request.get_json(silent=True) or {}
+    try:
+        message = m_equipe.envoyer_message("", _qui(), corps.get("texte", ""))
+    except ValueError as erreur:
+        return jsonify({"erreur": str(erreur)}), 400
+    return jsonify(message), 201
+
+
+@app.route("/api/themes/<identifiant>/messages", methods=["GET", "POST"])
+def api_messages(identifiant):
+    _theme(identifiant)
+    if request.method == "POST":
+        corps = request.get_json(silent=True) or {}
+        try:
+            message = m_equipe.envoyer_message(identifiant, _qui(), corps.get("texte", ""))
+        except ValueError as erreur:
+            return jsonify({"erreur": str(erreur)}), 400
+        _prevenir(identifiant, f"Nouveau message de {_qui()} : " + corps.get("texte", "")[:120])
+        return jsonify(message), 201
+    return jsonify({"messages": m_equipe.lister_messages(identifiant)})
+
+
+@app.route("/api/themes/<identifiant>/messages/<message>", methods=["DELETE"])
+def api_message_supprimer(identifiant, message):
+    _theme(identifiant)
+    m_equipe.supprimer_message(identifiant, message)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/themes/<identifiant>/pages", methods=["GET", "POST"])
+def api_pages(identifiant):
+    _theme(identifiant)
+    if request.method == "POST":
+        corps = request.get_json(silent=True) or {}
+        page = m_equipe.creer_page(identifiant, corps.get("titre", ""),
+                                   corps.get("contenu", ""), _qui())
+        _prevenir(identifiant, f"Nouvelle page : {page['titre']}")
+        return jsonify(page), 201
+    return jsonify({"pages": m_equipe.lister_pages(identifiant)})
+
+
+@app.route("/api/themes/<identifiant>/pages/<page>", methods=["GET", "PUT", "DELETE"])
+def api_page(identifiant, page):
+    _theme(identifiant)
+    if request.method == "DELETE":
+        m_equipe.supprimer_page(identifiant, page, _qui())
+        return jsonify({"ok": True})
+    if request.method == "PUT":
+        resultat = m_equipe.maj_page(identifiant, page, request.get_json(silent=True) or {},
+                                     _qui())
+        if resultat is None:
+            return jsonify({"erreur": "Page inconnue"}), 404
+        _prevenir(identifiant, f"Page modifiée : {resultat['titre']}")
+        return jsonify(resultat)
+    resultat = m_equipe.lire_page(identifiant, page)
+    if resultat is None:
+        return jsonify({"erreur": "Page inconnue"}), 404
+    return jsonify(resultat)
+
+
+@app.route("/api/cadre", methods=["GET", "PUT"])
+def api_cadre():
+    """Le cadre de travail : le contexte du projet, en quelques phrases."""
+    if request.method == "PUT":
+        corps = request.get_json(silent=True) or {}
+        return jsonify(m_equipe.maj_cadre(corps.get("contexte", ""), _qui()))
+    return jsonify(m_equipe.lire_cadre())
+
+
+@app.route("/api/cadre/documents", methods=["GET", "POST"])
+def api_cadre_documents():
+    """Les comptes rendus de réunion déposés dans le cadre de travail."""
+    if request.method == "POST":
+        depot = request.files.get("fichier")
+        if not depot or not depot.filename:
+            return jsonify({"erreur": "Aucun fichier reçu."}), 400
+        try:
+            document = m_atelier.ajouter_document("", depot.filename, depot.read(),
+                                                  depot.mimetype or "",
+                                                  request.form.get("note", ""),
+                                                  request.form.get("auteur") or _qui())
+        except ValueError as erreur:
+            return jsonify({"erreur": str(erreur)}), 413
+        return jsonify(document), 201
+    return jsonify({"documents": m_atelier.lister_documents("")})
+
+
+@app.route("/api/cadre/documents/<document>", methods=["DELETE"])
+def api_cadre_document_supprimer(document):
+    m_atelier.supprimer_document("", document, _qui())
+    return jsonify({"ok": True})
+
+
+@app.route("/api/cadre/documents/<document>/fichier")
+def api_cadre_document_fichier(document):
+    trouve = m_atelier.chemin_document("", document)
+    if not trouve:
+        abort(404, description="Document inconnu")
+    nom, chemin = trouve
+    return send_file(chemin, as_attachment=True, download_name=nom,
+                     mimetype="application/octet-stream")
+
+
+@app.route("/api/evenements")
+def api_evenements_generaux():
+    """Flux temps réel du chat général et du cadre de travail."""
+    nom = request.args.get("nom") or "Anonyme"
+    numero, file = m_atelier.abonner("", nom)
+
+    def flux():
+        try:
+            yield "retry: 3000\n\n"
+            while True:
+                try:
+                    evenement = file.get(timeout=15)
+                except queue.Empty:
+                    yield ": souffle\n\n"
+                    continue
+                yield "data: " + json.dumps(evenement, ensure_ascii=False) + "\n\n"
+        finally:
+            m_atelier.desabonner("", numero)
+
+    return Response(flux(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.route("/api/themes/<identifiant>/codes")
+def api_codes(identifiant):
+    _theme(identifiant)
+    return jsonify({"codes": m_fiches.lister_codes(identifiant)})
+
+
+@app.route("/api/themes/<identifiant>/codes", methods=["POST"])
+def api_code_enregistrer(identifiant):
+    _theme(identifiant)
+    try:
+        return jsonify(m_fiches.enregistrer_code(identifiant,
+                                                 request.get_json(silent=True) or {}, _qui()))
+    except ValueError as erreur:
+        return jsonify({"erreur": str(erreur)}), 400
+
+
+@app.route("/api/themes/<identifiant>/codes/<code>", methods=["DELETE"])
+def api_code_supprimer(identifiant, code):
+    _theme(identifiant)
+    m_fiches.supprimer_code(identifiant, code, _qui())
+    return jsonify({"ok": True})
+
+
+@app.route("/api/themes/<identifiant>/fiches", methods=["GET", "POST"])
+def api_fiches(identifiant):
+    _theme(identifiant)
+    if request.method == "POST":
+        corps = request.get_json(silent=True) or {}
+        fiche = m_fiches.creer_fiche(identifiant, corps, _qui())
+        _prevenir(identifiant, f"Nouvelle fiche de poste : {fiche['intitule']}")
+        return jsonify(fiche), 201
+    return jsonify({"fiches": m_fiches.lister_fiches(identifiant)})
+
+
+@app.route("/api/themes/<identifiant>/fiches/<fiche>", methods=["GET", "PUT", "DELETE"])
+def api_fiche(identifiant, fiche):
+    _theme(identifiant)
+    if request.method == "DELETE":
+        m_fiches.supprimer_fiche(identifiant, fiche, _qui())
+        return jsonify({"ok": True})
+    if request.method == "PUT":
+        resultat = m_fiches.maj_fiche(identifiant, fiche, request.get_json(silent=True) or {},
+                                      _qui())
+        if resultat is None:
+            return jsonify({"erreur": "Fiche inconnue"}), 404
+        _prevenir(identifiant, f"Fiche de poste modifiée : {resultat['intitule']}"
+                               f" ({resultat['statut_libelle']})")
+        return jsonify(resultat)
+    resultat = m_fiches.lire_fiche(identifiant, fiche)
+    if resultat is None:
+        return jsonify({"erreur": "Fiche inconnue"}), 404
+    return jsonify(resultat)
+
+
+@app.route("/api/themes/<identifiant>/fiches/<fiche>/dupliquer", methods=["POST"])
+def api_fiche_dupliquer(identifiant, fiche):
+    _theme(identifiant)
+    try:
+        return jsonify(m_fiches.dupliquer_fiche(identifiant, fiche, _qui())), 201
+    except ValueError as erreur:
+        return jsonify({"erreur": str(erreur)}), 404
+
+
+@app.route("/api/themes/<identifiant>/fiches/<fiche>/taches", methods=["POST"])
+def api_tache_ajouter(identifiant, fiche):
+    _theme(identifiant)
+    return jsonify(m_fiches.ajouter_tache(identifiant, fiche,
+                                          request.get_json(silent=True) or {}, _qui())), 201
+
+
+@app.route("/api/themes/<identifiant>/fiches/<fiche>/taches/<tache>", methods=["PUT", "DELETE"])
+def api_tache(identifiant, fiche, tache):
+    _theme(identifiant)
+    if request.method == "DELETE":
+        return jsonify(m_fiches.supprimer_tache(identifiant, fiche, tache, _qui()))
+    return jsonify(m_fiches.maj_tache(identifiant, fiche, tache,
+                                      request.get_json(silent=True) or {}, _qui()))
+
+
+@app.route("/api/alertes/essai", methods=["POST"])
+def api_alerte_essai():
+    """Vérifie que les alertes par courriel partent bien."""
+    corps = request.get_json(silent=True) or {}
+    destinataire = (corps.get("email") or "").strip()
+    if not destinataire:
+        compte = _compte()
+        destinataire = (compte or {}).get("email") or ""
+    if not destinataire:
+        return jsonify({"erreur": "Aucune adresse de courriel."}), 400
+    return jsonify({"envoye": m_equipe.test_alerte(destinataire), "email": destinataire})
+
+
 def principal():
     analyseur = argparse.ArgumentParser(description="Synergie — serveur")
     analyseur.add_argument("--port", type=int, default=int(os.environ.get("SYNERGIE_PORT", 8077)))
     analyseur.add_argument("--hote", default="127.0.0.1")
     arguments = analyseur.parse_args()
     m_atelier.initialiser()
+    m_fiches.initialiser()
+    m_equipe.initialiser()
+    m_equipe.demarrer_le_facteur()          # les alertes partent en arrière-plan
     # `threaded=True` : indispensable — une connexion temps réel occupe un fil, et les autres
     # participants doivent pouvoir continuer d'écrire pendant ce temps.
     app.run(host=arguments.hote, port=arguments.port, debug=False, threaded=True)

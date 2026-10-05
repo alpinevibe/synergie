@@ -94,12 +94,41 @@ create index if not exists votes_decision on votes (decision);
 """
 
 
+# Thèmes FIXES (demande du 05/10/2026) : ils ne peuvent pas être supprimés. Leur
+# identifiant est stable pour que les liens ne changent jamais.
+THEMES_FIXES = (
+    {"id": "th-rythme-de-travail", "titre": "Rythme de travail", "type": "rythme", "ordre": 0,
+     "couleur": "#4a6cf7",
+     "description": "Les horaires, les postes et les trames de travail : c'est ici que "
+                    "s'ouvre la boîte à trames."},
+    {"id": "th-fiches-de-poste", "titre": "Fiches de poste", "type": "fiches", "ordre": 1,
+     "couleur": "#17a673",
+     "description": "Le travail sur les fiches de poste, tranche horaire par tranche "
+                    "horaire : d'abord le vocabulaire (codes horaires), puis les fiches."},
+)
+
+
 def initialiser() -> None:
-    """Crée la base et le dossier des documents au premier lancement."""
+    """Crée la base, le dossier des documents, les thèmes fixes et les tables de l'équipe."""
     DONNEES.mkdir(parents=True, exist_ok=True)
     DOCUMENTS.mkdir(parents=True, exist_ok=True)
     with connexion() as base:
         base.executescript(SCHEMA)
+        # Colonnes ajoutées après coup : on les crée seulement si elles manquent.
+        colonnes = {l[1] for l in base.execute("pragma table_info(themes)")}
+        for nom, definition in (("type", "text default 'libre'"),
+                                ("fixe", "integer default 0"),
+                                ("ordre", "integer default 100")):
+            if nom not in colonnes:
+                base.execute(f"alter table themes add column {nom} {definition}")
+        moment = maintenant()
+        for theme in THEMES_FIXES:
+            base.execute(
+                "insert or ignore into themes (id, titre, description, couleur, projet, auteur,"
+                " cree_le, maj_le, type, fixe, ordre) values (?, ?, ?, ?, '', 'Synergie',"
+                " ?, ?, ?, 1, ?)",
+                (theme["id"], theme["titre"], theme["description"], theme["couleur"], moment,
+                 moment, theme["type"], theme["ordre"]))
 
 
 # --- journal des actions -------------------------------------------------------------
@@ -240,7 +269,8 @@ def _theme_depuis(ligne: sqlite3.Row, comptes: dict | None = None) -> dict:
 def lister_themes() -> list[dict]:
     with connexion() as base:
         themes = [dict(l) for l in base.execute(
-            "select * from themes order by maj_le desc, titre collate nocase")]
+            "select * from themes order by fixe desc, ordre, maj_le desc,"
+            " titre collate nocase")]
         for theme in themes:
             theme["notes"] = base.execute(
                 "select count(*) from notes where theme = ?", (theme["id"],)).fetchone()[0]
@@ -255,17 +285,19 @@ def lister_themes() -> list[dict]:
 
 
 def creer_theme(titre: str, description: str = "", couleur: str = "", projet: str = "",
-                auteur: str = "") -> dict:
+                auteur: str = "", type_theme: str = "libre") -> dict:
     moment = maintenant()
     theme = {
         "id": _identifiant("th"), "titre": (titre or "Thème sans titre").strip(),
         "description": (description or "").strip(), "couleur": couleur or "#4a6cf7",
         "projet": projet or "", "auteur": auteur or "", "cree_le": moment, "maj_le": moment,
+        "type": type_theme or "libre", "fixe": 0, "ordre": 100,
     }
     with connexion() as base:
         base.execute("insert into themes (id, titre, description, couleur, projet, auteur,"
-                     " cree_le, maj_le) values (:id, :titre, :description, :couleur, :projet,"
-                     " :auteur, :cree_le, :maj_le)", theme)
+                     " cree_le, maj_le, type, fixe, ordre) values (:id, :titre, :description,"
+                     " :couleur, :projet, :auteur, :cree_le, :maj_le, :type, :fixe, :ordre)",
+                     theme)
     journaliser(theme["id"], auteur or "Anonyme", "theme_cree", theme["id"], theme["titre"])
     return theme
 
@@ -291,7 +323,14 @@ def maj_theme(identifiant: str, champs: dict, qui: str = "") -> dict | None:
     return lire_theme(identifiant)
 
 
-def supprimer_theme(identifiant: str) -> None:
+def supprimer_theme(identifiant: str) -> bool:
+    """Supprime un thème et tout son contenu. Les thèmes FIXES (Rythme de travail,
+    Fiches de poste) ne se suppriment pas : la fonction refuse et rend False."""
+    theme = lire_theme(identifiant)
+    if not theme:
+        return False
+    if theme.get("fixe"):
+        return False
     with connexion() as base:
         for table in ("notes", "decisions", "documents"):
             base.execute(f"delete from {table} where theme = ?", (identifiant,))
@@ -300,6 +339,7 @@ def supprimer_theme(identifiant: str) -> None:
     if dossier.is_dir():
         shutil.rmtree(dossier, ignore_errors=True)
     diffuser(identifiant, {"type": "theme_supprime"})
+    return True
 
 
 # --- notes du tableau blanc ----------------------------------------------------------
