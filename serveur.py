@@ -8,13 +8,16 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import queue
 import sys
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import (Flask, Response, abort, jsonify, request, send_file,
+                   send_from_directory)
 
 RACINE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, RACINE)
 
+from moteur import atelier as m_atelier                 # noqa: E402
 from moteur import avis as m_avis                       # noqa: E402
 from moteur import boite as m_boite                     # noqa: E402
 from moteur import projet as m_projet                   # noqa: E402
@@ -169,12 +172,171 @@ def api_importer_hermes():
     return jsonify(m_boite.importer_hermes(pops, corps.get("semaines")))
 
 
+# ====================================================================================
+# ATELIER COLLABORATIF — thèmes de réflexion, tableau blanc, documents, décisions
+# ====================================================================================
+def _theme(identifiant: str) -> dict:
+    theme = m_atelier.lire_theme(identifiant)
+    if not theme:
+        abort(404, description="Thème inconnu")
+    return theme
+
+
+@app.route("/api/atelier/sante")
+def api_atelier_sante():
+    return jsonify(m_atelier.sante())
+
+
+@app.route("/api/themes", methods=["GET", "POST"])
+def api_themes():
+    if request.method == "POST":
+        corps = request.get_json(silent=True) or {}
+        titre = (corps.get("titre") or "").strip()
+        if not titre:
+            return jsonify({"erreur": "Le titre est obligatoire."}), 400
+        theme = m_atelier.creer_theme(titre, corps.get("description", ""),
+                                      corps.get("couleur", ""), corps.get("projet", ""),
+                                      corps.get("auteur", ""))
+        return jsonify(theme), 201
+    return jsonify({"themes": m_atelier.lister_themes()})
+
+
+@app.route("/api/themes/<identifiant>", methods=["GET", "PUT", "DELETE"])
+def api_theme(identifiant):
+    if request.method == "DELETE":
+        _theme(identifiant)
+        m_atelier.supprimer_theme(identifiant)
+        return jsonify({"ok": True})
+    if request.method == "PUT":
+        _theme(identifiant)
+        return jsonify(m_atelier.maj_theme(identifiant, request.get_json(silent=True) or {}))
+    return jsonify(m_atelier.resume(identifiant))
+
+
+@app.route("/api/themes/<identifiant>/notes", methods=["POST"])
+def api_note_creer(identifiant):
+    _theme(identifiant)
+    return jsonify(m_atelier.creer_note(identifiant, request.get_json(silent=True) or {})), 201
+
+
+@app.route("/api/themes/<identifiant>/notes/<note>", methods=["PUT", "DELETE"])
+def api_note(identifiant, note):
+    _theme(identifiant)
+    if request.method == "DELETE":
+        m_atelier.supprimer_note(identifiant, note)
+        return jsonify({"ok": True})
+    resultat = m_atelier.maj_note(identifiant, note, request.get_json(silent=True) or {})
+    if resultat is None:
+        return jsonify({"erreur": "Note inconnue"}), 404
+    return jsonify(resultat)
+
+
+@app.route("/api/themes/<identifiant>/decisions", methods=["POST"])
+def api_decision_creer(identifiant):
+    _theme(identifiant)
+    corps = request.get_json(silent=True) or {}
+    if not (corps.get("intitule") or "").strip():
+        return jsonify({"erreur": "L'intitulé est obligatoire."}), 400
+    return jsonify(m_atelier.creer_decision(identifiant, corps.get("intitule"),
+                                            corps.get("detail", ""),
+                                            corps.get("auteur", ""))), 201
+
+
+@app.route("/api/themes/<identifiant>/decisions/<decision>", methods=["PUT", "DELETE"])
+def api_decision(identifiant, decision):
+    _theme(identifiant)
+    if request.method == "DELETE":
+        m_atelier.supprimer_decision(identifiant, decision)
+        return jsonify({"ok": True})
+    resultat = m_atelier.maj_decision(identifiant, decision,
+                                      request.get_json(silent=True) or {})
+    if resultat is None:
+        return jsonify({"erreur": "Décision inconnue"}), 404
+    return jsonify(resultat)
+
+
+@app.route("/api/themes/<identifiant>/documents", methods=["POST"])
+def api_document_ajouter(identifiant):
+    _theme(identifiant)
+    depot = request.files.get("fichier")
+    if not depot or not depot.filename:
+        return jsonify({"erreur": "Aucun fichier reçu."}), 400
+    try:
+        document = m_atelier.ajouter_document(
+            identifiant, depot.filename, depot.read(), depot.mimetype or "",
+            request.form.get("note", ""), request.form.get("auteur", ""))
+    except ValueError as erreur:
+        return jsonify({"erreur": str(erreur)}), 413
+    return jsonify(document), 201
+
+
+@app.route("/api/themes/<identifiant>/documents/<document>/fichier")
+def api_document_fichier(identifiant, document):
+    trouve = m_atelier.chemin_document(identifiant, document)
+    if not trouve:
+        abort(404, description="Document inconnu")
+    nom, chemin = trouve
+    # Toujours proposé en TÉLÉCHARGEMENT, jamais affiché dans le navigateur : un fichier
+    # déposé par un participant ne doit pas pouvoir s'exécuter dans l'application.
+    return send_file(chemin, as_attachment=True, download_name=nom,
+                     mimetype="application/octet-stream")
+
+
+@app.route("/api/themes/<identifiant>/documents/<document>", methods=["DELETE"])
+def api_document_supprimer(identifiant, document):
+    _theme(identifiant)
+    m_atelier.supprimer_document(identifiant, document)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/themes/<identifiant>/curseurs", methods=["POST"])
+def api_curseurs(identifiant):
+    """« Qui travaille sur quelle note » : relayé aux autres, sans être enregistré."""
+    _theme(identifiant)
+    corps = request.get_json(silent=True) or {}
+    m_atelier.diffuser(identifiant, {
+        "type": "curseur", "qui": corps.get("qui", ""), "note": corps.get("note")})
+    return jsonify({"ok": True})
+
+
+@app.route("/api/themes/<identifiant>/evenements")
+def api_evenements(identifiant):
+    """Flux temps réel (Server-Sent Events) : tout ce qui se passe dans le thème arrive ici
+    sans que le navigateur ait à redemander quoi que ce soit."""
+    _theme(identifiant)
+    nom = request.args.get("nom") or "Anonyme"
+    numero, file = m_atelier.abonner(identifiant, nom)
+
+    def flux():
+        try:
+            yield "retry: 3000\n\n"
+            yield ("data: " + json.dumps(
+                {"type": "bonjour", "participants": m_atelier.participants(identifiant)},
+                ensure_ascii=False) + "\n\n")
+            while True:
+                try:
+                    evenement = file.get(timeout=15)
+                except queue.Empty:
+                    yield ": souffle\n\n"          # garde la connexion ouverte
+                    continue
+                yield "data: " + json.dumps(evenement, ensure_ascii=False) + "\n\n"
+        finally:
+            m_atelier.desabonner(identifiant, numero)
+
+    return Response(flux(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no",
+                             "Connexion": "keep-alive"})
+
+
 def principal():
     analyseur = argparse.ArgumentParser(description="Synergie — serveur")
     analyseur.add_argument("--port", type=int, default=int(os.environ.get("SYNERGIE_PORT", 8077)))
     analyseur.add_argument("--hote", default="127.0.0.1")
     arguments = analyseur.parse_args()
-    app.run(host=arguments.hote, port=arguments.port, debug=False)
+    m_atelier.initialiser()
+    # `threaded=True` : indispensable — une connexion temps réel occupe un fil, et les autres
+    # participants doivent pouvoir continuer d'écrire pendant ce temps.
+    app.run(host=arguments.hote, port=arguments.port, debug=False, threaded=True)
 
 
 if __name__ == "__main__":

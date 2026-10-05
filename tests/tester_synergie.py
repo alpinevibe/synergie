@@ -11,6 +11,7 @@ import sys
 RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, RACINE)
 
+from moteur import atelier as m_atelier                  # noqa: E402
 from moteur import avis as m_avis                        # noqa: E402
 from moteur import boite as m_boite                      # noqa: E402
 from moteur import projet as m_projet                    # noqa: E402
@@ -134,12 +135,66 @@ def test_boite():
     verifie(codes.count(code) == 1, "une trame = un code (aucun doublon)")
 
 
+def test_atelier():
+    """L'atelier collaboratif : thèmes, notes du tableau blanc, décisions, documents.
+
+    Ces tests écrivent dans la vraie base (`donnees/atelier.db`) : ils créent un thème de
+    test, vérifient que tout s'enregistre et se retrouve à l'identique, puis le suppriment.
+    """
+    print("\n— atelier collaboratif (thèmes, tableau blanc, décisions, documents) —")
+    theme = m_atelier.creer_theme("Thème de test", "Vérification automatique", auteur="Tests")
+    verifie(bool(theme.get("id")), "création d'un thème de réflexion")
+
+    note = m_atelier.creer_note(theme["id"], {
+        "x": 120, "y": 80, "texte": "Idée de test", "taille": 22, "gras": True,
+        "couleur_fond": m_atelier.COULEURS_FOND[2], "auteur": "Tests"})
+    verifie(note["gras"] is True and note["taille"] == 22,
+            "note créée avec sa mise en forme (taille, gras)")
+
+    modifiee = m_atelier.maj_note(theme["id"], note["id"], {"texte": "Idée corrigée",
+                                                            "couleur_texte": "#c0392b"})
+    verifie(modifiee and modifiee["texte"] == "Idée corrigée"
+            and modifiee["couleur_texte"] == "#c0392b", "note modifiée (texte et couleur)")
+
+    decision = m_atelier.creer_decision(theme["id"], "Décision de test", "détail", "Tests")
+    adoptee = m_atelier.maj_decision(theme["id"], decision["id"], {"statut": "adoptee",
+                                                                  "decide_par": "Tests"})
+    verifie(adoptee and adoptee["statut"] == "adoptee" and adoptee["decide_le"],
+            "décision adoptée, avec la date et l'auteur de la décision")
+
+    contenu_fichier = b"contenu de travail"
+    document = m_atelier.ajouter_document(theme["id"], "essai.txt", contenu_fichier,
+                                          "text/plain", "note", "Tests")
+    trouve = m_atelier.chemin_document(theme["id"], document["id"])
+    verifie(document["taille"] == len(contenu_fichier) and trouve and
+            os.path.exists(trouve[1]) and open(trouve[1], "rb").read() == contenu_fichier,
+            "document de travail déposé et retrouvé sur le disque")
+
+    contenu = m_atelier.resume(theme["id"])
+    verifie(len(contenu["notes"]) == 1 and len(contenu["decisions"]) == 1
+            and len(contenu["documents"]) == 1, "le thème rassemble notes, décisions et documents")
+
+    # La diffusion temps réel : ce que reçoit un participant doit contenir la note modifiée.
+    numero, file = m_atelier.abonner(theme["id"], "Tests")
+    verifie(not file.empty(), "un participant est prévenu de son arrivée (présence diffusée)")
+    file.get()
+    m_atelier.maj_note(theme["id"], note["id"], {"texte": "Diffusée"})
+    verifie(not file.empty() and file.get()["type"] == "note_maj",
+            "une modification est diffusée aux participants connectés")
+    m_atelier.desabonner(theme["id"], numero)
+    verifie(m_atelier.participants(theme["id"]) == [], "le participant est retiré à la déconnexion")
+
+    m_atelier.supprimer_theme(theme["id"])
+    verifie(m_atelier.lire_theme(theme["id"]) is None, "thème supprimé avec tout son contenu")
+
+
 def main():
     test_regles()
     test_moteur()
     test_genericite()
     test_avis()
     test_boite()
+    test_atelier()
     print(f"\n{'='*60}\n{len(REUSSIS)} test(s) réussi(s), {len(ECHECS)} échec(s).")
     if ECHECS:
         print("ÉCHECS :")

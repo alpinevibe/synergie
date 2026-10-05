@@ -3,133 +3,141 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Synergie — réorganisation de service</title>
-<link rel="stylesheet" href="style.css">
+<title>Synergie — travailler ensemble, décider ensemble</title>
+<link rel="stylesheet" href="synergie.css">
 </head>
 <body>
+
 <header>
   <div class="logo">✷</div>
   <div class="titre">
     <h1>Synergie</h1>
-    <p>Réorganiser un service : tous les avis comptent, pour un résultat harmonieux.</p>
+    <p>Tous les avis comptent : on réfléchit ensemble, on décide ensemble.</p>
   </div>
-  <select id="choix-projet" title="Projet courant"></select>
-  <button id="btn-demo" class="discret" title="Créer un projet d'exemple">Exemple</button>
+  <label class="moi">
+    <span>Je suis</span>
+    <input id="mon-nom" placeholder="votre nom" autocomplete="name">
+  </label>
+  <a class="lien-outils" href="outils.html" title="Générateur de trames et avis">Outils de réorganisation</a>
 </header>
 
-<nav class="onglets">
-  <button data-onglet="projet" class="actif">1 · Le service</button>
-  <button data-onglet="boite">2 · Boîte à trames</button>
-  <button data-onglet="avis">3 · Les avis</button>
-  <button data-onglet="synthese">4 · Résultat harmonieux</button>
-</nav>
+<!-- ======================= LISTE DES THÈMES ======================= -->
+<main id="vue-themes">
+  <div class="entete-vue">
+    <h2>Thèmes de réflexion</h2>
+    <p class="aide">Un thème = un sujet sur lequel l'équipe travaille. Dedans, un tableau
+      blanc sans limites pour écrire tout ce qui passe par la tête, les documents de travail,
+      et les décisions prises ensemble.</p>
+  </div>
+  <button id="btn-nouveau-theme" class="principal">+ Nouveau thème de réflexion</button>
+  <div id="liste-themes" class="grille-themes"></div>
+</main>
 
-<main>
-  <!-- 1. LE SERVICE ------------------------------------------------------------- -->
-  <section id="onglet-projet">
-    <div class="carte">
-      <h2>Décrire le service</h2>
-      <p class="aide">Un projet est <strong>générique</strong> : il vaut pour un service de
-        soins comme pour un atelier. Décrivez les métiers, leurs postes et la population.</p>
-      <div class="grille-form">
-        <label>Nom du projet<input id="p-nom" placeholder="Service de soins — réorganisation"></label>
-        <label>Collectivité / site<input id="p-collectivite" placeholder="CHU, entreprise…"></label>
-        <label>Début de la période<input id="p-date" type="date"></label>
-        <label>Durée (semaines)<input id="p-duree" type="number" min="1" max="26" value="6"></label>
-      </div>
-      <label>Description<textarea id="p-description" rows="2"
-        placeholder="Objet de la réorganisation…"></textarea></label>
+<!-- ======================= UN THÈME ======================= -->
+<main id="vue-theme" class="cache">
+  <button id="btn-retour" class="discret">← Tous les thèmes</button>
+
+  <div class="entete-theme">
+    <input id="titre-theme" class="titre-theme" placeholder="Titre du thème">
+    <input id="description-theme" class="description-theme" placeholder="En une phrase, de quoi parle ce thème ?">
+    <div class="presents">
+      <span class="etiquette">En ligne maintenant</span>
+      <span id="participants" class="participants">—</span>
+    </div>
+    <button id="btn-supprimer-theme" class="discret danger" title="Supprimer ce thème">Supprimer</button>
+  </div>
+
+  <nav class="onglets">
+    <button data-onglet="tableau" class="actif">Tableau blanc</button>
+    <button data-onglet="documents">Documents</button>
+    <button data-onglet="decisions">Décisions</button>
+    <button data-onglet="outils">Outils</button>
+  </nav>
+
+  <!-- ---- le tableau blanc ---- -->
+  <section id="onglet-tableau" class="onglet">
+    <div class="barre-tableau">
+      <button id="btn-note" class="principal petit">+ Nouvelle note</button>
+      <input id="recherche-notes" class="recherche" placeholder="Repérer une note…">
+      <span class="espace"></span>
+      <button id="zoom-moins" class="discret" title="Réduire">−</button>
+      <span id="zoom-valeur" class="zoom">100 %</span>
+      <button id="zoom-plus" class="discret" title="Agrandir">+</button>
+      <button id="btn-recentrer" class="discret" title="Revenir au départ">Recentrer</button>
+      <button id="btn-organiser" class="discret" title="Ranger les notes en colonnes">Ranger</button>
     </div>
 
-    <div class="carte">
-      <h2>Métiers et couverture cible</h2>
-      <p class="aide">Pour chaque métier : les postes de travail et le nombre de postes à
-        couvrir chaque jour. Le bouton <em>Proposer</em> répartit l'effectif en une couverture
-        équilibrée.</p>
-      <div id="liste-metiers"></div>
-      <button id="btn-ajouter-metier" class="discret">+ Ajouter un métier</button>
-      <button id="btn-cibles" class="discret">Proposer la couverture d'après l'effectif</button>
+    <!-- Formatage : s'applique à la note sélectionnée -->
+    <div id="barre-format" class="barre-format cache">
+      <span class="etiquette">Mise en forme</span>
+      <button data-format="taille-moins" title="Plus petit">A−</button>
+      <button data-format="taille-plus" title="Plus grand">A+</button>
+      <button data-format="gras" class="gras" title="Gras">G</button>
+      <button data-format="italique" class="italique" title="Italique">I</button>
+      <button data-format="souligne" class="souligne" title="Souligné">S</button>
+      <button data-format="gauche" title="Aligner à gauche">⇤</button>
+      <button data-format="centre" title="Centrer">↔</button>
+      <button data-format="droite" title="Aligner à droite">⇥</button>
+      <span class="etiquette">Texte</span>
+      <span id="couleurs-texte" class="pastilles"></span>
+      <span class="etiquette">Fond</span>
+      <span id="couleurs-fond" class="pastilles"></span>
+      <button data-format="dupliquer" title="Copier la note">⧉</button>
+      <button data-format="devant" title="Mettre au premier plan">▲</button>
+      <button data-format="supprimer" class="danger" title="Supprimer la note">🗑</button>
     </div>
 
-    <div class="carte">
-      <h2>Population</h2>
-      <p class="aide">Quotité, nuit fixe, « sans nuit » : ces critères déterminent la trame
-        de chacun (mêmes critères = même trame).</p>
-      <div id="liste-agents"></div>
-      <button id="btn-ajouter-agent" class="discret">+ Ajouter un agent</button>
-    </div>
-
-    <div class="actions">
-      <button id="btn-enregistrer" class="principal">Enregistrer le projet</button>
-      <span id="etat-projet" class="etat"></span>
+    <div id="plateau" class="plateau">
+      <div id="monde" class="monde"></div>
+      <div class="aide-tableau">Cliquez sur une note pour l'écrire · faites glisser le fond
+        pour vous déplacer · la molette déplace, Ctrl + molette agrandit</div>
     </div>
   </section>
 
-  <!-- 2. BOÎTE À TRAMES --------------------------------------------------------- -->
-  <section id="onglet-boite" hidden>
+  <!-- ---- les documents ---- -->
+  <section id="onglet-documents" class="onglet cache">
     <div class="carte">
-      <h2>Générer les trames</h2>
-      <p class="aide">Le générateur produit, par profil de temps de travail, une trame de
-        N semaines rejouée en boucle (N = effectif du profil). Deux agents aux mêmes
-        critères partagent la même trame : la couverture est identique chaque semaine.</p>
-      <div class="actions">
-        <label class="en-ligne">Minimiser la couverture
-          <select id="t-genre"><option value="projet">Projet entier</option></select>
-        </label>
-        <button id="btn-generer" class="principal">Générer les trames</button>
-        <button id="btn-hermes" class="discret">Importer les trames d'Hermes Planning</button>
-        <span id="etat-boite" class="etat"></span>
+      <h3>Déposer un document de travail</h3>
+      <p class="aide">Comptes rendus, tableaux, photos, plans… tout ce sur quoi le thème
+        s'appuie. Chacun peut le télécharger.</p>
+      <div class="ligne-depot">
+        <input type="file" id="fichier-document" multiple>
+        <input id="note-document" class="recherche" placeholder="Un mot pour dire à quoi il sert (facultatif)">
+        <button id="btn-deposer" class="principal petit">Déposer</button>
       </div>
+      <p id="etat-depot" class="aide"></p>
     </div>
-    <div id="liste-trames"></div>
-    <div class="carte">
-      <h2>La boîte à trames — catalogue</h2>
-      <p class="aide">Toute trame produite est rangée sous son code et devient réutilisable
-        par un autre projet.</p>
-      <div id="catalogue"><em>Chargement…</em></div>
-    </div>
+    <div id="liste-documents" class="liste-documents"></div>
   </section>
 
-  <!-- 3. LES AVIS --------------------------------------------------------------- -->
-  <section id="onglet-avis" hidden>
+  <!-- ---- les décisions ---- -->
+  <section id="onglet-decisions" class="onglet cache">
     <div class="carte">
-      <h2>Déposer un avis</h2>
-      <p class="aide">« Tous les avis comptent » : chaque avis est recensé, pesé et suivi.
-        Un avis ne dégrade jamais la couverture du service.</p>
-      <div class="grille-form">
-        <label>Agent<select id="a-agent"></select></label>
-        <label>Jour<input id="a-jour" type="date"></label>
-        <label>Souhait<select id="a-souhait"></select></label>
-        <label>Motif (facultatif)<input id="a-motif" placeholder="rendez-vous, famille…"></label>
-      </div>
-      <div class="actions">
-        <button id="btn-ajouter-avis" class="principal">Ajouter l'avis</button>
-        <span id="etat-avis" class="etat"></span>
-      </div>
+      <h3>Proposer une décision</h3>
+      <p class="aide">On écrit la décision, on discute sur le tableau blanc, puis on la
+        marque « adoptée » ou « rejetée ». Chacun voit qui a décidé quoi.</p>
+      <input id="intitule-decision" class="champ-large" placeholder="La décision en une phrase">
+      <textarea id="detail-decision" rows="2" placeholder="Pourquoi, comment (facultatif)"></textarea>
+      <button id="btn-decision" class="principal petit">Proposer</button>
     </div>
-    <div class="carte">
-      <h2>Avis déposés</h2>
-      <div id="liste-avis"></div>
-    </div>
+    <div id="liste-decisions" class="liste-decisions"></div>
   </section>
 
-  <!-- 4. SYNTHÈSE --------------------------------------------------------------- -->
-  <section id="onglet-synthese" hidden>
+  <!-- ---- les outils (dont le générateur de trames) ---- -->
+  <section id="onglet-outils" class="onglet cache">
     <div class="carte">
-      <h2>Résultat harmonieux</h2>
-      <p class="aide">Les trames sont superposées aux avis : les postes restent couverts,
-        les souhaits honorés quand c'est possible, les refus sont expliqués.</p>
-      <button id="btn-synthese" class="principal">Calculer la synthèse</button>
+      <h3>Outils de réorganisation</h3>
+      <p class="aide">Le générateur de trames, la boîte à trames et la synthèse des avis sont
+        des outils : ils servent le thème, ils ne le remplacent pas. Chaque thème peut être
+        relié à un projet.</p>
+      <div id="outils-lies" class="outils-lies"></div>
+      <div class="barre-boutons">
+        <a class="principal petit" href="outils.html">Ouvrir les outils (trames, avis, synthèse)</a>
+      </div>
     </div>
-    <div id="synthese"></div>
   </section>
 </main>
 
-<footer>
-  <span>Synergie 0.1 — moteur générique de trames (OR-Tools CP-SAT) · règles génériques
-    issues d'Hermes Planning</span>
-</footer>
-
-<script src="app.js"></script>
+<script src="synergie.js"></script>
 </body>
 </html>

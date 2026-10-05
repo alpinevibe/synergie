@@ -1,13 +1,16 @@
 # Synergie
 
-**Réorganiser un service, tous ensemble.** Synergie est une application **générique** de
-réorganisation du temps de travail : elle décrit un service, génère ses **trames de
-rotation** dans une *boîte à trames* réutilisable, recueille les **avis** de tous les
-professionnels et rend un **résultat harmonieux** — les postes restent couverts, les
-souhaits honorés quand c'est possible, les refus expliqués.
+**Travailler ensemble, décider ensemble.** Synergie est un **atelier collaboratif** : une
+équipe ouvre un **thème de réflexion**, y écrit tout ce qui lui passe par la tête sur un
+**tableau blanc sans limites**, y dépose ses **documents de travail**, et **prend ses
+décisions** — chaque membre voyant les modifications des autres **en direct**.
 
-Le nom dit la méthode : un travail **collaboratif où tous les avis comptent** et forment
-un résultat **harmonieux**.
+Le nom dit la méthode : un travail **collaboratif où tous les avis comptent** et forment un
+résultat **harmonieux**.
+
+Le **générateur de trames** est un **outil** de cet atelier — utile, mais un outil parmi
+d'autres : on y vient depuis un thème, quand le moment est venu de traduire les idées en
+organisation concrète.
 
 ---
 
@@ -15,10 +18,11 @@ un résultat **harmonieux**.
 
 | Question | Réponse de Synergie |
 |---|---|
-| Comment travailler à effectif constant ? | Le **générateur de trames** produit, par profil de temps de travail, une rotation de N semaines rejouée en boucle. |
-| Et si un autre service veut faire pareil ? | Le modèle de projet est **générique** : rien n'est propre au soin. Un atelier, un service technique, une équipe de nuit se décrivent de la même façon. |
-| Comment prendre en compte les souhaits de chacun ? | Les **avis** sont collectés, pesés (un congé annuel pèse plus qu'une récupération) et suivis jusqu'à la synthèse. |
-| Comment garantir l'équité ? | Mêmes critères de temps de travail ⇒ **même trame, même code** ; la couverture est **identique chaque semaine** (aucune semaine chargée, aucune creuse). |
+| Où rassembler les idées d'une équipe sur un sujet ? | Un **thème de réflexion** : chacun écrit sur le tableau blanc, sans hiérarchie, sans ordre imposé. |
+| Comment réfléchir à plusieurs, en même temps ? | Le tableau est **partagé en direct** : les notes, leurs couleurs, leurs tailles et leurs déplacements arrivent chez les autres immédiatement, et l'on voit **qui est en ligne** et **qui écrit sur quelle note**. |
+| Où mettre les documents de travail ? | Dans le thème : comptes rendus, tableaux, plans, photos. Chacun les télécharge (jamais affichés dans le navigateur, par sécurité). |
+| Comment savoir ce qui a été tranché ? | Les **décisions** : proposées, puis **adoptées** ou **rejetées**, avec l'auteur et la date. Les décisions adoptées se voient d'un coup d'œil. |
+| Comment passer des idées à l'organisation ? | Les **outils** du thème : générateur de **trames de rotation**, **boîte à trames**, **avis** de tous les professionnels, **synthèse** harmonieuse. Un thème peut être relié à un projet. |
 | Et si l'effectif ne suffit pas ? | La trame est **toujours produite** : le déficit est **signalé**, jamais masqué (suppléance à prévoir). |
 
 ---
@@ -30,101 +34,143 @@ un résultat **harmonieux**.
 ./run.sh --port 8080 --hote 0.0.0.0
 ```
 
-Tests (aucun réseau) :
-
-```bash
-/home/ubuntu/synergie-venv/bin/python tests/tester_synergie.py
-```
-
-Le projet d'exemple se crée d'un clic sur **« Exemple »** (bouton en haut à droite).
+En ligne : <https://synergie.alpinevibe.fr/>
 
 ---
 
-## Le parcours en quatre écrans
+## Le parcours
 
-1. **Le service** — nom, collectivité, période ; métiers, postes et **couverture cible** ;
-   population (quotité, nuit fixe, sans nuit). Le bouton *« Proposer la couverture »*
-   répartit l'effectif en une cible cohérente (le week-end pèse moins, samedi et dimanche
-   reçoivent la même cible).
-2. **Boîte à trames** — le générateur produit les trames ; chacune porte un **code**
-   (`TRM-<MÉTIER>-<quotité>-<n>S`) et rejoint le **catalogue**, réutilisable par un autre
-   projet. Un bouton importe les trames du **générateur d'Hermes Planning**.
-3. **Les avis** — chaque professionnel dépose son souhait (jour + code + motif).
-4. **Résultat harmonieux** — *indice de synergie* (part des avis honorés), avis non
-   honorés **avec leur raison**, contrôle des heures et **planning projeté** par agent.
+### 1. Les thèmes de réflexion (l'accueil)
+
+Chaque thème est une carte : son titre, son objet, le nombre de notes, de décisions (dont
+celles adoptées) et de documents, et le moment du dernier mouvement. On ouvre un thème d'un
+appui.
+
+### 2. Le tableau blanc (dans un thème)
+
+Une feuille **sans limites** :
+
+- **double-clic** (ou « + Nouvelle note ») : une note naît à cet endroit ;
+- on y **écrit** directement ;
+- **mise en forme** : taille (A− / A+), **gras**, *italique*, souligné, alignement,
+  **couleur du texte** et **couleur de fond** (six teintes pastel) ;
+- on **fait glisser** la note par sa poignée, on la **redimensionne** par son coin ;
+- on se **déplace** en tirant le fond, on **agrandit** avec Ctrl + molette, et le bouton
+  « Ranger » remet les notes en colonnes quand le tableau devient fouillis ;
+- un champ de **repérage** met en évidence les notes qui contiennent un mot.
+
+### 3. Les documents de travail
+
+On dépose un ou plusieurs fichiers, avec un mot pour dire à quoi ils servent. Ils sont
+rangés dans `donnees/documents/<thème>/` et **toujours proposés au téléchargement**
+(jamais affichés dans le navigateur : un fichier déposé ne doit pas pouvoir s'exécuter dans
+l'application).
+
+### 4. Les décisions
+
+On propose une décision, on en discute sur le tableau, puis on la marque **adoptée**,
+**rejetée** ou **en attente**. L'auteur de la proposition, l'auteur de la décision et la
+date sont conservés.
+
+### 5. Les outils (dont le générateur de trames)
+
+Depuis le thème : le générateur de trames, la boîte à trames, les avis et la synthèse. Un
+thème peut être **relié à un projet** pour que les deux se répondent.
 
 ---
 
-## Les règles génériques (la « boîte à trames »)
+## Le temps réel, comment ça marche
 
-Extraction générique des règles du moteur Hermes Planning (`data/regles_service.txt`),
-surchargeables par projet (`projet.regles`) :
+- chaque navigateur ouvre un flux d'événements (`/api/themes/<id>/evenements`, SSE) ;
+- le serveur lui **pousse** tout ce qui se passe : note créée, modifiée, supprimée,
+  déplacée, décision, document, présence ;
+- la **présence** (qui est en ligne) et le **curseur d'écriture** (qui travaille sur quelle
+  note) sont diffusés de la même façon ;
+- l'écriture en cours est **regroupée** avant envoi (moins d'une seconde) : on ne noie ni le
+  réseau ni la base.
 
-- **5 jours par semaine × quotité** : une semaine de week-end travaillé compte
-  `arrondi(5 × quotité) + 1` jours, la suivante `− 1` (moyenne 5 × quotité) ⇒
-  **heures travaillées ≥ heures légales** (35 h × quotité) ;
-- **2 RH par semaine** en moyenne, et **1 DS par semaine** pour un temps partiel (jour hors
-  quotité), **aucun DS** à temps plein ;
-- **un week-end sur deux**, réparti entre **toutes** les lignes (samedi et dimanche
-  forment une paire) ;
-- **nuits tournantes** absentes d'une trame ; seuls les **agents fixes de nuit** suivent le
-  cycle réglementaire de 14 jours (NN DS RH) ;
-- un **avis** ne dégrade jamais la couverture : la sous-couverture coûte plus cher que la
-  somme des avis (poids 10 000 contre 1 000 à 3 000) ;
-- **un déficit n'empêche jamais la production** : il est signalé.
+Aucune bibliothèque n'est nécessaire : le serveur est en Flask, la diffusion se fait par
+SSE, et la page écoute avec `EventSource`.
 
 ---
 
 ## Architecture
 
 ```
-synergie/
-├── serveur.py              API Flask + service de l'interface
-├── run.sh                  lancement local
-├── moteur/
-│   ├── regles.py           règles génériques de temps de travail
-│   ├── trames.py           générateur de trames (OR-Tools CP-SAT)
-│   ├── boite.py            boîte à trames (catalogue) + pont Hermes Planning
-│   ├── avis.py             collecte des avis + synthèse harmonieuse
-│   └── projet.py           modèle de projet, stockage, couverture recommandée
-├── web/                    interface (HTML/CSS/JS, sans dépendance)
-├── donnees/                projets, boîte à trames, générations (JSON)
-└── tests/tester_synergie.py
+serveur.py            API + interface (Flask)
+moteur/atelier.py     atelier collaboratif : thèmes, notes, décisions, documents, diffusion
+moteur/trames.py      générateur de trames (OR-Tools CP-SAT)   ← OUTIL
+moteur/boite.py       boîte à trames réutilisable              ← OUTIL
+moteur/avis.py        recueil et pesée des avis                ← OUTIL
+moteur/projet.py      modèle de projet générique               ← OUTIL
+moteur/regles.py      règles génériques de temps de travail    ← OUTIL
+web/index.html        l'atelier (thèmes, tableau blanc, documents, décisions, outils)
+web/synergie.js       logique de l'atelier et du temps réel
+web/synergie.css      habillage de l'atelier
+web/outils.html       la page des outils (trames, boîte, avis, synthèse)
+web/app.js            logique des outils
+donnees/atelier.db    base SQLite (thèmes, notes, décisions, documents)
+donnees/documents/    fichiers déposés
 ```
 
-### Le modèle de la trame
+### Pourquoi SQLite ici ?
 
-Une trame = **N semaines** rejouées en boucle, N = **effectif du profil** (mêmes critères
-de temps de travail), plafonné à 12. Chaque agent suit la trame **décalée d'une semaine** :
-la couverture d'un jour de la semaine est donc toujours la même. Le moteur partage la
-cible du métier entre ses profils **au prorata de leur capacité**.
+Plusieurs personnes écrivent **en même temps** : un fichier JSON se corromprait. SQLite en
+mode WAL encaisse les écritures concurrentes sans configuration, tient dans un fichier, et
+se sauvegarde comme n'importe quel fichier.
 
 ---
 
 ## API
 
-| Méthode | Route | Rôle |
+### Atelier
+
+| Méthode | Chemin | Rôle |
 |---|---|---|
-| `GET` | `/api/sante` | état, disponibilité du pont Hermes |
-| `GET` | `/api/regles` | règles génériques effectives |
-| `GET/POST` | `/api/projets` | liste / création |
-| `POST` | `/api/demo` | crée le projet d'exemple |
-| `GET/PUT/DELETE` | `/api/projets/<id>` | lecture / mise à jour / suppression |
-| `POST` | `/api/projets/<id>/cibles-recommandees` | couverture proposée d'après l'effectif |
-| `GET/POST` | `/api/projets/<id>/trames` | lit / génère les trames |
-| `POST/DELETE` | `/api/projets/<id>/avis` | ajoute / retire un avis |
-| `GET` | `/api/projets/<id>/synthese` | indice de synergie, planning projeté |
-| `GET` | `/api/boite` | catalogue des trames |
-| `POST` | `/api/boite/importer-hermes` | importe les trames d'Hermes Planning |
+| GET / POST | `/api/themes` | lister / créer un thème |
+| GET / PUT / DELETE | `/api/themes/<id>` | lire le thème complet / le modifier / le supprimer |
+| POST | `/api/themes/<id>/notes` | créer une note |
+| PUT / DELETE | `/api/themes/<id>/notes/<note>` | modifier / supprimer une note |
+| POST | `/api/themes/<id>/decisions` | proposer une décision |
+| PUT / DELETE | `/api/themes/<id>/decisions/<decision>` | statut (adoptée, rejetée, en attente) / supprimer |
+| POST | `/api/themes/<id>/documents` | déposer un document |
+| GET | `/api/themes/<id>/documents/<doc>/fichier` | télécharger un document |
+| DELETE | `/api/themes/<id>/documents/<doc>` | supprimer un document |
+| POST | `/api/themes/<id>/curseurs` | « j'écris sur cette note » (relayé) |
+| GET | `/api/themes/<id>/evenements` | **flux temps réel** (SSE) |
+
+### Outils
+
+| Méthode | Chemin | Rôle |
+|---|---|---|
+| GET | `/api/sante` | état du service |
+| GET / POST | `/api/projets` | lister / créer un projet |
+| GET / PUT / DELETE | `/api/projets/<id>` | lire / modifier / supprimer un projet |
+| POST | `/api/projets/<id>/cibles-recommandees` | couverture conseillée d'après l'effectif |
+| GET / POST | `/api/projets/<id>/trames` | lire / générer les trames |
+| POST / DELETE | `/api/projets/<id>/avis` | ajouter / retirer un avis |
+| GET | `/api/projets/<id>/synthese` | synthèse harmonieuse |
+| GET | `/api/boite` · POST `/api/boite/importer-hermes` | boîte à trames |
 
 ---
 
-## Lien avec Hermes Planning
+## Tests
 
-Synergie **réutilise** les règles génériques d'Hermes Planning et sait **appeler son
-générateur de grilles** (`engine_rotation.py`) pour importer ses trames dans la boîte
-(`moteur/boite.py`). Elle en est néanmoins **indépendante** : elle fonctionne sans lui, et
-sert des services qui n'ont rien de médical.
+```bash
+/home/ubuntu/synergie-venv/bin/python tests/tester_synergie.py
+```
 
-> Synergie ne remplace pas la production du **planning** d'Hermes (qui pose les nuits et
-> les absences) : elle construit la **trame** et la **concertation** autour d'elle.
+53 contrôles : règles génériques, moteur de trames, généricité, avis, boîte à trames, et
+l'atelier (thèmes, notes et leur mise en forme, décisions, documents, diffusion temps réel).
+
+---
+
+## Mise en ligne
+
+```bash
+bash deploy/installer.sh        # service systemd + nginx + HTTPS
+```
+
+Le flux temps réel a besoin de `proxy_buffering off` dans le vhost : sans cela, les
+événements attendent dans un tampon et rien n'arrive. Les méthodes `PUT` et `DELETE` sont
+autorisées sur `/api/` pour Synergie uniquement (voir `nginx/00-securite-alpinevibe.conf`).

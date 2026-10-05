@@ -1,0 +1,410 @@
+"""SYNERGIE — atelier collaboratif : thèmes de réflexion, tableau blanc, documents, décisions.
+
+Le cœur de Synergie n'est plus le planning : c'est le TRAVAIL À PLUSIEURS. Un « thème de
+réflexion » réunit une équipe autour d'un sujet ; dedans, chacun écrit ce qui lui passe par
+la tête sur un tableau blanc sans limites (comme une feuille OneNote), dépose des documents
+de travail, et ensemble on tranche des décisions. Tous les participants voient les
+modifications des autres en direct.
+
+Les données vivent dans une base SQLite (`donnees/atelier.db`) : plusieurs personnes
+écrivent en même temps, un fichier JSON ne suffirait pas. Les documents déposés sont
+rangés dans `donnees/documents/<thème>/`.
+
+La diffusion temps réel passe par des files d'attente en mémoire : chaque navigateur
+connecté en récupère une, et toute écriture est poussée à toutes les autres (SSE).
+"""
+from __future__ import annotations
+
+import datetime as dt
+import json
+import os
+import queue
+import secrets
+import shutil
+import sqlite3
+import threading
+from pathlib import Path
+
+RACINE = Path(__file__).resolve().parent.parent
+DONNEES = RACINE / "donnees"
+BASE = DONNEES / "atelier.db"
+DOCUMENTS = DONNEES / "documents"
+
+TAILLE_MAX_DOCUMENT = 40 * 1024 * 1024          # 40 Mo : suffisant pour un dossier de travail
+COULEURS_FOND = ("#fff8d6", "#e7f2ff", "#e9f9ee", "#fdeceb", "#f0eaff", "#ffffff")
+COULEURS_TEXTE = ("#1e2a3a", "#4a6cf7", "#17a673", "#c0392b", "#b26a00", "#7a3ea1")
+
+# --- diffusion temps réel ------------------------------------------------------------
+_ABONNES: dict[str, dict[int, dict]] = {}       # thème -> {n° de file -> {file, nom, vu}}
+_VERROU = threading.Lock()
+_COMPTEUR = [0]
+
+
+def maintenant() -> str:
+    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _identifiant(prefixe: str) -> str:
+    return f"{prefixe}-{secrets.token_urlsafe(8)}"
+
+
+def connexion() -> sqlite3.Connection:
+    DONNEES.mkdir(parents=True, exist_ok=True)
+    base = sqlite3.connect(BASE, timeout=15)
+    base.row_factory = sqlite3.Row
+    base.execute("PRAGMA journal_mode=WAL")
+    base.execute("PRAGMA foreign_keys=ON")
+    return base
+
+
+SCHEMA = """
+create table if not exists themes (
+    id text primary key, titre text not null, description text default '',
+    couleur text default '#4a6cf7', projet text default '', auteur text default '',
+    cree_le text not null, maj_le text not null);
+create table if not exists notes (
+    id text primary key, theme text not null, x real default 0, y real default 0,
+    largeur real default 280, texte text default '', taille integer default 16,
+    gras integer default 0, italique integer default 0, souligne integer default 0,
+    couleur_texte text default '#1e2a3a', couleur_fond text default '#fff8d6',
+    alignement text default 'gauche', ordre integer default 0, auteur text default '',
+    cree_le text, maj_le text);
+create table if not exists decisions (
+    id text primary key, theme text not null, intitule text not null, detail text default '',
+    statut text default 'proposee', auteur text default '', decide_par text default '',
+    commentaire text default '', cree_le text, decide_le text);
+create table if not exists documents (
+    id text primary key, theme text not null, nom text not null, taille integer default 0,
+    type text default '', fichier text default '', note text default '',
+    auteur text default '', cree_le text);
+create index if not exists notes_theme on notes (theme);
+create index if not exists decisions_theme on decisions (theme);
+create index if not exists documents_theme on documents (theme);
+"""
+
+
+def initialiser() -> None:
+    """Crée la base et le dossier des documents au premier lancement."""
+    DONNEES.mkdir(parents=True, exist_ok=True)
+    DOCUMENTS.mkdir(parents=True, exist_ok=True)
+    with connexion() as base:
+        base.executescript(SCHEMA)
+
+
+# --- thèmes --------------------------------------------------------------------------
+def _theme_depuis(ligne: sqlite3.Row, comptes: dict | None = None) -> dict:
+    theme = dict(ligne)
+    if comptes:
+        theme.update(comptes)
+    return theme
+
+
+def lister_themes() -> list[dict]:
+    with connexion() as base:
+        themes = [dict(l) for l in base.execute(
+            "select * from themes order by maj_le desc, titre collate nocase")]
+        for theme in themes:
+            theme["notes"] = base.execute(
+                "select count(*) from notes where theme = ?", (theme["id"],)).fetchone()[0]
+            theme["decisions"] = base.execute(
+                "select count(*) from decisions where theme = ?", (theme["id"],)).fetchone()[0]
+            theme["documents"] = base.execute(
+                "select count(*) from documents where theme = ?", (theme["id"],)).fetchone()[0]
+            theme["adoptees"] = base.execute(
+                "select count(*) from decisions where theme = ? and statut = 'adoptee'",
+                (theme["id"],)).fetchone()[0]
+    return themes
+
+
+def creer_theme(titre: str, description: str = "", couleur: str = "", projet: str = "",
+                auteur: str = "") -> dict:
+    moment = maintenant()
+    theme = {
+        "id": _identifiant("th"), "titre": (titre or "Thème sans titre").strip(),
+        "description": (description or "").strip(), "couleur": couleur or "#4a6cf7",
+        "projet": projet or "", "auteur": auteur or "", "cree_le": moment, "maj_le": moment,
+    }
+    with connexion() as base:
+        base.execute("insert into themes (id, titre, description, couleur, projet, auteur,"
+                     " cree_le, maj_le) values (:id, :titre, :description, :couleur, :projet,"
+                     " :auteur, :cree_le, :maj_le)", theme)
+    return theme
+
+
+def lire_theme(identifiant: str) -> dict | None:
+    with connexion() as base:
+        ligne = base.execute("select * from themes where id = ?", (identifiant,)).fetchone()
+    return dict(ligne) if ligne else None
+
+
+def maj_theme(identifiant: str, champs: dict) -> dict | None:
+    autorises = ("titre", "description", "couleur", "projet")
+    valeurs = {c: champs[c] for c in autorises if c in champs}
+    if not valeurs:
+        return lire_theme(identifiant)
+    valeurs["maj_le"] = maintenant()
+    colonnes = ", ".join(f"{c} = :{c}" for c in valeurs)
+    valeurs["id"] = identifiant
+    with connexion() as base:
+        base.execute(f"update themes set {colonnes} where id = :id", valeurs)
+    return lire_theme(identifiant)
+
+
+def supprimer_theme(identifiant: str) -> None:
+    with connexion() as base:
+        for table in ("notes", "decisions", "documents"):
+            base.execute(f"delete from {table} where theme = ?", (identifiant,))
+        base.execute("delete from themes where id = ?", (identifiant,))
+    dossier = DOCUMENTS / identifiant
+    if dossier.is_dir():
+        shutil.rmtree(dossier, ignore_errors=True)
+    diffuser(identifiant, {"type": "theme_supprime"})
+
+
+# --- notes du tableau blanc ----------------------------------------------------------
+CHAMPS_NOTE = ("x", "y", "largeur", "texte", "taille", "gras", "italique", "souligne",
+               "couleur_texte", "couleur_fond", "alignement", "ordre", "auteur")
+
+
+def _note_depuis(ligne: sqlite3.Row) -> dict:
+    note = dict(ligne)
+    for champ in ("gras", "italique", "souligne"):
+        note[champ] = bool(note.get(champ))
+    return note
+
+
+def lister_notes(theme: str) -> list[dict]:
+    with connexion() as base:
+        lignes = base.execute(
+            "select * from notes where theme = ? order by ordre, cree_le", (theme,)).fetchall()
+    return [_note_depuis(l) for l in lignes]
+
+
+def creer_note(theme: str, champs: dict) -> dict:
+    moment = maintenant()
+    note = {
+        "id": _identifiant("nt"), "theme": theme,
+        "x": float(champs.get("x") or 0), "y": float(champs.get("y") or 0),
+        "largeur": float(champs.get("largeur") or 280),
+        "texte": str(champs.get("texte") or ""),
+        "taille": int(champs.get("taille") or 16),
+        "gras": 1 if champs.get("gras") else 0,
+        "italique": 1 if champs.get("italique") else 0,
+        "souligne": 1 if champs.get("souligne") else 0,
+        "couleur_texte": champs.get("couleur_texte") or COULEURS_TEXTE[0],
+        "couleur_fond": champs.get("couleur_fond") or COULEURS_FOND[0],
+        "alignement": champs.get("alignement") or "gauche",
+        "ordre": int(champs.get("ordre") or 0), "auteur": champs.get("auteur") or "",
+        "cree_le": moment, "maj_le": moment,
+    }
+    with connexion() as base:
+        base.execute(
+            "insert into notes (id, theme, x, y, largeur, texte, taille, gras, italique,"
+            " souligne, couleur_texte, couleur_fond, alignement, ordre, auteur, cree_le, maj_le)"
+            " values (:id, :theme, :x, :y, :largeur, :texte, :taille, :gras, :italique,"
+            " :souligne, :couleur_texte, :couleur_fond, :alignement, :ordre, :auteur,"
+            " :cree_le, :maj_le)", note)
+    note = _note_depuis_dict(note)
+    diffuser(theme, {"type": "note_creee", "note": note})
+    return note
+
+
+def _note_depuis_dict(note: dict) -> dict:
+    for champ in ("gras", "italique", "souligne"):
+        note[champ] = bool(note.get(champ))
+    return note
+
+
+def maj_note(theme: str, note_id: str, champs: dict) -> dict | None:
+    valeurs = {c: champs[c] for c in CHAMPS_NOTE if c in champs}
+    if not valeurs:
+        return None
+    for booleen in ("gras", "italique", "souligne"):
+        if booleen in valeurs:
+            valeurs[booleen] = 1 if valeurs[booleen] else 0
+    valeurs["maj_le"] = maintenant()
+    colonnes = ", ".join(f"{c} = :{c}" for c in valeurs)
+    valeurs["id"] = note_id
+    valeurs["theme"] = theme
+    with connexion() as base:
+        base.execute(f"update notes set {colonnes} where id = :id and theme = :theme", valeurs)
+        base.execute("update themes set maj_le = ? where id = ?", (valeurs["maj_le"], theme))
+        ligne = base.execute("select * from notes where id = ?", (note_id,)).fetchone()
+    if not ligne:
+        return None
+    note = _note_depuis(ligne)
+    diffuser(theme, {"type": "note_maj", "note": note})
+    return note
+
+
+def supprimer_note(theme: str, note_id: str) -> None:
+    with connexion() as base:
+        base.execute("delete from notes where id = ? and theme = ?", (note_id, theme))
+    diffuser(theme, {"type": "note_supprimee", "id": note_id})
+
+
+# --- décisions -----------------------------------------------------------------------
+def lister_decisions(theme: str) -> list[dict]:
+    with connexion() as base:
+        lignes = base.execute(
+            "select * from decisions where theme = ? order by cree_le desc", (theme,)).fetchall()
+    return [dict(l) for l in lignes]
+
+
+def creer_decision(theme: str, intitule: str, detail: str = "", auteur: str = "") -> dict:
+    decision = {
+        "id": _identifiant("dc"), "theme": theme, "intitule": (intitule or "Décision").strip(),
+        "detail": (detail or "").strip(), "statut": "proposee", "auteur": auteur or "",
+        "decide_par": "", "commentaire": "", "cree_le": maintenant(), "decide_le": None,
+    }
+    with connexion() as base:
+        base.execute(
+            "insert into decisions (id, theme, intitule, detail, statut, auteur, decide_par,"
+            " commentaire, cree_le, decide_le) values (:id, :theme, :intitule, :detail,"
+            " :statut, :auteur, :decide_par, :commentaire, :cree_le, :decide_le)", decision)
+    diffuser(theme, {"type": "decision_creee", "decision": decision})
+    return decision
+
+
+def maj_decision(theme: str, decision_id: str, champs: dict) -> dict | None:
+    autorises = ("intitule", "detail", "commentaire")
+    valeurs = {c: champs[c] for c in autorises if c in champs}
+    if champs.get("statut") in ("proposee", "adoptee", "rejetee", "en attente"):
+        valeurs["statut"] = champs["statut"]
+        valeurs["decide_le"] = maintenant() if valeurs["statut"] != "proposee" else None
+        valeurs["decide_par"] = champs.get("decide_par") or ""
+    if not valeurs:
+        return None
+    colonnes = ", ".join(f"{c} = :{c}" for c in valeurs)
+    valeurs.update({"id": decision_id, "theme": theme})
+    with connexion() as base:
+        base.execute(f"update decisions set {colonnes} where id = :id and theme = :theme",
+                     valeurs)
+        ligne = base.execute("select * from decisions where id = ?", (decision_id,)).fetchone()
+    if not ligne:
+        return None
+    decision = dict(ligne)
+    diffuser(theme, {"type": "decision_maj", "decision": decision})
+    return decision
+
+
+def supprimer_decision(theme: str, decision_id: str) -> None:
+    with connexion() as base:
+        base.execute("delete from decisions where id = ? and theme = ?", (decision_id, theme))
+    diffuser(theme, {"type": "decision_supprimee", "id": decision_id})
+
+
+# --- documents de travail ------------------------------------------------------------
+def lister_documents(theme: str) -> list[dict]:
+    with connexion() as base:
+        lignes = base.execute(
+            "select id, theme, nom, taille, type, note, auteur, cree_le from documents"
+            " where theme = ? order by cree_le desc", (theme,)).fetchall()
+    return [dict(l) for l in lignes]
+
+
+def ajouter_document(theme: str, nom: str, contenu: bytes, type_fichier: str = "",
+                     note: str = "", auteur: str = "") -> dict:
+    """Enregistre un document de travail déposé par un participant."""
+    if len(contenu) > TAILLE_MAX_DOCUMENT:
+        raise ValueError(f"Document trop volumineux (maximum "
+                         f"{TAILLE_MAX_DOCUMENT // (1024 * 1024)} Mo).")
+    dossier = DOCUMENTS / theme
+    dossier.mkdir(parents=True, exist_ok=True)
+    identifiant = _identifiant("doc")
+    nom_propre = os.path.basename(nom or "document")
+    (dossier / f"{identifiant}__{nom_propre}").write_bytes(contenu)
+    document = {
+        "id": identifiant, "theme": theme, "nom": nom_propre, "taille": len(contenu),
+        "type": type_fichier or "", "fichier": f"{identifiant}__{nom_propre}",
+        "note": note or "", "auteur": auteur or "", "cree_le": maintenant(),
+    }
+    with connexion() as base:
+        base.execute(
+            "insert into documents (id, theme, nom, taille, type, fichier, note, auteur,"
+            " cree_le) values (:id, :theme, :nom, :taille, :type, :fichier, :note, :auteur,"
+            " :cree_le)", document)
+    public = {c: v for c, v in document.items() if c != "fichier"}
+    diffuser(theme, {"type": "document_ajoute", "document": public})
+    return public
+
+
+def chemin_document(theme: str, document_id: str) -> tuple[str, str] | None:
+    with connexion() as base:
+        ligne = base.execute(
+            "select nom, fichier from documents where id = ? and theme = ?",
+            (document_id, theme)).fetchone()
+    if not ligne:
+        return None
+    return ligne["nom"], str(DOCUMENTS / theme / ligne["fichier"])
+
+
+def supprimer_document(theme: str, document_id: str) -> None:
+    with connexion() as base:
+        ligne = base.execute("select fichier from documents where id = ? and theme = ?",
+                             (document_id, theme)).fetchone()
+        base.execute("delete from documents where id = ? and theme = ?", (document_id, theme))
+    if ligne:
+        (DOCUMENTS / theme / ligne["fichier"]).unlink(missing_ok=True)
+    diffuser(theme, {"type": "document_supprime", "id": document_id})
+
+
+# --- présence et diffusion temps réel ------------------------------------------------
+def abonner(theme: str, nom: str) -> tuple[int, queue.Queue]:
+    """Une file d'attente par navigateur connecté : il y reçoit tout ce qui se passe."""
+    file: queue.Queue = queue.Queue()
+    with _VERROU:
+        _COMPTEUR[0] += 1
+        numero = _COMPTEUR[0]
+        _ABONNES.setdefault(theme, {})[numero] = {
+            "file": file, "nom": nom or "Anonyme", "arrive": maintenant()}
+    diffuser(theme, {"type": "presence", "participants": participants(theme)})
+    return numero, file
+
+
+def desabonner(theme: str, numero: int) -> None:
+    with _VERROU:
+        (_ABONNES.get(theme) or {}).pop(numero, None)
+    diffuser(theme, {"type": "presence", "participants": participants(theme)})
+
+
+def participants(theme: str) -> list[str]:
+    with _VERROU:
+        noms = [a["nom"] for a in (_ABONNES.get(theme) or {}).values()]
+    vus, uniques = set(), []
+    for nom in noms:
+        if nom not in vus:
+            vus.add(nom)
+            uniques.append(nom)
+    return uniques
+
+
+def diffuser(theme: str, evenement: dict) -> None:
+    """Pousse un événement à tous les navigateurs connectés sur ce thème."""
+    with _VERROU:
+        abonnes = list((_ABONNES.get(theme) or {}).values())
+    for abonne in abonnes:
+        abonne["file"].put(evenement)
+
+
+def resume(theme: str) -> dict:
+    """Tout le contenu d'un thème, en une seule réponse."""
+    theme_complet = lire_theme(theme)
+    if not theme_complet:
+        return {}
+    return {
+        "theme": theme_complet,
+        "notes": lister_notes(theme),
+        "decisions": lister_decisions(theme),
+        "documents": lister_documents(theme),
+        "participants": participants(theme),
+    }
+
+
+def sante() -> dict:
+    try:
+        with connexion() as base:
+            base.execute("select 1").fetchone()
+        return {"ok": True, "base": str(BASE), "themes": len(lister_themes())}
+    except Exception as erreur:                     # pragma: no cover - dépend du disque
+        return {"ok": False, "erreur": str(erreur)}
