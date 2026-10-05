@@ -375,10 +375,21 @@
     });
   }
 
+  /** Une place libre, à partir d'un point : deux personnes qui créent une note au même
+      moment ne doivent PAS se superposer — les notes s'écartent en cascade. */
+  function placeLibre(x, y) {
+    let essai = 0;
+    while (essai < 40 && notes.some((n) => Math.abs(n.x - x) < 34 && Math.abs(n.y - y) < 34)) {
+      x += 30; y += 30; essai += 1;
+    }
+    return { x, y };
+  }
+
   async function creerNote(champs = {}) {
+    const place = placeLibre(Math.round((-vue.x + 60) / vue.z), Math.round((-vue.y + 90) / vue.z));
     const note = await appel('/api/themes/' + theme.id + '/notes', { methode: 'POST',
       corps: Object.assign({
-        x: Math.round((-vue.x + 60) / vue.z), y: Math.round((-vue.y + 90) / vue.z),
+        x: place.x, y: place.y,
         auteur: monNom() || 'Anonyme', couleur_fond: prochaineCouleur()
       }, champs) });
     notes.push(note);
@@ -741,8 +752,9 @@
     $('#plateau').addEventListener('dblclick', (evenement) => {
       if (evenement.target !== plateau && evenement.target.id !== 'monde') return;
       const boite = plateau.getBoundingClientRect();
-      creerNote({ x: Math.round((evenement.clientX - boite.left - vue.x) / vue.z),
-                  y: Math.round((evenement.clientY - boite.top - vue.y) / vue.z) });
+      const place = placeLibre(Math.round((evenement.clientX - boite.left - vue.x) / vue.z),
+                               Math.round((evenement.clientY - boite.top - vue.y) / vue.z));
+      creerNote(place);
     });
 
     document.addEventListener('keydown', (evenement) => {
