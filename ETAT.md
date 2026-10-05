@@ -39,9 +39,17 @@ collaboratif.** Le générateur de trames devient un outil parmi d'autres, rang�
   calcule les **heures hebdomadaires** et les **ETP nécessaires** (avec le coefficient de
   remplacement habituel dans la FPH, expliqué), les compare aux ETP disponibles, puis
   propose **jusqu'à 3 trames**, chacune vérifiée par un **contrôleur de réglementation**
-  (amplitude ≤ 10 h, repos quotidien ≥ 11 h, 2 jours de repos par semaine dont un dimanche
-  sur deux, 48 h maximum sur une semaine, 6 jours d'affilée au maximum, 5 nuits d'affilée,
-  pause dès 6 h) avec ses **compteurs**. Le dépassement des 35 h par semaine n'est pas un
+  (amplitude ≤ 12 h — au-delà de 10 h une dérogation est signalée —, repos quotidien
+  ≥ 11 h, 2 jours de repos par semaine dont un dimanche sur deux, 48 h maximum sur une
+  semaine, 6 jours d'affilée au maximum, 5 nuits d'affilée, pause dès 6 h) avec ses
+  **compteurs**.
+- **Horaires variés** : la cible d'une personne est un nombre d'HEURES par semaine, pas un
+  nombre de jours — on peut donc mêler des journées de 7 h 30 et de 12 h (cinq courtes ou
+  trois longues reviennent au même), et n'importe quelle configuration est acceptée.
+- **Couleurs d'Hermes** : chaque poste reçoit le code et la couleur du planning habituel
+  (M03 matin jaune, S03 après-midi cyan, J13 journée longue magenta, N02 nuit violet,
+  RH repos vert) ; les cases de la grille portent le code sur sa couleur, avec une légende,
+  et le code de chaque poste peut être choisi dans la page. Le dépassement des 35 h par semaine n'est pas un
   manquement : dans la FPH il se compense sur l'année, et l'outil calcule le nombre de
   **jours de réduction** à prévoir. Seules les règles **collectives** sont prises en
   compte, aucune règle individuelle.
