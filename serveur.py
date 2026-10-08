@@ -19,6 +19,7 @@ sys.path.insert(0, RACINE)
 
 from moteur import atelier as m_atelier                 # noqa: E402
 from moteur import equipe as m_equipe                   # noqa: E402
+from moteur import invitations as m_invitations         # noqa: E402
 from moteur import projets as m_projets                 # noqa: E402
 
 WEB = os.path.join(RACINE, "web")
@@ -78,6 +79,15 @@ def _compte(requis: bool = False) -> dict | None:
     if compte is None and requis:
         abort(401, description="Compte inconnu : créez votre compte dans Synergie.")
     return compte
+
+
+def _avec_cookie(reponse, jeton: str):
+    """Pose le jeton en COOKIE : c'est ce qui authentifie le flux temps réel (un
+    « EventSource » ne peut pas porter d'en-tête personnalisé)."""
+    if jeton:
+        reponse.set_cookie("synergie", jeton, httponly=True, samesite="Lax",
+                           max_age=60 * 60 * 24 * 365)
+    return reponse
 
 
 def _prevenir(identifiant: str, resume: str) -> None:
@@ -276,6 +286,10 @@ def api_theme(identifiant):
                                            _qui()))
     theme = _theme(identifiant)
     contenu = m_atelier.resume(identifiant, _qui())
+    # Le JOURNAL d'un groupe est réservé à ses administrateurs (consigne du 08/10/2026) :
+    # les membres du projet et les visiteurs voient tout le reste, pas le journal.
+    if not m_projets.peut_administrer(getattr(request, "role_theme", None)):
+        contenu["journal"] = []
     contenu["membres"] = m_projets.membres_du_theme(identifiant)
     contenu["role"] = getattr(request, "role_theme", None)
     contenu["role_projet"] = m_projets.role_du_projet(
@@ -493,12 +507,7 @@ def api_comptes():
                                              corps.get("jeton"))
         except ValueError as erreur:
             return jsonify({"erreur": str(erreur)}), 400
-        # Le jeton part aussi en COOKIE : c'est ce qui permet au flux temps réel de
-        # s'authentifier sans exposer le jeton dans l'adresse.
-        reponse = jsonify(resultat)
-        reponse.set_cookie("synergie", resultat["jeton"], httponly=True, samesite="Lax",
-                           max_age=60 * 60 * 24 * 365)
-        return reponse, 201
+        return _avec_cookie(jsonify(resultat), resultat["jeton"]), 201
     _compte(requis=True)
     return jsonify({"comptes": m_equipe.lister_comptes()})
 
@@ -511,6 +520,155 @@ def api_mon_compte():
         corps = request.get_json(silent=True) or {}
         compte = m_equipe.maj_compte(compte["id"], corps) or compte
     return jsonify({"compte": compte, "notifications": _mes_notifications(compte["id"])})
+
+
+# ====================================================================================
+# INVITATIONS — on invite par ADRESSE : la personne active son compte, puis entre avec
+# son IDENTIFIANT personnel (personne ne peut prendre l'identité d'un autre).
+# ====================================================================================
+@app.route("/api/projets/<identifiant>/invitations", methods=["GET", "POST"])
+def api_invitations(identifiant):
+    projet = _projet(identifiant, ecriture=True)
+    if request.method == "GET":
+        return jsonify({"invitations": m_invitations.lister_invitations(identifiant)})
+    corps = request.get_json(silent=True) or {}
+    role = corps.get("role") or "membre"
+    if role not in m_projets.ROLES:
+        return jsonify({"erreur": "Rôle inconnu."}), 400
+    try:
+        invitation = m_invitations.creer_invitation(
+            corps.get("email", ""), corps.get("prenom", ""), identifiant, role,
+            corps.get("note", ""), _qui())
+    except ValueError as erreur:
+        return jsonify({"erreur": str(erreur)}), 400
+    sujet, texte = m_invitations.courriel_invitation(invitation, projet["nom"])
+    envoye = m_equipe.envoyer_courriel(invitation["email"], sujet, texte)
+    m_atelier.journaliser("", _qui(), "invitation", identifiant,
+                          f"{invitation['email']} · {m_projets.LIBELLES_ROLES[role]}",
+                          diffuser_aussi=False)
+    return jsonify({"invitation": invitation, "envoye": envoye}), 201
+
+
+@app.route("/api/invitations/<jeton>", methods=["GET", "POST"])
+def api_invitation(jeton):
+    """Le lien reçu par courriel : on lit l'invitation, puis on active son compte."""
+    invitation = m_invitations.lire_invitation(jeton)
+    if not m_invitations.invitation_utilisable(invitation):
+        return jsonify({"erreur": "Ce lien d'invitation n'est plus valable. Demandez-en un "
+                                  "nouveau à l'administrateur du projet."}), 410
+    projet = m_projets.lire_projet(invitation["projet"])
+    if request.method == "GET":
+        return jsonify({"invitation": {"email": invitation["email"],
+                                       "prenom": invitation["prenom"],
+                                       "role": invitation["role"]},
+                        "projet": {"id": projet["id"], "nom": projet["nom"]} if projet else None})
+    corps = request.get_json(silent=True) or {}
+    prenom = (corps.get("prenom") or invitation["prenom"] or "").strip()
+    identifiant_ = (corps.get("identifiant") or "").strip()
+    if not prenom:
+        return jsonify({"erreur": "Indiquez votre prénom."}), 400
+    try:
+        resultat = m_equipe.creer_compte(prenom, invitation["email"], "", "", None)
+        m_equipe.definir_identifiant(resultat["compte"]["id"], identifiant_)
+    except ValueError as erreur:
+        return jsonify({"erreur": str(erreur)}), 400
+    m_projets.definir_membre_projet(invitation["projet"], resultat["compte"]["id"],
+                                    invitation["role"], notifier=True,
+                                    ajoute_par="invitation")
+    m_invitations.marquer_utilisee(jeton)
+    m_atelier.journaliser("", prenom, "invitation_activee", invitation["projet"],
+                          invitation["email"], diffuser_aussi=False)
+    return _avec_cookie(
+        jsonify({"compte": resultat["compte"], "jeton": resultat["jeton"],
+                 "projet": {"id": projet["id"], "nom": projet["nom"]} if projet else None}),
+        resultat["jeton"])
+
+
+@app.route("/api/connexion", methods=["POST"])
+def api_connexion():
+    """Entrer avec son IDENTIFIANT personnel (demande du 08/10/2026)."""
+    corps = request.get_json(silent=True) or {}
+    compte = m_equipe.entrer_avec_identifiant(corps.get("identifiant", ""))
+    if not compte:
+        return jsonify({"erreur": "Identifiant inconnu. Vérifiez la saisie, ou demandez une "
+                                  "invitation à l'administrateur du projet."}), 404
+    jeton = m_equipe.jeton_de(compte["id"])
+    return _avec_cookie(jsonify({"compte": compte, "jeton": jeton}), jeton)
+
+
+# ====================================================================================
+# VOTES — un lien personnel par votant, envoyé sur sa boîte : une personne, une voix
+# ====================================================================================
+@app.route("/api/themes/<identifiant>/decisions/<decision>/scrutin", methods=["POST"])
+def api_lancer_scrutin(identifiant, decision):
+    """Ouvre le vote : « membres du groupe » ou « tous les membres du projet »."""
+    theme = _theme(identifiant, ecriture=True)
+    corps = request.get_json(silent=True) or {}
+    scrutin = "projet" if corps.get("scrutin") == "projet" else "groupe"
+    dec = next((d for d in m_atelier.lister_decisions(identifiant) if d["id"] == decision), None)
+    if not dec:
+        return jsonify({"erreur": "Décision inconnue."}), 404
+    if not m_projets.peut_administrer(getattr(request, "role_theme", None)):
+        return jsonify({"erreur": "Seul un administrateur du groupe peut ouvrir un vote."}), 403
+    projet = theme.get("projet") or ""
+
+    if scrutin == "projet":
+        votants = m_projets.membres_du_projet(projet)
+        votants = [{"compte": v["compte"], "email": v["email"]} for v in votants]
+    else:
+        votants = [{"compte": v["compte"], "email": v["email"]}
+                   for v in m_projets.membres_du_theme(identifiant)]
+        if not votants:
+            votants = [{"compte": v["compte"], "email": v["email"]}
+                       for v in m_projets.membres_du_projet(projet)]
+    votants = [v for v in votants if v["email"]]
+
+    deja = {b["compte"] for b in m_invitations.lister_bulletins(decision)}
+    votants = [v for v in votants if v["compte"] not in deja]
+    envoyes = []
+    for votant in votants:
+        bulletin = m_invitations.creer_bulletin(decision, identifiant, votant["compte"],
+                                                votant["email"], scrutin)
+        sujet, texte = m_invitations.courriel_vote(bulletin, dec["intitule"],
+                                                   dec.get("detail") or "",
+                                                   theme["titre"], scrutin)
+        m_equipe.envoyer_courriel(bulletin["email"], sujet, texte)
+        envoyes.append(bulletin["email"])
+    m_atelier.maj_decision(identifiant, decision, {"statut": "en_vote"}, _qui())
+    m_atelier.journaliser(identifiant, _qui(), "vote_ouvert", decision,
+                          f"{scrutin} · {len(envoyes)} bulletin(s)")
+    return jsonify({"scrutin": scrutin, "envoyes": envoyes,
+                    "bulletins": m_invitations.lister_bulletins(decision)}), 201
+
+
+@app.route("/api/votes/<jeton>", methods=["GET", "POST"])
+def api_vote(jeton):
+    """Le lien de vote : la personne vote une fois, et le dépouillement reste anonyme."""
+    bulletin = m_invitations.lire_bulletin(jeton)
+    if not bulletin:
+        return jsonify({"erreur": "Ce lien de vote n'existe pas."}), 404
+    theme = m_atelier.lire_theme(bulletin["theme"])
+    dec = next((d for d in m_atelier.lister_decisions(bulletin["theme"])
+                if d["id"] == bulletin["decision"]), None)
+    if not dec:
+        return jsonify({"erreur": "Cette décision n'existe plus."}), 404
+    if request.method == "GET":
+        return jsonify({"intitule": dec["intitule"], "detail": dec.get("detail") or "",
+                        "groupe": theme["titre"] if theme else "",
+                        "scrutin": bulletin["scrutin"],
+                        "deja_vote": bool(bulletin["vote_le"])})
+    corps = request.get_json(silent=True) or {}
+    valeur = (corps.get("valeur") or "").lower()
+    if valeur not in ("pour", "contre", "neutre"):
+        return jsonify({"erreur": "Choisissez « pour », « contre » ou « neutre »."}), 400
+    try:
+        m_invitations.enregistrer_vote(jeton, valeur)
+        # Le VOTE lui-même reste anonyme : on ne garde qu'une empreinte (voir atelier.voter).
+        resultat = m_atelier.voter(bulletin["theme"], bulletin["decision"],
+                                   bulletin["compte"], valeur)
+    except ValueError as erreur:
+        return jsonify({"erreur": str(erreur)}), 400
+    return jsonify({"ok": True, "comptes": (resultat or {}).get("comptes", {})})
 
 
 @app.route("/api/notifications", methods=["PUT"])
@@ -708,6 +866,7 @@ def principal():
     arguments = analyseur.parse_args()
     m_atelier.initialiser()
     m_projets.initialiser()
+    m_invitations.initialiser()
     m_equipe.initialiser()
     m_equipe.demarrer_le_facteur()          # les alertes partent en arrière-plan
     # `threaded=True` : indispensable — une connexion temps réel occupe un fil, et les autres

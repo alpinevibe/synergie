@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import queue
 import subprocess
 import threading
@@ -35,6 +36,7 @@ SCHEMA = """
 create table if not exists comptes (
     id text primary key, prenom text not null, email text default '',
     poste text default '', appareil text default '', derniere_connexion text default '',
+    identifiant text, identifiant_min text,
     jeton text unique, notifier_tout integer default 0, cree_le text, maj_le text);
 create table if not exists responsables (
     theme text not null, compte text not null, cree_le text,
@@ -63,7 +65,9 @@ def initialiser() -> None:
         colonnes = {l[1] for l in base.execute("pragma table_info(comptes)")}
         for nom, definition in (("poste", "text default ''"),
                                 ("appareil", "text default ''"),
-                                ("derniere_connexion", "text default ''")):
+                                ("derniere_connexion", "text default ''"),
+                                ("identifiant", "text"),
+                                ("identifiant_min", "text")):
             if nom not in colonnes:
                 base.execute(f"alter table comptes add column {nom} {definition}")
         base.execute("insert or ignore into cadre (id, contexte, maj_le, maj_par)"
@@ -108,12 +112,8 @@ def creer_compte(prenom: str, email: str = "", poste: str = "", appareil: str = 
             # Même poste, même prénom : c'est la même personne qui revient.
             ligne = base.execute("select * from comptes where prenom = ? and poste = ?",
                                  (prenom, poste)).fetchone()
-        if not ligne:
-            # Dernier recours : le prénom. Synergie ne demande pas de mot de passe (elle est
-            # réservée à une équipe qui se connaît) : on retrouve donc le compte existant
-            # plutôt que d'en créer un deuxième pour la même personne sur un autre appareil.
-            ligne = base.execute("select * from comptes where prenom = ? collate nocase"
-                                 " order by cree_le limit 1", (prenom,)).fetchone()
+        # PAS de repli par le prénom : sans cela, n'importe qui pourrait se faire passer
+        # pour quelqu'un d'autre en tapant son prénom (constat du 08/10/2026).
         if ligne:
             base.execute(
                 "update comptes set prenom = ?, email = ?, poste = ?, appareil = ?, jeton = ?,"
@@ -134,6 +134,62 @@ def creer_compte(prenom: str, email: str = "", poste: str = "", appareil: str = 
     return {"compte": _compte_public(resultat), "jeton": resultat["jeton"]}
 
 
+IDENTIFIANT_MINIMUM = 6
+
+
+def identifiant_valide(identifiant: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z0-9._-]{6,60}", (identifiant or "").strip()))
+
+
+def definir_identifiant(compte_id: str, identifiant: str) -> dict:
+    """Pose (ou change) l'identifiant personnel d'un compte. Il doit être unique."""
+    propre = (identifiant or "").strip()
+    if not identifiant_valide(propre):
+        raise ValueError("L'identifiant doit faire au moins "
+                         f"{IDENTIFIANT_MINIMUM} caractères (lettres, chiffres, . _ -).")
+    with connexion() as base:
+        autre = base.execute("select id from comptes where identifiant_min = ? and id <> ?",
+                             (propre.lower(), compte_id)).fetchone()
+        if autre:
+            raise ValueError("Cet identifiant est déjà pris : choisissez-en un autre.")
+        base.execute("update comptes set identifiant = ?, identifiant_min = ?, maj_le = ?"
+                     " where id = ?", (propre, propre.lower(), maintenant(), compte_id))
+    return lire_compte(identifiant=compte_id)
+
+
+def entrer_avec_identifiant(identifiant: str) -> dict | None:
+    """Retrouve le compte correspondant à un identifiant personnel (connexion)."""
+    propre = (identifiant or "").strip().lower()
+    if not propre:
+        return None
+    with connexion() as base:
+        ligne = base.execute("select * from comptes where identifiant_min = ?",
+                             (propre,)).fetchone()
+        if ligne:
+            base.execute("update comptes set derniere_connexion = ?, maj_le = ? where id = ?",
+                         (maintenant(), maintenant(), ligne["id"]))
+    return _compte_public(ligne) if ligne else None
+
+
+def jeton_de(compte_id: str) -> str:
+    with connexion() as base:
+        ligne = base.execute("select jeton from comptes where id = ?", (compte_id,)).fetchone()
+    return ligne["jeton"] if ligne else ""
+
+
+def adresse_site() -> str:
+    """L'adresse publique de Synergie (pour les liens envoyés par courriel)."""
+    return os.environ.get("SYNERGIE_ADRESSE", "https://synergie.alpinevibe.fr")
+
+
+def envoyer_courriel(destinataire: str, sujet: str, corps: str) -> bool:
+    """Met un courriel dans la file d'envoi : c'est le facteur qui l'envoie, en fond."""
+    if not (destinataire or "").strip():
+        return False
+    _FILE.put((destinataire.strip(), sujet, corps))
+    return True
+
+
 def lire_compte(jeton: str | None = None, identifiant: str | None = None) -> dict | None:
     if not jeton and not identifiant:
         return None
@@ -151,6 +207,11 @@ def lister_comptes() -> list[dict]:
 
 
 def maj_compte(identifiant: str, champs: dict) -> dict | None:
+    # L'identifiant personnel se pose à part : il est unique et vérifié.
+    if "identifiant" in champs:
+        nouveau = (champs.pop("identifiant") or "").strip()
+        if nouveau and nouveau != (lire_compte(identifiant=identifiant) or {}).get("identifiant"):
+            definir_identifiant(identifiant, nouveau)
     autorises = ("prenom", "email", "poste")
     valeurs = {c: champs[c] for c in autorises if c in champs}
     if not valeurs:

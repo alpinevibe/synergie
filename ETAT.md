@@ -1,5 +1,34 @@
 # Synergie — état du projet
 
+## 8 octobre 2026 (après-midi) — identité, invitations, votes et confort d'usage
+
+Sept améliorations demandées par le cadre, appliquées le jour même :
+
+1. **Annuler** sur le tableau blanc (bouton ↶ et Ctrl + Z) : création, suppression, texte,
+   déplacement, redimensionnement, couleurs et mise en forme ; la touche annule aussi dans
+   les pages de travail.
+2. **Ranger** range désormais les post-it **en colonnes par couleur** (une teinte par
+   colonne, l'ordre de la palette décide).
+3. **Suppression des post-it** : les boutons d'une note (✏️ et ×) sont **toujours visibles**
+   et larges — sur un écran tactile, un bouton qui n'apparaît qu'au survol était introuvable.
+4. **Invitations par courriel et identifiant personnel** : l'administrateur invite par
+   **adresse** ; la personne reçoit un **lien personnel**, y choisit son **prénom** et son
+   **identifiant**, puis entre **avec cet identifiant seulement**. Le repli par prénom est
+   supprimé (on ne peut plus se faire passer pour quelqu'un). Le **journal d'un groupe** est
+   réservé à ses **administrateurs** ; les membres du projet écrivent dans la discussion du
+   projet et visitent les groupes ; les visiteurs lisent sans modifier.
+5. **Votes par lien personnel** : l'administrateur du groupe ouvre le vote « aux membres du
+   groupe » ou « à tout le projet » ; chaque votant reçoit un lien par courriel, **une
+   personne = une voix**, et le dépouillement reste **anonyme** (empreinte, jamais de nom).
+6. **Cadre de travail** : il ne tient plus de place sur la page — il s'ouvre en cliquant le
+   **nom du projet** dans l'entête, en **lecture seule**, modifiable par l'**administrateur**
+   du projet.
+7. **Création de groupes réservée à l'administrateur du projet** (bouton visible pour lui
+   seul, et vérifié côté serveur).
+
+Tests : **60 contrôles verts**. Vérifié dans un vrai navigateur (connexion par identifiant,
+activation d'une invitation, vote par lien, journal masqué pour un membre) : aucune erreur.
+
 ## 8 octobre 2026 — Synergie devient multi-projets, et s'allège
 
 Demandes du cadre, appliquées le jour même :

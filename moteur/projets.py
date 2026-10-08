@@ -144,14 +144,28 @@ def maj_projet(identifiant: str, champs: dict, qui: str = "") -> dict | None:
 
 
 def supprimer_projet(identifiant: str, supprimer_groupes: bool = True) -> bool:
+    """Supprime un projet. Avec ses groupes, TOUT leur contenu part aussi (notes,
+    décisions, votes, bulletins, documents, pages, discussions) — on ne laisse jamais de
+    contenu orphelin derrière soi. Avec `supprimer_groupes=False`, les groupes sont
+    seulement détachés du projet et gardent leur contenu."""
     with connexion() as base:
         base.execute("delete from projet_membres where projet = ?", (identifiant,))
         if supprimer_groupes:
-            base.execute("delete from theme_membres where theme in"
-                         " (select id from themes where projet = ?)", (identifiant,))
-            base.execute("delete from themes where projet = ?", (identifiant,))
+            groupes = [l["id"] for l in base.execute("select id from themes where projet = ?",
+                                                     (identifiant,))]
+            for theme in groupes:
+                base.execute("delete from bulletins where theme = ?", (theme,))
+                base.execute("delete from votes where decision in"
+                             " (select id from decisions where theme = ?)", (theme,))
+                for table in ("notes", "decisions", "documents", "pages", "messages",
+                              "theme_membres", "journal"):
+                    base.execute(f"delete from {table} where theme = ?", (theme,))
+                base.execute("delete from themes where id = ?", (theme,))
         else:
             base.execute("update themes set projet = '' where projet = ?", (identifiant,))
+        # La discussion et les comptes rendus DU projet lui-même.
+        base.execute("delete from messages where theme = ?", (identifiant,))
+        base.execute("delete from documents where theme = ?", (identifiant,))
         base.execute("delete from projets where id = ?", (identifiant,))
     return True
 

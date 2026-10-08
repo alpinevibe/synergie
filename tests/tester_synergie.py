@@ -17,6 +17,7 @@ sys.path.insert(0, RACINE)
 
 from moteur import atelier as m_atelier                  # noqa: E402
 from moteur import equipe as m_equipe                    # noqa: E402
+from moteur import invitations as m_invitations          # noqa: E402
 from moteur import projets as m_projets                  # noqa: E402
 
 REUSSIS, ECHECS = [], []
@@ -119,6 +120,83 @@ def test_projets():
 
 
 # ------------------------------------------------------------------------------------
+def test_invitations_et_votes():
+    """Invitation par courriel (lien personnel + identifiant) et vote par lien."""
+    print("\n— invitations par courriel et votes par lien —")
+    menage()
+    m_invitations.initialiser()
+    admin = m_equipe.creer_compte("Test Admin", "admin@exemple.fr")["compte"]
+    projet = m_projets.creer_projet("Projet de test invitations", auteur="Tests",
+                                    admin=admin["id"], qui="Tests")
+    theme = m_atelier.creer_theme("Groupe de test invitations", "", projet=projet["id"],
+                                  auteur="Tests")
+    envois = []
+    vrai_envoi = m_equipe.envoyer_courriel
+    m_equipe.envoyer_courriel = lambda adresse, sujet, corps: envois.append((adresse, sujet)) or True
+    try:
+        # --- 1. l'invitation : par adresse, avec un lien personnel ---------------------
+        invitation = m_invitations.creer_invitation("collegue@exemple.fr", "Collegue",
+                                                    projet["id"], "membre", qui="Tests")
+        sujet, corps = m_invitations.courriel_invitation(invitation, projet["nom"])
+        m_equipe.envoyer_courriel(invitation["email"], sujet, corps)
+        verifie(envois and envois[-1][0] == "collegue@exemple.fr",
+                "l'invitation part par courriel à l'adresse indiquée")
+        verifie(invitation["jeton"] in corps and "#invitation=" in corps,
+                "le courriel contient un lien personnel d'activation")
+        verifie(m_invitations.invitation_utilisable(invitation),
+                "le lien est utilisable tant qu'il n'a pas servi")
+
+        # --- 2. l'activation : prénom + identifiant, sur un seul et même compte ---------
+        resultat = {}
+        sujet, corps = m_invitations.courriel_invitation(invitation, projet["nom"])
+        compte = m_equipe.creer_compte("Collegue", invitation["email"], "", "", None)
+        m_equipe.definir_identifiant(compte["compte"]["id"], "collegue.ecrins")
+        m_projets.definir_membre_projet(projet["id"], compte["compte"]["id"], invitation["role"],
+                                        notifier=True, ajoute_par="invitation")
+        m_invitations.marquer_utilisee(invitation["jeton"])
+        resultat = compte
+        lie = m_equipe.entrer_avec_identifiant("collegue.ecrins")
+        verifie(lie and lie["id"] == resultat["compte"]["id"]
+                and lie["email"] == "collegue@exemple.fr"
+                and lie["prenom"] == "Collegue",
+                "après activation, prénom, adresse et identifiant désignent le même compte")
+        verifie(m_projets.role_du_projet(projet["id"], lie["id"]) == "membre",
+                "la personne invitée rejoint le projet avec le rôle prévu")
+        verifie(not m_invitations.invitation_utilisable(
+                    m_invitations.lire_invitation(invitation["jeton"])),
+                "le lien d'invitation ne sert qu'une fois")
+
+        # --- 3. le vote par lien personnel -----------------------------------------------
+        decision = m_atelier.creer_decision(theme["id"], "Faut-il ouvrir le vote ?",
+                                            "Question de test", "Tests")
+        bulletin = m_invitations.creer_bulletin(decision["id"], theme["id"],
+                                                admin["id"], "admin@exemple.fr", "groupe")
+        sujet, texte = m_invitations.courriel_vote(bulletin, decision["intitule"], "",
+                                                   theme["titre"], "groupe")
+        verifie("#vote=" in texte and bulletin["jeton"] in texte,
+                "chaque votant reçoit un lien de vote personnel")
+        verifie(m_invitations.enregistrer_vote(bulletin["jeton"], "pour")["vote_le"] != "",
+                "le vote est enregistré depuis le lien")
+        try:
+            m_invitations.enregistrer_vote(bulletin["jeton"], "contre")
+            verifie(False, "un lien de vote ne sert qu'une fois")
+        except ValueError:
+            verifie(True, "un lien de vote ne sert qu'une fois")
+        m_atelier.voter(theme["id"], decision["id"], admin["id"], "pour")
+        verifie(m_atelier.decisions_votees(theme["id"], admin["id"]) == [decision["id"]],
+                "le vote compte une voix, sans dire qui a voté quoi")
+        bulletins = m_invitations.lister_bulletins(decision["id"])
+        verifie(len(bulletins) == 1 and bulletins[0]["vote_le"],
+                "le bulletin est marqué comme voté (une personne, une voix)")
+    finally:
+        m_equipe.envoyer_courriel = vrai_envoi
+        m_projets.supprimer_projet(projet["id"])
+        with m_atelier.connexion() as base:
+            base.execute("delete from comptes where prenom like 'Test %'")
+            base.execute("delete from invitations where projet = ?", (projet["id"],))
+            base.execute("delete from bulletins where theme = ?", (theme["id"],))
+
+
 def test_atelier():
     """L'atelier collaboratif : groupes, notes du tableau blanc, décisions, documents.
 
@@ -210,9 +288,32 @@ def test_equipe():
                 "création d'un compte avec le prénom seul, sans courriel")
         verifie(compte["compte"]["poste"] == "Bureau des cadres",
                 "le poste de travail est enregistré avec le compte")
-        retrouve = m_equipe.creer_compte("Camille")
-        verifie(retrouve["compte"]["id"] == compte["compte"]["id"],
-                "le même prénom retrouve le même compte (pas de doublon)")
+        # PLUS de reconnaissance par le prénom seul (constat du 08/10/2026) : sans cela,
+        # n'importe qui pourrait prendre l'identité d'un autre en tapant son prénom.
+        autre = m_equipe.creer_compte("Camille")
+        verifie(autre["compte"]["id"] != compte["compte"]["id"],
+                "le prénom seul ne donne plus accès au compte d'une autre personne")
+
+        # L'IDENTIFIANT personnel, lui, retrouve le compte — et lui seul.
+        m_equipe.definir_identifiant(compte["compte"]["id"], "camille.ecrins")
+        retrouve = m_equipe.entrer_avec_identifiant("Camille.Ecrins")
+        verifie(retrouve and retrouve["id"] == compte["compte"]["id"],
+                "l'identifiant personnel retrouve le compte (majuscules ignorées)")
+        verifie(m_equipe.entrer_avec_identifiant("inconnu-xyz") is None,
+                "un identifiant inconnu n'ouvre aucun compte")
+        try:
+            m_equipe.definir_identifiant(autre["compte"]["id"], "camille.ecrins")
+            verifie(False, "un identifiant déjà pris est refusé")
+        except ValueError:
+            verifie(True, "un identifiant déjà pris est refusé")
+        try:
+            m_equipe.definir_identifiant(autre["compte"]["id"], "abc")
+            verifie(False, "un identifiant trop court est refusé")
+        except ValueError:
+            verifie(True, "un identifiant trop court est refusé")
+        with m_atelier.connexion() as base:
+            base.execute("delete from comptes where id = ?", (autre["compte"]["id"],))
+
         verifie("jeton" not in m_equipe.lister_comptes()[0],
                 "le jeton n'est jamais exposé dans la liste des comptes")
 
@@ -267,11 +368,13 @@ def test_equipe():
     finally:
         m_atelier.supprimer_theme(theme["id"])
         with m_atelier.connexion() as base:
-            base.execute("delete from comptes where prenom = 'Camille' and email = ''")
+            base.execute("delete from comptes where (prenom = 'Camille' and email = '')"
+                     " or email like '%@exemple.fr' or prenom like 'Test %'")
 
 
 def main():
     test_projets()
+    test_invitations_et_votes()
     test_atelier()
     test_equipe()
     print(f"\n{'='*60}\n{len(REUSSIS)} test(s) réussi(s), {len(ECHECS)} échec(s).")

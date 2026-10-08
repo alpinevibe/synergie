@@ -27,7 +27,8 @@ Deux idées gouvernent l'application :
 | Qui a le droit de faire quoi ? | Les **rôles** : **administrateur** (membres, groupes, réglages), **membre participant** (écrit, dépose, propose et vote), **visiteur** (consulte seulement). Un rôle donné **dans un groupe** l'emporte sur celui du projet. |
 | Où mettre les documents de travail ? | Dans le groupe, ou dans le projet (comptes rendus de réunion). Chacun les télécharge ; ils ne s'affichent jamais dans le navigateur, par sécurité. |
 | Comment savoir ce qui a été tranché ? | Les **décisions** : proposées, puis **adoptées** ou **rejetées**, avec l'auteur et la date. Chacun vote une fois, **anonymement**. |
-| Comment être prévenu sans y passer sa journée ? | Chacun choisit, **projet par projet et groupe par groupe**, s'il veut un courriel — ou rien. Le courriel n'est demandé **que** si l'on active les alertes. |
+| Comment être prévenu sans y passer sa journée ? | Chacun choisit, **projet par projet et groupe par groupe**, s'il veut un courriel — ou rien. |
+| Comment voter sans se déplacer ? | L'administrateur du groupe **ouvre le vote** : un **lien personnel** part par courriel à chaque votant (membres du groupe, ou tout le projet). **Une personne, une voix**, et les votes restent **anonymes** dans le dépouillement. |
 | Et la traçabilité ? | Le **journal** de chaque groupe dit qui a fait quoi et quand ; rien ne s'efface. |
 
 ---
@@ -45,13 +46,18 @@ En ligne : <https://synergie.alpinevibe.fr/>
 
 ## Le parcours
 
-### 1. Entrer : le prénom, rien de plus
+### 1. Entrer : son identifiant personnel
 
-À l'ouverture, l'application demande le **prénom**. C'est tout : il dit qui écrit et qui
-décide. Le **poste de travail** (navigateur, système, appareil) est enregistré automatiquement
-avec le compte — un site web n'a pas le droit de lire l'identifiant de session Windows — et
-la personne peut le **corriger** dans « Mon compte » (par exemple « bureau des cadres,
-poste 2 »). Le courriel n'est **jamais** demandé à l'entrée.
+On entre avec son **identifiant personnel** — un identifiant ne se devine pas, personne ne
+peut donc prendre l'identité d'un autre (c'était possible tant que le prénom suffisait).
+Le **poste de travail** (navigateur, système, appareil) est enregistré automatiquement avec
+le compte — un site web n'a pas le droit de lire l'identifiant de session Windows — et la
+personne peut le **corriger** dans « Mon compte ».
+
+**Comment obtient-on un identifiant ?** Un administrateur de projet invite par
+**adresse de courriel** : la personne reçoit un **lien personnel**, y choisit son **prénom**
+et son **identifiant**, et rejoint le projet. Le lien ne sert qu'une fois et vaut 30 jours.
+Le courriel n'est jamais demandé à l'entrée : il sert à recevoir l'invitation et les alertes.
 
 ### 2. Mes projets, puis un projet
 
@@ -73,14 +79,31 @@ ouvre le groupe, avec **les mêmes six outils pour tous** :
 | **Discussion** | le fil du groupe |
 | **Documents** | les fichiers de travail, téléchargeables par tous |
 | **Décisions** | proposer, discuter, voter (anonyme), adopter ou rejeter |
-| **Journal** | qui a fait quoi, quand |
+| **Journal** | qui a fait quoi, quand — **réservé aux administrateurs du groupe** |
+
+Le **cadre de travail** du projet se lit en cliquant le **nom du projet**, en haut : tout le
+monde le lit, seul l'administrateur le modifie. Sur le tableau blanc, **↶ Annuler** (ou
+Ctrl + Z) revient en arrière, et **Ranger** range les post-it **en colonnes par couleur**.
 
 ### 4. Les membres et les rôles
 
 Le bouton **Membres** (au projet) liste les personnes avec leur rôle, une case « me prévenir
-par courriel » et l'invitation par prénom. Dans un groupe, le bouton **Membres** donne un
-rôle **propre au groupe** : utile pour ouvrir un groupe à quelqu'un qui n'a rien à faire
-ailleurs, ou pour n'y laisser qu'un droit de lecture.
+par courriel », le formulaire d'**invitation par adresse** et les invitations en attente.
+Dans un groupe, le bouton **Membres** donne un rôle **propre au groupe**, choisi **parmi les
+membres du projet** : utile pour ouvrir un groupe à quelqu'un qui n'a rien à faire ailleurs,
+ou pour n'y laisser qu'un droit de lecture.
+
+### 5. Ce que chacun peut faire
+
+| Rôle | Ce qu'il peut faire |
+|---|---|
+| **Administrateur du projet** | tout : membres, invitations, groupes, cadre de travail, rôles |
+| **Membre du projet** | écrire dans la discussion du projet, participer aux groupes, lire — **sauf le journal des groupes** |
+| **Visiteur du projet** | voir la discussion et les groupes, **sans rien modifier** ni voir le journal |
+| **Rôle dans un groupe** | l'emporte sur le rôle du projet : administrateur, membre participant ou visiteur |
+
+**Seul un administrateur du projet crée des groupes** (et seul un administrateur du groupe
+ouvre un vote).
 
 ---
 
@@ -91,6 +114,7 @@ serveur.py            API + interface (Flask) ; contrôle des rôles
 moteur/atelier.py     groupes, notes, décisions, documents, journal, diffusion temps réel
 moteur/equipe.py      comptes, discussions, pages, cadre de travail, alertes par courriel
 moteur/projets.py     projets, membres, rôles, notifications
+moteur/invitations.py invitations par courriel (liens personnels) et bulletins de vote
 web/index.html        l'application (projets, groupes, outils)
 web/synergie.js       logique de l'application et du temps réel
 web/synergie.css      habillage (lisibilité, accessibilité)
@@ -147,7 +171,12 @@ Toutes les routes exigent le **jeton du navigateur** (`X-Synergie-Jeton`, ou le 
 
 | Méthode | Chemin | Rôle |
 |---|---|---|
-| POST | `/api/comptes` | entrer (prénom, poste détecté) → jeton + cookie |
+| POST | `/api/comptes` | premier rattachement (prénom, poste détecté) → jeton + cookie |
+| POST | `/api/connexion` | **entrer avec son identifiant personnel** → jeton + cookie |
+| GET / POST | `/api/projets/<id>/invitations` | les invitations du projet / **inviter par adresse** |
+| GET / POST | `/api/invitations/<jeton>` | ouvrir le lien reçu / **activer son compte** (prénom + identifiant) |
+| POST | `/api/themes/<id>/decisions/<d>/scrutin` | **ouvrir le vote** (membres du groupe ou tout le projet) |
+| GET / POST | `/api/votes/<jeton>` | le lien de vote : lire la question / **voter une fois** |
 | GET / PUT | `/api/comptes/moi` | mon compte, mes projets, mes rôles |
 | PUT | `/api/notifications` | mes alertes (projet et groupes) |
 | POST | `/api/alertes/essai` | essai d'envoi de courriel |
@@ -162,9 +191,10 @@ Toutes les routes exigent le **jeton du navigateur** (`X-Synergie-Jeton`, ou le 
 /home/ubuntu/synergie-venv/bin/python tests/tester_synergie.py
 ```
 
-45 contrôles, sans réseau : projets, membres, rôles et droits, notifications, atelier
-(groupes, notes et mise en forme, décisions, documents, votes anonymes, diffusion temps réel)
-et équipe (comptes au prénom seul, discussions, pages, cadre de travail, alertes).
+60 contrôles, sans réseau : projets, membres, rôles et droits, notifications, invitations
+par courriel (lien personnel, activation, identifiant unique), votes par lien (une personne,
+une voix), atelier (groupes, notes et mise en forme, décisions, documents, votes anonymes,
+diffusion temps réel) et équipe (comptes, discussions, pages, cadre de travail, alertes).
 
 ---
 

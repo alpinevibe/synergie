@@ -18,6 +18,9 @@
   let roleTheme = null;                  // mon rôle dans le groupe ouvert
   let roles = [];                        // les rôles possibles (libellés du serveur)
   let membresProjet = [];
+  let cadreProjet = null;
+  let invitationEnCours = null;        // invitation ouverte depuis un lien de courriel
+  let jetonVote = null;                // lien de vote en cours              // cadre de travail du projet (lu en cliquant son nom)
   let membresTheme = [];
   let fluxGeneral = null;                // flux temps réel du projet
   let groupes = [];                      // groupes du projet
@@ -221,7 +224,9 @@
   function construireOnglets() {
     const barre = $('#onglets-theme');
     barre.innerHTML = '';
-    ONGLETS.forEach(([cle, libelle], rang) => {
+    // Le JOURNAL est réservé aux administrateurs du groupe (consigne du 08/10/2026).
+    const liste = ONGLETS.filter(([cle]) => cle !== 'journal' || estAdministrateurTheme());
+    liste.forEach(([cle, libelle], rang) => {
       const bouton = element('button', { texte: libelle });
       bouton.dataset.onglet = cle;
       if (rang === 0) bouton.classList.add('actif');
@@ -229,7 +234,7 @@
       barre.append(bouton);
     });
     document.querySelectorAll('.onglet').forEach((onglet) => onglet.classList.add('cache'));
-    montrerOnglet(ONGLETS[0][0]);
+    montrerOnglet(liste[0][0]);
   }
 
   function montrerOnglet(cle) {
@@ -470,6 +475,55 @@
     noeud.querySelector('.note-auteur').textContent = note.auteur ? note.auteur : '';
   }
 
+  // ---------------------------------------------------------------- ANNULER
+  // Chaque modification du tableau pousse son INVERSE sur une pile : on peut revenir en
+  // arrière (bouton « ↶ Annuler » ou Ctrl + Z), comme dans une page de texte.
+  const annulations = [];
+  const ANNULATIONS_MAX = 60;
+
+  function noterAnnulation(description, action) {
+    annulations.push({ description, action });
+    if (annulations.length > ANNULATIONS_MAX) annulations.shift();
+    majBoutonAnnuler();
+  }
+
+  function majBoutonAnnuler() {
+    const bouton = $('#btn-annuler');
+    if (!bouton) return;
+    bouton.disabled = annulations.length === 0;
+    bouton.title = annulations.length
+      ? "Revenir en arrière : " + annulations[annulations.length - 1].description
+      : 'Rien à annuler';
+  }
+
+  async function annuler() {
+    const dernier = annulations.pop();
+    majBoutonAnnuler();
+    if (!dernier) { toast('Rien à annuler.'); return; }
+    try {
+      await dernier.action();
+      toast('Annulé : ' + dernier.description);
+    } catch (erreur) {
+      toast('Annulation impossible : ' + erreur.message);
+    }
+  }
+
+  /** Applique des changements à une note, en gardant de quoi revenir en arrière. */
+  async function modifierNote(note, changements, description) {
+    const avant = {};
+    Object.keys(changements).forEach((cle) => { avant[cle] = note[cle]; });
+    Object.assign(note, changements);
+    poserNote(note);
+    if (noteSelectionnee() === note) afficherBarreFormat();
+    await sauver(note.id, changements);
+    noterAnnulation(description, async () => {
+      Object.assign(note, avant);
+      poserNote(note);
+      if (noteSelectionnee() === note) afficherBarreFormat();
+      await sauver(note.id, avant, { annulable: false });
+    });
+  }
+
   function retirerNote(identifiant) {
     const noeud = document.querySelector(`.note[data-id="${identifiant}"]`);
     if (noeud) noeud.remove();
@@ -495,8 +549,11 @@
 
     let enEdition = false;
 
+    let texteAvant = '';
+
     /** On écrit dans la note : le texte devient modifiable (demande du 05/10/2026). */
     function modifier(invitation) {
+      texteAvant = texte.textContent;
       enEdition = true;
       texte.contentEditable = 'true';
       noeud.classList.add('en-edition');
@@ -523,6 +580,16 @@
       const courante = notes.find((n) => n.id === note.id);
       if (courante) courante.texte = texte.textContent;
       sauver(note.id, { texte: texte.textContent });
+      if (texteAvant !== texte.textContent) {
+        const ancien = texteAvant;
+        noterAnnulation('texte de la note', async () => {
+          const noeudNote = document.querySelector(`.note[data-id="${note.id}"] .note-texte`);
+          if (noeudNote) noeudNote.textContent = ancien;
+          const cible = notes.find((n) => n.id === note.id);
+          if (cible) cible.texte = ancien;
+          await sauver(note.id, { texte: ancien });
+        });
+      }
     }
 
     crayon.addEventListener('click', (evenement) => {
@@ -539,10 +606,11 @@
       programmer(note.id, () => sauver(note.id, { texte: texte.textContent }, 'texte'), 700);
     });
 
-    supprimer.addEventListener('click', (evenement) => {
+    supprimer.addEventListener('click', async (evenement) => {
       evenement.stopPropagation();
       if (!confirm('Supprimer cette note ?')) return;
-      appel('/api/themes/' + theme.id + '/notes/' + note.id, { methode: 'DELETE' });
+      await supprimerNote(note);
+      toast('Note supprimée.');
     });
 
     // ---- déplacer : en cliquant N'IMPORTE OÙ sur la note (hors crayon, croix et coin) ----
@@ -569,7 +637,18 @@
         noeud.removeEventListener('pointerup', relacher);
         noeud.removeEventListener('pointercancel', relacher);
         noeud.classList.remove('deplacee');
-        if (bouge) sauver(note.id, { x: note.x, y: note.y });
+        if (bouge) {
+          const avant = { x: depart.ox, y: depart.oy };
+          const apres = { x: note.x, y: note.y };
+          if (avant.x !== apres.x || avant.y !== apres.y) {
+            sauver(note.id, apres);
+            noterAnnulation('déplacement de la note', async () => {
+              Object.assign(note, avant);
+              poserNote(note);
+              await sauver(note.id, avant);
+            });
+          }
+        }
       };
       noeud.addEventListener('pointermove', deplacer);
       noeud.addEventListener('pointerup', relacher);
@@ -587,6 +666,7 @@
       evenement.preventDefault(); evenement.stopPropagation();
       poigneeTaille.setPointerCapture(evenement.pointerId);
       const depart = { x: evenement.clientX, largeur: note.largeur };
+      const largeurAvant = note.largeur;
       const etirer = (e) => {
         note.largeur = Math.max(160, depart.largeur + (e.clientX - depart.x) / vue.z);
         noeud.style.width = note.largeur + 'px';
@@ -596,12 +676,41 @@
         poigneeTaille.removeEventListener('pointermove', etirer);
         poigneeTaille.removeEventListener('pointerup', relacher);
         sauver(note.id, { largeur: note.largeur });
+        if (Math.round(largeurAvant) !== Math.round(note.largeur)) {
+          const avant = { largeur: largeurAvant };
+          noterAnnulation('redimensionnement de la note', async () => {
+            Object.assign(note, avant);
+            poserNote(note);
+            await sauver(note.id, avant);
+          });
+        }
       };
       poigneeTaille.addEventListener('pointermove', etirer);
       poigneeTaille.addEventListener('pointerup', relacher);
     });
 
     return noeud;
+  }
+
+  /** Supprime une note, en gardant tout pour pouvoir la remettre (annulation). */
+  async function supprimerNote(note, { annulable = true } = {}) {
+    const copie = { ...note };
+    await appel('/api/themes/' + theme.id + '/notes/' + note.id, { methode: 'DELETE' });
+    notes = notes.filter((n) => n.id !== note.id);
+    retirerNote(note.id);
+    if (selection === note.id) selectionner(null);
+    if (annulable) {
+      noterAnnulation('suppression de la note', async () => {
+        const remise = await appel('/api/themes/' + theme.id + '/notes', { methode: 'POST',
+          corps: { x: copie.x, y: copie.y, texte: copie.texte, taille: copie.taille,
+                   gras: copie.gras, italique: copie.italique, souligne: copie.souligne,
+                   couleur_texte: copie.couleur_texte, couleur_fond: copie.couleur_fond,
+                   alignement: copie.alignement, largeur: copie.largeur,
+                   auteur: copie.auteur || monNom() || 'Anonyme' } });
+        notes.push(remise);
+        poserNote(remise);
+      });
+    }
   }
 
   function textoVide(noeud) { return !(noeud.textContent || '').trim(); }
@@ -620,11 +729,12 @@
     minuteurs[cle] = setTimeout(action, delai);
   }
 
-  async function sauver(identifiant, champs) {
+  async function sauver(identifiant, champs, { annulable = true } = {}) {
     try {
       await appel('/api/themes/' + theme.id + '/notes/' + identifiant,
         { methode: 'PUT', corps: champs });
     } catch (erreur) { /* la note reste à l'écran, une nouvelle tentative suivra */ }
+    return annulable;
   }
 
   function envoyerCurseur(noteId) {
@@ -677,6 +787,7 @@
     notes.push(note);
     poserNote(note);
     selectionner(note.id);
+    noterAnnulation('création de la note', async () => { await supprimerNote(note, { annulable: false }); });
     const crayon = document.querySelector(`.note[data-id="${note.id}"] .crayon`);
     if (crayon) crayon.click();          // la note neuve s'ouvre en écriture
     return note;
@@ -711,36 +822,50 @@
       }
       case 'supprimer':
         if (!confirm('Supprimer cette note ?')) return;
-        await appel('/api/themes/' + theme.id + '/notes/' + note.id, { methode: 'DELETE' });
+        await supprimerNote(note);
         return;
       default: break;
     }
-    Object.assign(note, changements);
-    poserNote(note);
-    afficherBarreFormat();
-    await sauver(note.id, changements);
+    await modifierNote(note, changements, 'mise en forme de la note');
   }
 
   async function changerCouleur(note, champ, couleur) {
-    note[champ] = couleur;
-    poserNote(note);
-    await sauver(note.id, { [champ]: couleur });
+    await modifierNote(note, { [champ]: couleur },
+      champ === 'couleur_fond' ? 'changement de couleur' : 'changement de couleur du texte');
   }
 
   /** Range les notes en colonnes, dans l'ordre de lecture : le tableau redevient lisible. */
+  /** Ranger le tableau : UNE COLONNE PAR COULEUR de post-it (demande du 08/10/2026).
+      Les notes de même fond se suivent, dans l'ordre où elles étaient ; la couleur de
+      fond la plus fréquente n'est pas privilégiée — c'est l'ordre des couleurs de la
+      palette qui décide, pour que le tableau soit toujours rangé pareil. */
   async function organiser() {
     if (!notes.length) return;
-    const triees = [...notes].sort((a, b) => (a.y - b.y) || (a.x - b.x));
-    const colonne = 330, pas = 230, hauteurPage = 900;
-    let index = 0;
+    const rang = (note) => {
+      const place = ORDRE_FONDS.indexOf(note.couleur_fond);
+      return place === -1 ? ORDRE_FONDS.length : place;
+    };
+    const triees = [...notes].sort((a, b) => (rang(a) - rang(b)) || (a.y - b.y) || (a.x - b.x));
+    const colonne = 400, pas = 230, parColonne = 4;
+    let x = 40;
+    let y = 40;
+    let couleur = null;
     for (const note of triees) {
-      const c = Math.floor(index / Math.ceil(hauteurPage / pas));
-      const r = index % Math.ceil(hauteurPage / pas);
-      note.x = 40 + c * colonne;
-      note.y = 40 + r * pas;
+      const teinte = note.couleur_fond || ORDRE_FONDS[0];
+      if (couleur === null || teinte !== couleur) {
+        // Nouvelle couleur : nouvelle colonne, en haut.
+        if (couleur !== null) { x += colonne; y = 40; }
+        couleur = teinte;
+      } else if (y > 40 + (parColonne - 1) * pas) {
+        // Colonne pleine : la même couleur continue dans la colonne suivante.
+        x += colonne;
+        y = 40;
+      }
+      note.x = x;
+      note.y = y;
+      y += pas;
       poserNote(note);
       await sauver(note.id, { x: note.x, y: note.y });
-      index += 1;
     }
     vue = { x: 40, y: 40, z: 1 };
     appliquerVue();
@@ -804,6 +929,18 @@
   }
 
   // ================================================================ DÉCISIONS
+  /** Recharge les décisions et les comptes de votes (après avoir ouvert un vote). */
+  async function chargerVotes() {
+    if (!theme) return;
+    try {
+      const donnees = await appel('/api/themes/' + theme.id);
+      decisions = donnees.decisions || [];
+      votes = donnees.votes || {};
+      mesVotes = donnees.mes_votes || [];
+      afficherDecisions();
+    } catch (erreur) { /* sans conséquence */ }
+  }
+
   function afficherDecisions() {
     const zone = $('#liste-decisions');
     zone.innerHTML = '';
@@ -811,7 +948,7 @@
       zone.append(element('p', { classe: 'vide', texte: 'Aucune décision pour ce thème.' }));
       return;
     }
-    const ordre = { proposee: 0, 'en attente': 1, adoptee: 2, rejetee: 3 };
+    const ordre = { proposee: 0, en_vote: 0, 'en attente': 1, adoptee: 2, rejetee: 3 };
     [...decisions].sort((a, b) => (ordre[a.statut] || 0) - (ordre[b.statut] || 0))
       .forEach((decision) => {
         const carte = element('div', { classe: `carte decision ${decision.statut}` });
@@ -833,6 +970,17 @@
           element('span', { classe: 'meta', texte: comptes.total
             ? comptes.total + ' vote(s) — personne ne sait qui a voté quoi'
             : 'aucun vote pour le moment' })));
+        if (estAdministrateurTheme() && decision.statut !== 'en_vote') {
+          // L'administrateur du groupe ouvre le vote : par courriel, avec un lien personnel.
+          const barre = element('div', { classe: 'barre-boutons' });
+          barre.append(element('span', { classe: 'etiquette', texte: 'Ouvrir le vote par courriel' }));
+          [['groupe', 'Aux membres du groupe'], ['projet', 'À tout le projet']].forEach(([portee, mot]) => {
+            const bouton = element('button', { classe: 'petit', texte: mot });
+            bouton.addEventListener('click', () => ouvrirScrutin(decision, portee));
+            barre.append(bouton);
+          });
+          carte.append(barre);
+        }
         if (mesVotes.includes(decision.id)) {
           carte.append(element('p', { classe: 'meta deja-vote',
             texte: '✓ Vous avez voté (votre vote reste anonyme).' }));
@@ -864,6 +1012,24 @@
   }
 
   /** Vote ANONYME : une seule fois par personne. Le serveur ne garde jamais le nom. */
+  /** Ouvre le vote : un lien personnel part par courriel à chaque votant. */
+  async function ouvrirScrutin(decision, portee) {
+    if (!confirm(portee === 'projet'
+      ? 'Envoyer un lien de vote à TOUS les membres du projet ?'
+      : 'Envoyer un lien de vote aux membres de ce groupe ?')) return;
+    try {
+      const donnees = await appel(`/api/themes/${theme.id}/decisions/${decision.id}/scrutin`,
+        { methode: 'POST', corps: { scrutin: portee } });
+      const nombre = (donnees.envoyes || []).length;
+      toast(nombre
+        ? nombre + ' lien(s) de vote envoyé(s) par courriel.'
+        : "Aucun lien envoyé : les personnes visées n'ont pas d'adresse de courriel.");
+      await chargerVotes();
+    } catch (erreur) {
+      toast(erreur.message);
+    }
+  }
+
   async function voter(decision, valeur) {
     try {
       const resultat = await appel(
@@ -907,7 +1073,8 @@
   }
 
   function libelle(statut) {
-    return { proposee: 'proposée', adoptee: 'adoptée', rejetee: 'rejetée', 'en attente': 'en attente' }[statut] || statut;
+    return { proposee: 'proposée', en_vote: 'vote en cours', adoptee: 'adoptée',
+             rejetee: 'rejetée', 'en attente': 'en attente' }[statut] || statut;
   }
 
   async function changerStatut(decision, statut) {
@@ -927,25 +1094,114 @@
   // Chaque personne a un compte enregistré sur le serveur (prénom + courriel). Le jeton
   // gardé par le navigateur permet de le retrouver, et le courriel sert aux alertes.
 
-  async function creerMonCompte() {
-    const prenom = ($('#prenom').value || '').trim();
+  /** Entrer avec son IDENTIFIANT personnel (demande du 08/10/2026) : l'identifiant
+      n'est connu que de son titulaire, personne ne peut donc prendre sa place. */
+  async function entrerAvecIdentifiant() {
     const erreur = $('#nom-erreur');
-    if (!prenom) {
-      erreur.textContent = 'Indiquez votre prénom.';
-      $('#prenom').classList.add('manquant');
-      $('#prenom').focus();
+    const champ = $('#identifiant');
+    const identifiant = (champ.value || '').trim();
+    if (!identifiant) {
+      erreur.textContent = 'Indiquez votre identifiant.';
+      champ.classList.add('manquant');
+      champ.focus();
       return false;
     }
     erreur.textContent = '';
-    const donnees = await appel('/api/comptes', { methode: 'POST', corps: {
-      prenom,
-      poste: localStorage.getItem('synergie.poste') || posteDetecte(),
-      appareil: appareilDetecte(),
-      jeton: monJeton() || null } });
+    const donnees = await appel('/api/connexion', { methode: 'POST', corps: { identifiant } });
     compte = donnees.compte;
     retenirJeton(donnees.jeton);
     retenirNom(compte.prenom);
+    localStorage.setItem('synergie.identifiant', identifiant);
     return true;
+  }
+
+  /** Le premier appareil : on garde la trace du poste de travail pour le compte. */
+  async function signalerLePoste() {
+    try {
+      await appel('/api/comptes/moi', { methode: 'PUT', corps: {
+        poste: localStorage.getItem('synergie.poste') || posteDetecte(),
+        appareil: appareilDetecte() } });
+    } catch (erreur) { /* sans conséquence */ }
+  }
+
+  // ---------------------------------------------------------------- INVITATION
+  /** Le lien reçu par courriel : on choisit son prénom et son identifiant. */
+  async function ouvrirInvitation(jeton) {
+    try {
+      const donnees = await appel('/api/invitations/' + encodeURIComponent(jeton));
+      invitationEnCours = { jeton, ...donnees };
+      $('#titre-invitation').textContent = donnees.projet
+        ? 'Rejoindre « ' + donnees.projet.nom + ' »' : 'Activer mon accès';
+      $('#invitation-projet').textContent = donnees.invitation.prenom
+        ? 'Bonjour ' + donnees.invitation.prenom + ' !' : 'Bonjour !';
+      $('#invitation-email').textContent = 'Votre adresse : ' + donnees.invitation.email
+        + ' (' + (roles.find((r) => r.cle === donnees.invitation.role) || {}).libelle + ')';
+      $('#invitation-prenom').value = donnees.invitation.prenom || '';
+      afficherVue('invitation');
+      $('#vue-invitation').classList.remove('cache');
+      setTimeout(() => $('#invitation-identifiant').focus(), 200);
+    } catch (erreur) {
+      toast(erreur.message);
+      history.replaceState(null, '', location.pathname);
+      demarrer();
+    }
+  }
+
+  async function activerInvitation() {
+    const prenom = ($('#invitation-prenom').value || '').trim();
+    const identifiant = ($('#invitation-identifiant').value || '').trim();
+    const erreur = $('#invitation-erreur');
+    if (!prenom) { erreur.textContent = 'Indiquez votre prénom.'; return; }
+    if (!identifiant) { erreur.textContent = 'Choisissez votre identifiant personnel.'; return; }
+    try {
+      const donnees = await appel('/api/invitations/' + invitationEnCours.jeton,
+        { methode: 'POST', corps: { prenom, identifiant } });
+      compte = donnees.compte;
+      retenirJeton(donnees.jeton);
+      retenirNom(compte.prenom);
+      localStorage.setItem('synergie.identifiant', identifiant);
+      $('#vue-invitation').classList.add('cache');
+      history.replaceState(null, '', location.pathname);
+      toast('Bienvenue ' + prenom + ' !');
+      await entrerDansLAtelier();
+    } catch (e) {
+      erreur.textContent = e.message;
+    }
+  }
+
+  // ---------------------------------------------------------------- VOTE
+  /** Le lien de vote reçu par courriel : une personne, une voix. */
+  async function ouvrirVote(jeton) {
+    try {
+      const donnees = await appel('/api/votes/' + encodeURIComponent(jeton));
+      jetonVote = jeton;
+      $('#titre-vote').textContent = 'Vote — ' + donnees.groupe;
+      $('#vote-groupe').textContent = donnees.scrutin === 'projet'
+        ? 'Tous les membres du projet votent.' : 'Les membres du groupe votent.';
+      $('#vote-question').textContent = donnees.intitule;
+      $('#vote-detail').textContent = donnees.detail || '';
+      $('#vote-etat').textContent = donnees.deja_vote
+        ? 'Votre vote a déjà été enregistré. Merci !' : 'Choisissez, puis validez.';
+      document.querySelectorAll('[data-vote]').forEach((b) => { b.disabled = donnees.deja_vote; });
+      afficherVue('vote');
+      $('#vue-vote').classList.remove('cache');
+    } catch (erreur) {
+      toast(erreur.message);
+      history.replaceState(null, '', location.pathname);
+      demarrer();
+    }
+  }
+
+  async function voter(valeur) {
+    $('#vote-etat').textContent = 'Enregistrement…';
+    try {
+      await appel('/api/votes/' + jetonVote, { methode: 'POST', corps: { valeur } });
+      document.querySelectorAll('[data-vote]').forEach((b) => { b.disabled = true; });
+      $('#vote-etat').textContent = 'Votre vote est enregistré. Merci !';
+      toast('Vote enregistré.');
+    } catch (erreur) {
+      $('#vote-etat').textContent = erreur.message;
+    }
   }
 
   async function chargerMonCompte() {
@@ -966,6 +1222,7 @@
     if (!compte) { demanderPrenom(); return; }
     $('#c-prenom').value = compte.prenom || '';
     $('#c-poste').value = compte.poste || '';
+    $('#c-identifiant').value = compte.identifiant || '';
     $('#c-email').value = compte.email || '';
     await chargerNotifications();
     $('#c-etat').textContent = compte.email
@@ -1010,6 +1267,7 @@
       const donnees = await appel('/api/comptes/moi', { methode: 'PUT', corps: {
         prenom: $('#c-prenom').value.trim(),
         poste: $('#c-poste').value.trim(),
+        identifiant: $('#c-identifiant').value.trim(),
         email: $('#c-email').value.trim() } });
       compte = Object.assign(compte, donnees.compte);
       localStorage.setItem('synergie.poste', compte.poste || '');
@@ -1032,18 +1290,43 @@
   }
 
   // ================================================================ CADRE DE TRAVAIL
+  /** Le cadre de travail : on le lit en cliquant le NOM DU PROJET (consigne du
+      08/10/2026), il n'occupe plus la page. Seul l'administrateur du projet le modifie. */
   async function chargerCadre() {
     try {
       const cadre = await appel('/api/projets/' + projet.id + '/cadre');
-      if (document.activeElement !== $('#cadre-contexte')) {
-        $('#cadre-contexte').value = cadre.contexte || '';
-      }
-      $('#cadre-etat').textContent = cadre.maj_le
-        ? 'Dernière modification par ' + (cadre.maj_par || 'quelqu\'un') + ' ' + quand(cadre.maj_le)
-        : '';
+      cadreProjet = cadre;
+      afficherCadre();
       const donnees = await appel('/api/projets/' + projet.id + '/documents');
       afficherComptesRendus(donnees.documents || []);
     } catch (erreur) { /* sans conséquence */ }
+  }
+
+  /** Le cadre se lit en clair ; « Modifier » ne s'affiche que pour l'administrateur. */
+  function afficherCadre({ enEdition = false } = {}) {
+    const lecture = $('#cadre-lecture');
+    const zone = $('#cadre-contexte');
+    const texte = (cadreProjet && cadreProjet.contexte) || '';
+    const administre = roleProjet === 'admin';
+    lecture.textContent = texte || 'Le cadre de travail n\'est pas encore renseigné.';
+    lecture.classList.toggle('cache', enEdition || !texte);
+    zone.classList.toggle('cache', !enEdition);
+    $('#cadre-modifier').classList.toggle('cache', !administre || enEdition || !texte);
+    $('#cadre-enregistrer').classList.toggle('cache', !enEdition);
+    $('#cadre-annuler').classList.toggle('cache', !enEdition);
+    zone.value = texte;
+    $('#cadre-etat').textContent = cadreProjet && cadreProjet.maj_le
+      ? 'Dernière modification par ' + (cadreProjet.maj_par || 'quelqu\'un') + ' '
+        + quand(cadreProjet.maj_le)
+      : '';
+  }
+
+  async function ouvrirCadre() {
+    if (!projet) return;
+    await chargerCadre();
+    afficherCadre();
+    $('#vue-cadre').classList.remove('cache');
+    $('#cadre-lecture').focus();
   }
 
   function afficherComptesRendus(documents) {
@@ -1074,10 +1357,13 @@
   }
 
   async function enregistrerCadre() {
+    if (roleProjet !== 'admin') { toast('Seul l\'administrateur du projet peut modifier le cadre.'); return; }
     $('#cadre-etat').textContent = 'Enregistrement…';
     await appel('/api/projets/' + projet.id + '/cadre',
       { methode: 'PUT', corps: { contexte: $('#cadre-contexte').value } });
     await chargerCadre();
+    afficherCadre();
+    toast('Cadre de travail enregistré.');
   }
 
   async function deposerComptesRendus() {
@@ -1304,8 +1590,8 @@
     $('#membres-inviter').classList.toggle('cache', !administre);
     if (!membresProjet.length) {
       zone.append(element('p', { classe: 'vide', texte: 'Personne pour le moment.' }));
-      return;
     }
+    if (administre) afficherInvitations();
     membresProjet.forEach((membre) => {
       if (administre) {
         zone.append(ligneMembre(membre, { portee: 'projet', identifiant: projet.id }));
@@ -1329,21 +1615,52 @@
     $('#vue-membres').classList.remove('cache');
   }
 
+  /** Inviter par ADRESSE : la personne reçoit un lien personnel et choisit son identifiant. */
   async function inviterAuProjet() {
-    const prenom = ($('#membre-prenom').value || '').trim();
-    if (!prenom) { $('#membre-prenom').focus(); return; }
-    await appel('/api/projets/' + projet.id + '/membres', { methode: 'POST', corps: {
-      prenom, role: $('#membre-role').value, notifier: true } });
-    $('#membre-prenom').value = '';
-    await rafraichirProjet();
-    toast(prenom + ' a rejoint le projet.');
+    const email = ($('#membre-email').value || '').trim();
+    if (!email) { $('#membre-email').focus(); return; }
+    try {
+      const donnees = await appel('/api/projets/' + projet.id + '/invitations',
+        { methode: 'POST', corps: { email, role: $('#membre-role').value } });
+      $('#membre-email').value = '';
+      await rafraichirProjet();
+      toast(donnees.envoye
+        ? 'Invitation envoyée à ' + email + '.'
+        : "Invitation enregistrée, mais le courriel n'est pas parti (voir le journal des alertes).");
+    } catch (erreur) {
+      toast(erreur.message);
+    }
+  }
+
+  /** Les invitations en attente (celles dont le lien n'a pas encore été utilisé). */
+  async function afficherInvitations() {
+    const zone = $('#invitations-en-cours');
+    if (!zone) return;
+    zone.innerHTML = '';
+    let invitations = [];
+    try { invitations = (await appel('/api/projets/' + projet.id + '/invitations')).invitations || []; }
+    catch (erreur) { return; }
+    const attente = invitations.filter((i) => !i.utilise_le && i.expire_le > new Date().toISOString().slice(0, 19) + 'Z');
+    if (!attente.length) return;
+    zone.append(element('p', { classe: 'aide',
+      texte: attente.length + ' invitation(s) en attente :' }));
+    attente.forEach((invitation) => {
+      const ligne = element('div', { classe: 'membre' });
+      poser(ligne,
+        element('strong', { texte: invitation.email }),
+        element('span', { classe: 'etiquette-role',
+          texte: (roles.find((r) => r.cle === invitation.role) || {}).libelle || invitation.role }),
+        element('span', { classe: 'aide', texte: 'invité ' + quand(invitation.cree_le) }));
+      zone.append(ligne);
+    });
   }
 
   function afficherMembresTheme() {
     const zone = $('#liste-membres-theme');
     zone.innerHTML = '';
     const administre = estAdministrateurTheme();
-    $('#inviter-theme').classList.toggle('cache', !administre);
+    if (administre) remplirMembresThemesDisponibles();
+    else $('#inviter-theme').classList.add('cache');
     const menu = $('#membre-theme-role');
     if (menu.options.length !== roles.length) {
       menu.innerHTML = '';
@@ -1367,14 +1684,35 @@
     });
   }
 
+  /** Ajouter au groupe un membre DU PROJET, avec un rôle propre au groupe. */
   async function inviterAuTheme() {
-    const prenom = ($('#membre-theme-prenom').value || '').trim();
-    if (!prenom) { $('#membre-theme-prenom').focus(); return; }
+    const menu = $('#membre-theme-compte');
+    const compteId = menu.value;
+    if (!compteId) return;
+    const choisi = (menu.options[menu.selectedIndex] || {}).textContent || '';
     await appel('/api/themes/' + theme.id + '/membres', { methode: 'POST', corps: {
-      prenom, role: $('#membre-theme-role').value, notifier: true } });
-    $('#membre-theme-prenom').value = '';
+      compte: compteId, role: $('#membre-theme-role').value, notifier: true } });
     await rafraichirMembresTheme();
-    toast(prenom + ' a rejoint le groupe.');
+    toast(choisi + ' a rejoint le groupe.');
+  }
+
+  /** Le menu des personnes à ajouter : les membres du projet qui n'ont pas de rôle ici. */
+  function remplirMembresThemesDisponibles() {
+    const menu = $('#membre-theme-compte');
+    if (!menu) return;
+    const dejaLa = new Set(membresTheme.map((m) => m.compte));
+    menu.innerHTML = '';
+    const libres = membresProjet.filter((m) => !dejaLa.has(m.compte));
+    libres.forEach((membre) => {
+      menu.append(element('option', { texte: membre.prenom + ' (' + (membre.email || 'sans courriel') + ')',
+        attrs: { value: membre.compte } }));
+    });
+    const possible = libres.length > 0;
+    $('#inviter-theme').classList.toggle('cache', !possible);
+    $('#inviter-theme-note').classList.toggle('cache', possible);
+    if (!possible) {
+      $('#inviter-theme-note').textContent = 'Tous les membres du projet ont déjà un rôle dans ce groupe.';
+    }
   }
 
   /** Petit message en bas de l'écran (jamais de fenêtre qui bloque le travail). */
@@ -1421,10 +1759,12 @@
     // Au clavier : Échap ferme la fenêtre ouverte et rend le focus au bouton qui l'a ouverte.
     document.addEventListener('keydown', (evenement) => {
       if (evenement.key !== 'Escape') return;
-      const fenetre = ['#vue-compte', '#vue-membres'].find((sel) => !$(sel).classList.contains('cache'));
+      const fenetre = ['#vue-compte', '#vue-membres', '#vue-cadre']
+        .find((sel) => !$(sel).classList.contains('cache'));
       if (!fenetre) return;
       $(fenetre).classList.add('cache');
-      const retour = fenetre === '#vue-compte' ? $('#btn-compte') : $('#btn-membres');
+      const retour = fenetre === '#vue-compte' ? $('#btn-compte')
+        : fenetre === '#vue-cadre' ? $('#btn-cadre') : $('#btn-membres');
       if (retour) retour.focus();
     });
     $('#btn-compte').addEventListener('click', ouvrirMonCompte);
@@ -1440,6 +1780,17 @@
       } catch (erreur) { $('#c-etat').textContent = 'Essai impossible : ' + erreur.message; }
     });
 
+    $('#btn-invitation').addEventListener('click', activerInvitation);
+    $('#invitation-identifiant').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') activerInvitation();
+    });
+    document.querySelectorAll('[data-vote]').forEach((bouton) => {
+      bouton.addEventListener('click', () => voter(bouton.dataset.vote));
+    });
+    $('#btn-cadre').addEventListener('click', ouvrirCadre);
+    $('#cadre-fermer').addEventListener('click', () => $('#vue-cadre').classList.add('cache'));
+    $('#cadre-modifier').addEventListener('click', () => afficherCadre({ enEdition: true }));
+    $('#cadre-annuler').addEventListener('click', () => afficherCadre());
     $('#cadre-enregistrer').addEventListener('click', enregistrerCadre);
     $('#cadre-deposer').addEventListener('click', deposerComptesRendus);
     $('#chat-general-form').addEventListener('submit', (evenement) => {
@@ -1516,6 +1867,21 @@
 
     // --- tableau blanc
     $('#btn-note').addEventListener('click', () => creerNote());
+    $('#btn-annuler').addEventListener('click', annuler);
+    // Ctrl + Z annule sur le tableau (dans une page de texte, le navigateur s'en occupe).
+    document.addEventListener('keydown', (evenement) => {
+      if (!(evenement.ctrlKey || evenement.metaKey) || evenement.key.toLowerCase() !== 'z') return;
+      if (vue !== undefined && $('#onglet-tableau') && !$('#onglet-tableau').classList.contains('cache')
+          && !evenement.target.isContentEditable) {
+        evenement.preventDefault();
+        annuler();
+      }
+    });
+    $('#page-annuler').addEventListener('click', () => {
+      $('#page-contenu').focus();
+      document.execCommand('undo');
+      programmerPage();
+    });
     $('#zoom-plus').addEventListener('click', () => { vue.z = Math.min(2.5, vue.z * 1.2); appliquerVue(); });
     $('#zoom-moins').addEventListener('click', () => { vue.z = Math.max(0.3, vue.z / 1.2); appliquerVue(); });
     $('#btn-recentrer').addEventListener('click', () => { vue = { x: 40, y: 40, z: 1 }; appliquerVue(); });
@@ -1613,16 +1979,16 @@
       Tant qu'il n'est pas donné, on n'entre pas : toute action est journalisée. */
   function demanderPrenom() {
     const voile = $('#accueil-nom');
-    const champ = $('#prenom');
+    const champ = $('#identifiant');
     voile.classList.remove('cache');
     setTimeout(() => champ.focus(), 200);
 
     async function valider() {
       try {
-        const pret = await creerMonCompte();
+        const pret = await entrerAvecIdentifiant();
         if (!pret) return;
       } catch (erreur) {
-        $('#nom-erreur').textContent = 'Connexion impossible : ' + erreur.message;
+        $('#nom-erreur').textContent = erreur.message;
         return;
       }
       voile.classList.add('cache');
@@ -1657,8 +2023,17 @@
   async function demarrer() {
     brancher();
     afficherVue('projets');
+    roles = [{ cle: 'admin', libelle: 'Administrateur' },
+             { cle: 'membre', libelle: 'Membre participant' },
+             { cle: 'visiteur', libelle: 'Visiteur' }];
+    // Un lien reçu par courriel passe AVANT tout : invitation, puis vote.
+    const invitation = (location.hash.match(/#invitation=([^&]+)/) || [])[1];
+    if (invitation) { await ouvrirInvitation(invitation); return; }
+    const vote = (location.hash.match(/#vote=([^&]+)/) || [])[1];
+    if (vote) { await ouvrirVote(vote); return; }
     await chargerMonCompte();                      // le compte d'abord
     if (!compte || !compte.prenom) { demanderPrenom(); return; }
+    await signalerLePoste();
     await entrerDansLAtelier();
   }
 

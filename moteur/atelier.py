@@ -342,6 +342,11 @@ def supprimer_theme(identifiant: str) -> bool:
     if theme.get("fixe"):
         return False
     with connexion() as base:
+        # Les bulletins de vote partent avec les décisions du groupe (sinon ils
+        # s'accumuleraient sans fin, sans pouvoir être rattachés à quoi que ce soit).
+        base.execute("delete from bulletins where theme = ?", (identifiant,))
+        base.execute("delete from votes where decision in"
+                     " (select id from decisions where theme = ?)", (identifiant,))
         for table in ("notes", "decisions", "documents"):
             base.execute(f"delete from {table} where theme = ?", (identifiant,))
         base.execute("delete from themes where id = ?", (identifiant,))

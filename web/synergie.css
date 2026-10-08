@@ -159,12 +159,21 @@ textarea { margin-top: 8px; resize: vertical; }
 .note-barre { display: flex; align-items: center; gap: 4px; min-height: 22px; }
 .note-auteur { font-size: 11px; color: #6b7a90; flex: 1; opacity: .75;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.crayon, .note-suppr { border: none; background: transparent; font-size: 14px; padding: 0 4px;
-  opacity: 0; transition: opacity .12s ease; }
-.note:hover .crayon, .note:hover .note-suppr, .note.en-edition .crayon { opacity: .75; }
-.crayon:hover, .note-suppr:hover { opacity: 1; }
-.note-suppr { color: #6b7a90; font-size: 16px; }
-.note-suppr:hover { color: var(--danger); }
+/* Les boutons d'une note sont TOUJOURS visibles : sur un écran tactile il n'y a pas de
+   survol, et des boutons cachés rendaient la suppression impossible à trouver
+   (constat du 08/10/2026). Ils sont larges, pour être touchés au doigt. */
+.crayon, .note-suppr {
+  border: none; background: transparent; cursor: pointer;
+  min-width: 32px; min-height: 32px; border-radius: 8px;
+  font-size: 15px; padding: 2px 6px; opacity: .65;
+  line-height: 1; transition: opacity .12s ease, background .12s ease;
+}
+.note:hover .crayon, .note:hover .note-suppr, .note.en-edition .crayon { opacity: .9; }
+.crayon:hover, .note-suppr:hover, .crayon:focus-visible, .note-suppr:focus-visible {
+  opacity: 1; background: #eef2f8;
+}
+.note-suppr { color: #6b7a90; font-size: 18px; }
+.note-suppr:hover { color: var(--danger); background: #fdeceb; }
 .note-texte[contenteditable="true"] { cursor: text; }
 .note-texte[contenteditable="true"]:empty::before {
   content: 'Écrivez ici…'; color: #93a1b5; }
@@ -481,3 +490,23 @@ select.role { min-height: 38px; border-radius: 9px; border: 1px solid var(--bord
   .projet-chat { position: static; max-height: none; }
   .projet-chat .fil { max-height: 320px; }
 }
+
+/* Le nom du projet ouvre le cadre de travail : c'est un bouton, il doit en avoir l'air. */
+.titre-projet {
+  border: none; background: transparent; padding: 0; margin: 0;
+  font-size: 20px; font-weight: 700; color: var(--encre);
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer; min-height: 30px;
+}
+.titre-projet:hover { color: var(--accent); }
+.titre-projet .info { font-size: 15px; color: var(--accent); opacity: .85; font-weight: 400; }
+.cadre-lecture {
+  white-space: pre-wrap; background: #f8fafd; border: 1px solid var(--bord);
+  border-radius: 12px; padding: 14px 16px; margin: 8px 0; font-size: 14.5px;
+  max-height: 46vh; overflow: auto;
+}
+button:disabled { opacity: .45; cursor: default; }
+button:disabled:hover { border-color: var(--bord); }
+
+/* Décisions : le vote en cours se distingue d'une décision simplement proposée. */
+.decision.en_vote { border-left-color: var(--accent); background: #f4f7ff; }
+.vote-question { font-size: 17px; font-weight: 700; margin: 10px 0 4px; }
