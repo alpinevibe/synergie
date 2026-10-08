@@ -1418,6 +1418,15 @@
 
   // ================================================================ BRANCHEMENTS
   function brancher() {
+    // Au clavier : Échap ferme la fenêtre ouverte et rend le focus au bouton qui l'a ouverte.
+    document.addEventListener('keydown', (evenement) => {
+      if (evenement.key !== 'Escape') return;
+      const fenetre = ['#vue-compte', '#vue-membres'].find((sel) => !$(sel).classList.contains('cache'));
+      if (!fenetre) return;
+      $(fenetre).classList.add('cache');
+      const retour = fenetre === '#vue-compte' ? $('#btn-compte') : $('#btn-membres');
+      if (retour) retour.focus();
+    });
     $('#btn-compte').addEventListener('click', ouvrirMonCompte);
     $('#c-enregistrer').addEventListener('click', enregistrerMonCompte);
     $('#c-fermer').addEventListener('click', () => $('#vue-compte').classList.add('cache'));
@@ -1618,6 +1627,9 @@
       }
       voile.classList.add('cache');
       entrerDansLAtelier();
+      // Au clavier, on repart du début du contenu : la personne sait où elle est.
+      const contenu = $('#vue-projet') || $('#vue-projets');
+      if (contenu) { contenu.setAttribute('tabindex', '-1'); contenu.focus(); }
     }
     $('#btn-prenom').addEventListener('click', valider);
     champ.addEventListener('keydown', (evenement) => {
