@@ -1,5 +1,16 @@
 # Synergie — état du projet
 
+## 8 octobre 2026 — modération des discussions
+
+- **Retirer un message non adapté** : dans les discussions (projet et groupes), l'**auteur**
+  peut retirer son message et un **administrateur** peut retirer n'importe lequel — c'est la
+  modération. Le retrait est **journalisé** (« untel a retiré un message de untel ») et
+  diffusé en direct : le message disparaît chez tout le monde sans recharger la page.
+- **Ménage** : la présence de « Camille » (jeu d'essai) a été retirée — ses messages, sa page
+  et ses 79 lignes de journal — ainsi que 266 lignes de journal orphelines laissées par les
+  groupes d'essai supprimés au fil des mises au point. Les quatre groupes de travail et leurs
+  contenus sont intacts.
+
 ## 8 octobre 2026 (soirée) — liens à copier, alerte d'accueil, envois suspendus
 
 1. **Les envois de courriel sont SUSPENDUS** (`SYNERGIE_ENVOI=non` dans

@@ -470,6 +470,19 @@ def test_equipe():
         with m_atelier.connexion() as base:
             base.execute("update themes set projet = '' where id = ?", (theme["id"],))
 
+        # --- la MODÉRATION : retirer un message non adapté -------------------------------
+        message = m_equipe.envoyer_message(theme["id"], "Quelqu'un", "Message à modérer")
+        verifie(m_equipe.supprimer_message(theme["id"], message["id"], "Camille") is True
+                and all(m["id"] != message["id"]
+                        for m in m_equipe.lister_messages(theme["id"])),
+                "un message de discussion se retire (modération)")
+        verifie(m_equipe.supprimer_message(theme["id"], "ms-inexistant", "Camille") is False,
+                "retirer un message inconnu ne casse rien")
+        trace = [l for l in m_atelier.lister_journal(theme["id"])
+                 if l["action"] == "message_supprime"]
+        verifie(trace and trace[0]["qui"] == "Camille" and "Quelqu'un" in (trace[0]["details"] or ""),
+                "le retrait d'un message est journalisé (qui a retiré, et de qui)")
+
         # le journal garde la trace des actions
         actions = {l["action"] for l in m_atelier.lister_journal(theme["id"])}
         verifie({"page_creee", "cadre_modifie"} <= actions or "page_creee" in actions,

@@ -890,8 +890,17 @@ def api_messages_projet(identifiant):
 
 @app.route("/api/projets/<identifiant>/messages/<message>", methods=["DELETE"])
 def api_message_projet_supprimer(identifiant, message):
+    """Modération de la discussion du projet : auteur ou administrateur du projet."""
     _projet(identifiant)
-    m_equipe.supprimer_message(identifiant, message)
+    message_lu = next((m for m in m_equipe.lister_messages(identifiant, 500)
+                       if m["id"] == message), None)
+    if not message_lu:
+        return jsonify({"erreur": "Message inconnu."}), 404
+    if not (message_lu["qui"] == _qui()
+            or m_projets.peut_administrer(getattr(request, "role_projet", None))):
+        return jsonify({"erreur": "Seul l'auteur du message ou un administrateur du projet "
+                                  "peut le retirer."}), 403
+    m_equipe.supprimer_message(identifiant, message, _qui())
     return jsonify({"ok": True})
 
 
@@ -911,8 +920,18 @@ def api_messages(identifiant):
 
 @app.route("/api/themes/<identifiant>/messages/<message>", methods=["DELETE"])
 def api_message_supprimer(identifiant, message):
+    """Modération : l'auteur peut retirer son message, un administrateur du groupe peut
+    retirer n'importe lequel."""
     _theme(identifiant, ecriture=True)
-    m_equipe.supprimer_message(identifiant, message)
+    message_lu = next((m for m in m_equipe.lister_messages(identifiant, 500)
+                       if m["id"] == message), None)
+    if not message_lu:
+        return jsonify({"erreur": "Message inconnu."}), 404
+    if not (message_lu["qui"] == _qui()
+            or m_projets.peut_administrer(getattr(request, "role_theme", None))):
+        return jsonify({"erreur": "Seul l'auteur du message ou un administrateur du groupe "
+                                  "peut le retirer."}), 403
+    m_equipe.supprimer_message(identifiant, message, _qui())
     return jsonify({"ok": True})
 
 

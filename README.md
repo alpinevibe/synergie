@@ -78,7 +78,7 @@ ouvre le groupe, avec **les mêmes six outils pour tous** :
 |---|---|
 | **Tableau blanc** | notes libres, déplaçables, redimensionnables, mises en forme (6 couleurs de texte, 6 fonds), rangement automatique en colonnes, recherche |
 | **Pages** | des pages de travail avec un traitement de texte simple (comptes rendus, procédures) |
-| **Discussion** | le fil du groupe |
+| **Discussion** | le fil du groupe ; **modération** : l'auteur peut retirer son message, un administrateur peut retirer n'importe lequel (le journal garde la trace du retrait) |
 | **Documents** | les fichiers de travail, téléchargeables par tous |
 | **Votes et sondages** | **un vote** = une question, oui ou non (décision collective) ; **un sondage** = plusieurs questions, avec le type de réponse qui convient : choix unique, cases à cocher, liste déroulante, échelle de 1 à 5, un mot (nuage de mots). On choisit **qui l'on consulte** (le groupe ou tout le projet), les réponses restent **anonymes**, et **ce qui vous attend s'affiche en alerte à l'ouverture du projet** : on répond d'un clic, sans courriel |
 
@@ -163,6 +163,8 @@ Toutes les routes exigent le **jeton du navigateur** (`X-Synergie-Jeton`, ou le 
 | GET / PUT | `/api/projets/<id>/cadre` | le cadre de travail du projet |
 | GET / POST | `/api/projets/<id>/documents` | comptes rendus de réunion |
 | GET / POST | `/api/projets/<id>/messages` | la discussion du projet |
+| DELETE | `/api/projets/<id>/messages/<message>` | **retirer un message** (auteur ou administrateur) |
+| DELETE | `/api/themes/<id>/messages/<message>` | **retirer un message d'un groupe** (auteur ou administrateur) |
 | GET | `/api/projets/<id>/evenements` | **flux temps réel** du projet (SSE) |
 
 ### Groupes de travail
@@ -214,7 +216,7 @@ Toutes les routes exigent le **jeton du navigateur** (`X-Synergie-Jeton`, ou le 
 /home/ubuntu/synergie-venv/bin/python tests/tester_synergie.py
 ```
 
-80 contrôles, sans réseau : projets, membres, rôles et droits, notifications, invitations
+83 contrôles, sans réseau : projets, membres, rôles et droits, notifications, invitations
 par courriel (lien personnel, activation, identifiant unique), votes et sondages (questions
 de tous types, liens personnels, une réponse par personne, dépouillement anonyme), atelier
 (groupes, notes et mise en forme, documents, diffusion temps réel) et équipe (comptes,

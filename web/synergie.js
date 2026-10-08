@@ -364,6 +364,7 @@
       try {
         const evenement = JSON.parse(message.data);
         if (evenement.type === 'message') chargerChatGeneral();
+        if (evenement.type === 'message_supprime') chargerChatGeneral();
         if (evenement.type === 'cadre') chargerCadre();
       } catch (erreur) { /* événement illisible */ }
     };
@@ -400,6 +401,9 @@
       case 'note_supprimee':
         notes = notes.filter((n) => n.id !== evenement.id);
         retirerNote(evenement.id);
+        break;
+      case 'message_supprime':
+        chargerChatTheme();
         break;
       case 'consultation_creee':
       case 'consultation_maj':
@@ -965,6 +969,7 @@
     consultation_ouverte: 'a ouvert un vote ou un sondage',
     consultation_repondue: 'a répondu à une consultation',
     consultation_close: 'a clos une consultation',
+    message_supprime: 'a retiré un message de la discussion',
     invitation: 'a invité quelqu\'un', invitation_activee: 'a activé son accès',
     projet_membre: 'a modifié les membres du projet', arrivee: 'est arrivé dans le groupe',
   };
@@ -1715,7 +1720,8 @@
   // ================================================================ DISCUSSIONS
   // Un chat général (tout le projet) et un chat par thème. Les messages arrivent en direct.
 
-  function afficherFil(zone, messages, sujet) {
+  /** Le fil d'une discussion. `moderation` : où retirer un message (auteur ou admin). */
+  function afficherFil(zone, messages, sujet, { moderation = '', administre = false } = {}) {
     const proche = zone.scrollHeight - zone.scrollTop - zone.clientHeight < 80;
     zone.innerHTML = '';
     if (!messages.length) {
@@ -1728,6 +1734,21 @@
         element('span', { classe: 'qui', texte: message.qui || 'Quelqu\'un' }),
         element('span', { classe: 'texte', texte: message.texte }),
         element('span', { classe: 'quand', texte: quand(message.cree_le) }));
+      // MODÉRATION : l'auteur peut retirer son message ; un administrateur peut retirer
+      // n'importe lequel (« posts non adaptés »).
+      if (moderation && (administre || message.qui === monNom())) {
+        const retirer = element('button', { classe: 'retirer-message', texte: 'Retirer' });
+        retirer.title = administre && message.qui !== monNom()
+          ? 'Retirer ce message (modération)' : 'Retirer mon message';
+        retirer.addEventListener('click', async () => {
+          if (!confirm('Retirer ce message de la discussion ?')) return;
+          try {
+            await appel(moderation + '/' + message.id, { methode: 'DELETE' });
+            toast('Message retiré.');
+          } catch (erreur) { toast(erreur.message); }
+        });
+        ligne.append(retirer);
+      }
       zone.append(ligne);
     });
     if (proche) zone.scrollTop = zone.scrollHeight;
@@ -1736,7 +1757,9 @@
   async function chargerChatGeneral() {
     try {
       const donnees = await appel('/api/projets/' + projet.id + '/messages');
-      afficherFil($('#chat-general'), donnees.messages || []);
+      afficherFil($('#chat-general'), donnees.messages || [], '',
+        { moderation: '/api/projets/' + projet.id + '/messages',
+          administre: roleProjet === 'admin' });
     } catch (erreur) { /* sans conséquence */ }
   }
 
@@ -1744,7 +1767,9 @@
     if (!theme) return;
     try {
       const donnees = await appel('/api/themes/' + theme.id + '/messages');
-      afficherFil($('#fil-theme'), donnees.messages || []);
+      afficherFil($('#fil-theme'), donnees.messages || [], '',
+        { moderation: '/api/themes/' + theme.id + '/messages',
+          administre: estAdministrateurTheme() });
     } catch (erreur) { /* sans conséquence */ }
   }
 

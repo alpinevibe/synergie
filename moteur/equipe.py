@@ -263,11 +263,19 @@ def envoyer_message(theme: str, qui: str, texte: str) -> dict:
     return message
 
 
-def supprimer_message(theme: str, message_id: str) -> None:
+def supprimer_message(theme: str, message_id: str, qui: str = "") -> bool:
+    """Retire un message du fil (modération). Le journal garde la trace du retrait."""
     with connexion() as base:
+        ligne = base.execute("select qui from messages where id = ? and theme = ?",
+                             (message_id, theme or "")).fetchone()
+        if not ligne:
+            return False
         base.execute("delete from messages where id = ? and theme = ?",
                      (message_id, theme or ""))
     diffuser(theme or "", {"type": "message_supprime", "id": message_id})
+    journaliser(theme or "", qui or "Anonyme", "message_supprime", message_id,
+                f"message de {ligne['qui'] or 'quelqu\'un'}")
+    return True
 
 
 # ====================================================================================
