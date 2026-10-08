@@ -406,6 +406,29 @@ def _ecrire_config_msmtp(config: dict) -> str:
     return CONFIG_MSMTP
 
 
+def _message(destinataire: str, sujet: str, corps: str, expediteur: str) -> str:
+    """Un courriel complet : expéditeur lisible, Date, Message-ID, sujet encodé, texte UTF-8.
+
+    Sans ces en-têtes, les filtres anti-spam se méfient — le message part sans erreur mais
+    n'arrive pas (constat du 08/10/2026 : les envois d'OVH étaient acceptés, rien dans les
+    boîtes).
+    """
+    from email.message import EmailMessage
+    from email.utils import formataddr, formatdate, make_msgid
+
+    domaine = expediteur.split("@")[-1] if "@" in expediteur else "alpinevibe.fr"
+    message = EmailMessage()
+    message["From"] = formataddr(("Synergie", expediteur))
+    message["To"] = destinataire
+    message["Subject"] = sujet
+    message["Date"] = formatdate(localtime=True)
+    message["Message-ID"] = make_msgid(domain=domaine)
+    message["Reply-To"] = expediteur
+    message["X-Mailer"] = "Synergie"
+    message.set_content(corps, charset="utf-8")
+    return message.as_string()
+
+
 def _envoyer(destinataire: str, sujet: str, corps: str) -> bool:
     config = _config_mail()
     if not config or not config.get("SMTP_HOTE"):
@@ -413,8 +436,8 @@ def _envoyer(destinataire: str, sujet: str, corps: str) -> bool:
         return False
     try:
         fichier = _ecrire_config_msmtp(config)
-        message = (f"To: {destinataire}\nFrom: {config.get('EXPEDITEUR', 'contact@alpinevibe.fr')}\n"
-                   f"Subject: {sujet}\nContent-Type: text/plain; charset=utf-8\n\n{corps}\n")
+        message = _message(destinataire, sujet, corps,
+                           config.get("EXPEDITEUR", "contact@alpinevibe.fr"))
         resultat = subprocess.run(["msmtp", "--file", fichier, destinataire],
                                   input=message.encode("utf-8"), capture_output=True,
                                   timeout=30)
