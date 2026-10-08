@@ -961,7 +961,8 @@
   // consulte, chacun reçoit un lien personnel, et les réponses restent anonymes.
 
   let consultations = [];
-  let consultationOuverte = null;       // celle qu'on est en train de créer
+  let consultationOuverte = null;       // celle qu'on modifie (sinon, on crée)
+  let typeConsultation = 'sondage';     // « vote » ou « sondage » en cours de création
   let typesQuestion = [];
 
   async function chargerConsultations() {
@@ -1095,6 +1096,7 @@
   function ouvrirFenetreConsultation(consultation = null, typeParDefaut = 'sondage') {
     consultationOuverte = consultation;
     const type = consultation ? consultation.type : typeParDefaut;
+    typeConsultation = type;
     $('#titre-consultation').textContent = consultation
       ? 'Modifier ' + (type === 'vote' ? 'le vote' : 'le sondage')
       : (type === 'vote' ? 'Nouveau vote' : 'Nouveau sondage');
@@ -1107,7 +1109,7 @@
     $('#consultation-erreur').textContent = '';
     $('#btn-ajouter-question').classList.toggle('cache', type === 'vote');
     $('#btn-consultation-ouvrir').textContent = consultation
-      ? 'Enregistrer' : 'Enregistrer et envoyer les liens';
+      ? 'Enregistrer et envoyer les liens' : 'Enregistrer et envoyer les liens';
     $('#vue-consultation').classList.remove('cache');
     setTimeout(() => $('#consultation-intitule').focus(), 200);
   }
@@ -1183,7 +1185,7 @@
     const erreur = $('#consultation-erreur');
     erreur.textContent = '';
     const corps = {
-      type: consultationOuverte ? consultationOuverte.type : 'sondage',
+      type: consultationOuverte ? consultationOuverte.type : typeConsultation,
       intitule: $('#consultation-intitule').value.trim(),
       detail: $('#consultation-detail').value.trim(),
       questions: lireQuestions(),
@@ -2188,7 +2190,7 @@
     $('#btn-nouveau-sondage').addEventListener('click', () =>
       ouvrirFenetreConsultation(null, 'sondage'));
     $('#btn-ajouter-question').addEventListener('click', () => {
-      const type = consultationOuverte ? consultationOuverte.type : 'sondage';
+      const type = consultationOuverte ? consultationOuverte.type : typeConsultation;
       $('#consultation-questions').append(construireQuestion({}, type,
         $('#consultation-questions').children.length));
     });
