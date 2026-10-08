@@ -171,6 +171,11 @@
     let attentes = [];
     try { attentes = (await appel('/api/projets/' + projet.id + '/attente')).attentes || []; }
     catch (erreur) { return; }
+    const pastille = $('#pastille-votes');
+    if (pastille) {
+      pastille.textContent = attentes.length;
+      pastille.classList.toggle('cache', !attentes.length);
+    }
     if (!attentes.length) return;
     const titre = element('p', { classe: 'alerte-titre', texte:
       attentes.length === 1 ? 'Une consultation vous attend'
@@ -322,13 +327,86 @@
     history.replaceState(null, '', location.pathname);
   }
 
+  // ================================================================ VERSION TÉLÉPHONE
+  // Sur un téléphone, l'application change de navigation : une barre en bas, un écran
+  // par chose à faire, et le tableau blanc sous forme de liste de notes.
+  const mediaEtroit = window.matchMedia('(max-width: 900px)');
+  let sectionMobile = 'projet';
+
+  function estMobile() {
+    return mediaEtroit.matches || /Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent);
+  }
+
+  /** Première mise en place : on choisit la version adaptée à l'appareil. */
+  function afficherMode() { appliquerMode(); }
+
+  function appliquerMode() {
+    const mobile = estMobile();
+    document.body.dataset.vue = mobile ? 'mobile' : 'bureau';
+    const barre = $('#nav-mobile');
+    if (barre) barre.classList.toggle('cache', !mobile);
+    if (mobile) afficherSectionMobile(sectionMobile);
+    if (theme) dessinerNotes();
+  }
+
+  function afficherSectionMobile(cle) {
+    sectionMobile = cle || 'projet';
+    document.body.dataset.section = sectionMobile;
+    document.querySelectorAll('#nav-mobile button').forEach((bouton) =>
+      bouton.classList.toggle('actif', bouton.dataset.section === sectionMobile));
+    if (sectionMobile === 'votes') chargerConsultationsProjet();
+    if (sectionMobile === 'compte') ouvrirMonCompte();
+  }
+
+  /** Le volet « Votes » du téléphone : tout ce qui est ouvert dans le projet. */
+  async function chargerConsultationsProjet() {
+    const zone = $('#consultations-projet');
+    if (!zone || !projet) return;
+    zone.innerHTML = '';
+    let liste = [];
+    try { liste = (await appel('/api/projets/' + projet.id + '/consultations')).consultations || []; }
+    catch (erreur) { return; }
+    if (!liste.length) {
+      zone.append(element('p', { classe: 'vide',
+        texte: 'Aucun vote ni sondage ouvert pour le moment.' }));
+      return;
+    }
+    liste.forEach((consultation) => {
+      const carte = element('div', { classe: 'carte consultation ' + consultation.statut });
+      poser(carte,
+        element('h4', { texte: (consultation.type === 'vote' ? '🗳 ' : '📊 ')
+          + consultation.intitule }),
+        consultation.detail ? element('p', { classe: 'aide', texte: consultation.detail }) : null,
+        element('p', { classe: 'meta', texte: consultation.groupe + ' · ' + consultation.libelle_type
+          + ' · ' + (consultation.statut === 'ouverte' ? 'ouvert' : consultation.statut) }));
+      if (consultation.je_suis_consulte) {
+        if (consultation.moi_repondu) {
+          carte.append(element('p', { classe: 'meta deja-vote',
+            texte: '✓ Vous avez répondu (merci !).' }));
+        } else {
+          const bouton = element('button', { classe: 'principal petit', texte: 'Répondre' });
+          bouton.addEventListener('click', () => repondreDansApplication(consultation.id));
+          carte.append(bouton);
+        }
+      } else {
+        carte.append(element('p', { classe: 'aide fin',
+          texte: 'Vous n\'êtes pas consulté(e) pour celle-ci.' }));
+      }
+      zone.append(carte);
+    });
+  }
+
   /** Bascule entre les trois vues : mes projets, un projet, un groupe. */
   function afficherVue(nom) {
     ['projets', 'projet', 'theme'].forEach((cle) => {
       $('#vue-' + cle).classList.toggle('cache', cle !== nom);
     });
     const barre = document.querySelector('header');
-    if (barre) barre.classList.toggle('cache', nom === 'projets');
+    if (barre) barre.classList.toggle('cache', nom === 'projets' && !estMobile());
+    // Sur téléphone, la barre du bas ne sert que dans le projet (dans un groupe, on
+    // revient par le bouton « ← Le projet »).
+    const nav = $('#nav-mobile');
+    if (nav) nav.classList.toggle('cache', !estMobile() || nom !== 'projet');
   }
 
   async function enregistrerTheme() {
@@ -746,7 +824,111 @@
 
   function textoVide(noeud) { return !(noeud.textContent || '').trim(); }
 
+  /** La liste des notes : sur téléphone, c'est ainsi qu'on lit et qu'on écrit. */
+  function carteNoteMobile(note) {
+    const carte = element('div', { classe: 'carte-note' + (selection === note.id ? ' choisie' : '') });
+    carte.style.background = note.couleur_fond || '#fff8d6';
+    carte.style.color = note.couleur_texte || '#1e2a3a';
+    carte.style.borderLeft = '5px solid ' + (note.couleur_texte || '#1e2a3a');
+    carte.dataset.id = note.id;
+
+    const texte = element('div', { classe: 'note-texte-mobile', texte: note.texte || '' });
+    texte.setAttribute('role', 'textbox');
+    texte.setAttribute('aria-label', 'Note');
+    let avantEdition = note.texte || '';
+    // Sur téléphone, on écrit en appuyant sur la note : le curseur se place à la fin.
+    texte.addEventListener('click', () => {
+      if (texte.contentEditable === 'true') return;
+      avantEdition = texte.textContent || '';
+      texte.contentEditable = 'true';
+      texte.focus();
+      const plage = document.createRange();
+      plage.selectNodeContents(texte);
+      plage.collapse(false);
+      const choix = window.getSelection();
+      choix.removeAllRanges();
+      choix.addRange(plage);
+      selectionner(note.id);
+    });
+    texte.addEventListener('blur', async () => {
+      texte.contentEditable = 'false';
+      const courante = notes.find((n) => n.id === note.id);
+      if (courante) courante.texte = texte.textContent;
+      if (avantEdition !== texte.textContent) {
+        await sauver(note.id, { texte: texte.textContent });
+        noterAnnulation('texte de la note', async () => {
+          texte.textContent = avantEdition;
+          const cible = notes.find((n) => n.id === note.id);
+          if (cible) cible.texte = avantEdition;
+          await sauver(note.id, { texte: avantEdition });
+        });
+      }
+    });
+    carte.append(texte);
+
+    const meta = element('div', { classe: 'note-meta-mobile' });
+    poser(meta,
+      element('span', { texte: (note.auteur || 'quelqu\'un') + ' · ' + quand(note.maj_le) }),
+      element('span', { classe: 'etiquette-role', texte: note.texte ? ''
+        : 'note vide — appuyez pour écrire' }));
+    carte.append(meta);
+
+    const actions = element('div', { classe: 'actions-note' });
+    const couleur = element('button', { classe: 'discret petit', texte: 'Couleur',
+      attrs: { title: 'Changer la couleur du post-it' } });
+    couleur.addEventListener('click', () => {
+      const suite = ORDRE_FONDS[(ORDRE_FONDS.indexOf(note.couleur_fond) + 1) % ORDRE_FONDS.length];
+      changerCouleur(note, 'couleur_fond', suite).then(() => afficherNotesMobile());
+    });
+    const haut = element('button', { classe: 'discret petit', texte: '↑',
+      attrs: { title: 'Monter la note' } });
+    haut.addEventListener('click', () => deplacerDansListe(note, -1));
+    const bas = element('button', { classe: 'discret petit', texte: '↓',
+      attrs: { title: 'Descendre la note' } });
+    bas.addEventListener('click', () => deplacerDansListe(note, 1));
+    const retirer = element('button', { classe: 'discret danger petit', texte: 'Supprimer' });
+    retirer.addEventListener('click', async () => {
+      if (!confirm('Supprimer cette note ?')) return;
+      await supprimerNote(note);
+      afficherNotesMobile();
+      toast('Note supprimée.');
+    });
+    poser(actions, couleur, haut, bas, retirer);
+    carte.append(actions);
+    return carte;
+  }
+
+  /** Ranger une note dans la liste : on échange sa place avec sa voisine. */
+  async function deplacerDansListe(note, sens) {
+    const ordonnees = [...notes].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+    const rang = ordonnees.findIndex((n) => n.id === note.id);
+    const voisine = ordonnees[rang + sens];
+    if (!voisine) return;
+    const y = note.y;
+    note.y = voisine.y;
+    voisine.y = y;
+    await sauver(note.id, { y: note.y });
+    await sauver(voisine.id, { y: voisine.y });
+    afficherNotesMobile();
+  }
+
+  function afficherNotesMobile() {
+    const zone = $('#notes-liste');
+    if (!zone || !estMobile()) return;
+    zone.innerHTML = '';
+    const ordonnees = [...notes].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+    if (!ordonnees.length) {
+      zone.append(element('p', { classe: 'vide',
+        texte: 'Aucune note pour le moment : appuyez sur « + Note ».' }));
+      return;
+    }
+    ordonnees.forEach((note) => zone.append(carteNoteMobile(note)));
+    const bouton = $('#btn-voir-tableau');
+    if (bouton) bouton.classList.remove('cache');
+  }
+
   function dessinerNotes() {
+    afficherNotesMobile();
     $('#monde').innerHTML = '';
     notes.forEach((note) => poserNote(note));
     appliquerVue();
@@ -817,6 +999,7 @@
       }, champs) });
     notes.push(note);
     poserNote(note);
+    afficherNotesMobile();
     selectionner(note.id);
     noterAnnulation('création de la note', async () => { await supprimerNote(note, { annulable: false }); });
     const crayon = document.querySelector(`.note[data-id="${note.id}"] .crayon`);
@@ -2176,6 +2359,21 @@
 
   // ================================================================ BRANCHEMENTS
   function brancher() {
+    brancherInstallation();
+    // --- la barre de navigation du téléphone
+    document.querySelectorAll('#nav-mobile button').forEach((bouton) => {
+      bouton.addEventListener('click', () => {
+        afficherSectionMobile(bouton.dataset.section);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
+    mediaEtroit.addEventListener('change', appliquerMode);
+    $('#btn-voir-tableau').addEventListener('click', () => {
+      const tableau = document.body.dataset.tableau === 'oui';
+      document.body.dataset.tableau = tableau ? 'non' : 'oui';
+      $('#btn-voir-tableau').textContent = tableau ? 'Voir le tableau' : 'Revenir à la liste';
+      if (!tableau) appliquerVue();
+    });
     // Au clavier : Échap ferme la fenêtre ouverte et rend le focus au bouton qui l'a ouverte.
     document.addEventListener('keydown', (evenement) => {
       if (evenement.key !== 'Escape') return;
@@ -2208,6 +2406,8 @@
       bouton.addEventListener('click', () => voter(bouton.dataset.vote));
     });
     $('#btn-cadre').addEventListener('click', ouvrirCadre);
+    $('#btn-cadre-mobile').addEventListener('click', ouvrirCadre);
+    $('#btn-membres-mobile').addEventListener('click', ouvrirMembresProjet);
     $('#cadre-fermer').addEventListener('click', () => $('#vue-cadre').classList.add('cache'));
     $('#cadre-modifier').addEventListener('click', () => afficherCadre({ enEdition: true }));
     $('#cadre-annuler').addEventListener('click', () => afficherCadre());
@@ -2460,6 +2660,7 @@
 
   async function demarrer() {
     brancher();
+    afficherMode();
     afficherVue('projets');
     roles = [{ cle: 'admin', libelle: 'Administrateur' },
              { cle: 'membre', libelle: 'Membre participant' },
@@ -2473,6 +2674,43 @@
     if (!compte || !compte.prenom) { demanderPrenom(); return; }
     await signalerLePoste();
     await entrerDansLAtelier();
+  }
+
+  // ---------------------------------------------------------------- INSTALLATION (PWA)
+  // Synergie s'installe comme une application, sur ordinateur comme sur téléphone : le
+  // navigateur prévient quand c'est possible, et on propose alors le bouton « Installer ».
+  let invitationInstallation = null;
+
+  window.addEventListener('beforeinstallprompt', (evenement) => {
+    evenement.preventDefault();
+    invitationInstallation = evenement;
+    const bouton = $('#btn-installer');
+    if (bouton) bouton.classList.remove('cache');
+  });
+
+  async function installerApplication() {
+    if (!invitationInstallation) {
+      toast('Utilisez le menu de votre navigateur : « Installer l\'application ».');
+      return;
+    }
+    invitationInstallation.prompt();
+    const choix = await invitationInstallation.userChoice;
+    invitationInstallation = null;
+    $('#btn-installer').classList.add('cache');
+    toast(choix && choix.outcome === 'accepted' ? 'Synergie est installée !'
+                                                : 'Installation annulée.');
+  }
+
+  function brancherInstallation() {
+    const bouton = $('#btn-installer');
+    if (bouton) bouton.addEventListener('click', installerApplication);
+  }
+
+  // Le service worker rend l'application installable et utilisable hors connexion.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
   }
 
   document.addEventListener('DOMContentLoaded', demarrer);

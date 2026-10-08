@@ -1,5 +1,38 @@
 # Synergie — état du projet
 
+## 8 octobre 2026 (nuit) — plus tendance, et une vraie version téléphone
+
+1. **Les couleurs de fond ont été retravaillées** : la page n'est plus d'un blanc/bleu uni
+   mais d'un **fond à dégradés doux** (trois halos — bleu, vert d'eau, violet — posés sur un
+   dégradé diagonal clair). Les cartes, l'entête, les tuiles de groupe et les boutons
+   principaux suivent la même famille (dégradés d'accent bleu-violet-vert d'eau), avec un
+   léger **effet de verre** (les cartes laissent transparaître le fond). Rien d'excessif : les
+   textes gardent un contraste franc (AA), et l'ensemble reste calme.
+
+2. **Une version téléphone pensée pour le pouce** — pas l'interface d'ordinateur réduite :
+   - une **barre de navigation en bas** de l'écran (Projet · Groupes · Discussion · Votes ·
+     Compte), cibles d'au moins 58 px ;
+   - **un écran = une chose** : les blocs de la page se répartissent par onglet, on ne fait
+     plus défiler une longue page ;
+   - le **tableau blanc devient une liste de notes** : une note par carte, on écrit
+     directement dedans, on change la couleur, on range, on supprime ; un bouton « Voir le
+     tableau » rend le plateau vrai (68 vh) pour qui le veut ;
+   - champs à `16px` (plus de zoom involontaire), onglets qui défilent latéralement, entête
+     compacte qui ne déborde jamais (un entête trop large force le navigateur à dézoomer) ;
+   - les outils de zoom/recentrage restent, mais seulement en mode tableau.
+
+   Le mode s'active **tout seul** dès qu'un téléphone est détecté ; la vue d'ordinateur est
+   inchangée.
+
+3. **Application installable** (PWA) sur ordinateur **et** téléphone : `manifest.webmanifest`,
+   quatre icônes (192, 512, maskable 512, 180 pour iOS), un service worker qui met en cache
+   les fichiers de l'application — **jamais** `/api/` ni les flux — et un bouton **Installer**
+   dans l'entête (Chrome/Edge). Sur téléphone : « Ajouter à l'écran d'accueil ».
+
+   Vérifié au navigateur : bureau 5/5, téléphone (iPhone émulé 390×844) barre du bas, 4
+   tuiles, **17 notes en liste**, écriture au doigt, section Votes — **aucune erreur JS**,
+   aucun débordement horizontal. 83 tests moteur verts.
+
 ## 8 octobre 2026 — modération des discussions
 
 - **Retirer un message non adapté** : dans les discussions (projet et groupes), l'**auteur**

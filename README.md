@@ -103,6 +103,7 @@ ou pour n'y laisser qu'un droit de lecture.
 | **Administrateur du projet** | tout : membres, invitations, groupes, cadre de travail, rôles |
 | **Membre du projet** | écrire dans la discussion du projet, participer aux groupes, lire — **sauf le journal des groupes** |
 | **Visiteur du projet** | voir la discussion et les groupes, **sans rien modifier** ni voir le journal |
+| **Rôle dans un groupe** | l'emporte sur le rôle du projet : administrateur, membre participant ou visiteur |
 
 Un **vote** est ouvert par un administrateur du groupe ; les **résultats** sont visibles par
 tous **une fois la consultation close** (et à tout moment par les administrateurs).
@@ -115,10 +116,29 @@ et répond d'un clic, sans courriel. Les **liens personnels** restent disponible
 > `/srv/bases/config/mail.conf`), le temps que les messageries professionnelles acceptent
 > les messages de `contact@alpinevibe.fr` : tout passe par des **liens à copier**. Pour
 > rouvrir les envois : mettre `SYNERGIE_ENVOI=oui` puis redémarrer le service.
-| **Rôle dans un groupe** | l'emporte sur le rôle du projet : administrateur, membre participant ou visiteur |
-
 **Seul un administrateur du projet crée des groupes** (et seul un administrateur du groupe
 ouvre un vote).
+
+### 6. Sur téléphone, et l'installation sur l'appareil (08/10/2026)
+
+Synergie existe en **deux dispositions**, pas une seule rétrécie :
+
+| | Ordinateur | Téléphone |
+|---|---|---|
+| Navigation | tout sur une page (tableau, groupes, discussion côte à côte) | **barre en bas**, à portée de pouce : Projet · Groupes · Discussion · Votes · Compte |
+| Écran | plusieurs blocs visibles | **un écran = une chose** (les blocs se répartissent par onglet) |
+| Tableau blanc | plateau à déplacer à la souris | **liste de notes** : on écrit au doigt, on change la couleur, on range, on supprime |
+
+Le passage se fait **tout seul** dès qu'un téléphone est détecté (`data-vue="mobile"` sur
+`body`, écoute de la largeur d'écran). On n'y perd rien : les votes et l'alerte d'accueil
+sont sur l'onglet **Votes**, les documents sur **Projet**, le chat sur **Discussion**.
+
+**Installer l'application** : Synergie se comporte comme une application (PWA —
+`web/manifest.webmanifest` et `web/sw.js`). Sur téléphone, « Ajouter à l'écran d'accueil »
+depuis le menu du navigateur ; sur ordinateur, le bouton **Installer** apparaît dans
+l'entête (Chrome/Edge) et installe Synergie comme une fenêtre à part. En mode installé,
+l'application **fonctionne même sans réseau** pour tout ce qui est déjà chargé (le service
+worker ne met en cache que les fichiers de l'application, **jamais** `/api/` ni les flux).
 
 ---
 

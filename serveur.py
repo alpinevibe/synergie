@@ -745,6 +745,22 @@ def api_ouvrir_consultation(identifiant):
                     "consultation": m_consultations.lire_consultation(identifiant)}), 201
 
 
+@app.route("/api/projets/<identifiant>/consultations")
+def api_consultations_projet(identifiant):
+    """Tous les votes et sondages des groupes du projet (pour l'écran « Votes »)."""
+    _projet(identifiant)
+    compte = _compte(requis=True)
+    liste = []
+    for theme in m_atelier.lister_themes(projet=identifiant):
+        for consultation in m_consultations.lister_consultations(theme["id"]):
+            consultation["groupe"] = theme["titre"]
+            bulletin = m_consultations.bulletin_de(consultation["id"], compte["id"])
+            consultation["moi_repondu"] = bool(bulletin and bulletin["repondu_le"])
+            consultation["je_suis_consulte"] = bool(bulletin)
+            liste.append(consultation)
+    return jsonify({"consultations": liste})
+
+
 @app.route("/api/projets/<identifiant>/attente")
 def api_attente_projet(identifiant):
     """Ce qui ATTEND la personne à l'ouverture du projet : votes et sondages sans réponse."""

@@ -1,16 +1,35 @@
 /* SYNERGIE — atelier collaboratif (thèmes, tableau blanc, documents, décisions). */
 
+/* ============================================================================
+   v3 — 08/10/2026 : une palette plus actuelle (dégradés doux, cartes en verre),
+   sans sacrifier la lisibilité : les textes restent très contrastés.
+   ========================================================================== */
 :root {
-  --fond: #f4f6fb;
-  --carte: #ffffff;
-  --encre: #1e2a3a;
-  --doux: #5b6b81;
-  --accent: #4a6cf7;
-  --accent-2: #17a673;
-  --bord: #e2e7f0;
-  --ombre: 0 2px 10px rgba(30, 42, 58, .07);
-  --rayon: 14px;
-  --danger: #c0392b;
+  --encre: #16233a;                 /* texte principal, quasi noir bleuté */
+  --doux: #4b5a70;                  /* texte secondaire (contraste AA) */
+  --accent: #4a6cf7;                /* bleu : actions principales */
+  --accent-clair: #7c93ff;
+  --accent-2: #12a189;              /* vert d'eau : réussite, présence */
+  --accent-3: #7a5cf0;              /* violet : votes et sondages */
+  --danger: #cf3b2f;
+
+  --fond: #eef2fb;
+  --degrade-fond:
+    radial-gradient(1200px 620px at 8% -12%, #e6ebff 0%, rgba(230, 235, 255, 0) 62%),
+    radial-gradient(1000px 560px at 102% 4%, #e2f7f0 0%, rgba(226, 247, 240, 0) 58%),
+    radial-gradient(900px 700px at 50% 110%, #f3ecff 0%, rgba(243, 236, 255, 0) 60%),
+    linear-gradient(165deg, #f8faff 0%, #eef3fb 45%, #ecf7f4 100%);
+
+  --carte: rgba(255, 255, 255, .88);
+  --carte-pleine: #ffffff;
+  --bord: rgba(22, 35, 58, .11);
+  --bord-clair: rgba(22, 35, 58, .07);
+  --ombre: 0 12px 32px rgba(22, 35, 58, .09);
+  --ombre-douce: 0 3px 10px rgba(22, 35, 58, .06);
+  --rayon: 16px;
+  --rayon-petit: 11px;
+  --degrade-accent: linear-gradient(120deg, #4a6cf7 0%, #6b5cf5 55%, #12a189 130%);
+  --degrade-entete: linear-gradient(115deg, #1b2550 0%, #3a56c9 48%, #12907d 128%);
 }
 
 * { box-sizing: border-box; }
@@ -18,8 +37,9 @@ html, body { height: 100%; }
 body {
   margin: 0;
   font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  background: var(--fond);
+  background: var(--degrade-fond) fixed, var(--fond);
   color: var(--encre);
+  -webkit-font-smoothing: antialiased;
 }
 .cache { display: none !important; }
 
@@ -27,8 +47,9 @@ body {
 header {
   display: flex; align-items: center; gap: 16px;
   padding: 14px 24px;
-  background: linear-gradient(120deg, #2b3a67 0%, #4a6cf7 55%, #17a673 130%);
+  background: var(--degrade-entete);
   color: #fff;
+  box-shadow: 0 6px 24px rgba(27, 37, 80, .22);
 }
 header .logo {
   font-size: 26px; width: 44px; height: 44px; display: grid; place-items: center;
@@ -606,3 +627,176 @@ button.retirer-message {
   align-self: flex-start;
 }
 button.retirer-message:hover { color: var(--danger); background: #fdeceb; }
+
+/* ---- v3 : cartes en verre, boutons et tuiles en dégradé ---------------- */
+.carte, .entete-projet, .entete-theme, .alerte-attente {
+  background: var(--carte);
+  border: 1px solid var(--bord-clair);
+  box-shadow: var(--ombre-douce);
+  backdrop-filter: blur(10px) saturate(150%);
+  -webkit-backdrop-filter: blur(10px) saturate(150%);
+}
+.carte:hover { box-shadow: var(--ombre); }
+button.principal {
+  background: var(--degrade-accent);
+  border: none;
+  box-shadow: 0 6px 16px rgba(74, 108, 247, .28);
+}
+button.principal:hover { filter: brightness(1.06); }
+button.principal:active { transform: translateY(1px); }
+button.carte-theme {
+  background: linear-gradient(150deg, rgba(255, 255, 255, .96) 0%,
+    rgba(246, 249, 255, .92) 100%);
+  border: 1px solid var(--bord-clair);
+  border-left: 5px solid var(--teinte, var(--accent));
+  box-shadow: var(--ombre-douce);
+  backdrop-filter: blur(8px) saturate(140%);
+}
+button.carte-theme:hover {
+  box-shadow: 0 14px 34px rgba(22, 35, 58, .13);
+  border-left-color: var(--accent);
+}
+.onglets button.actif {
+  background: var(--degrade-accent); border-color: transparent; color: #fff;
+  box-shadow: 0 6px 16px rgba(74, 108, 247, .25);
+}
+.etiquette-role { background: linear-gradient(120deg, #eef2ff, #e8f7f2); }
+.alerte-attente {
+  background: linear-gradient(120deg, #fffbeb 0%, #fff7dc 100%);
+  border-left: 6px solid #e8b93a;
+}
+.consultation.ouverte { background: linear-gradient(120deg, #f7faff, #eef7ff); }
+.resultat-remplie { background: var(--degrade-accent); }
+
+/* ============================================================================
+   v3 — VERSION TÉLÉPHONE (consigne du 08/10/2026).
+
+   Ce n'est pas l'interface d'ordinateur rétrécie : la navigation change.
+     • une barre en BAS, à portée de pouce (Projet · Groupes · Discussion ·
+       Votes · Compte) ;
+     • un écran = une chose ; les blocs de la page sont répartis par onglet ;
+     • le tableau blanc devient une LISTE DE NOTES : on écrit, on change la
+       couleur, on range, on supprime — sans avoir à viser une note du doigt ;
+     • tout est large et haut : au moins 44 px pour chaque bouton.
+   ========================================================================== */
+body[data-vue="mobile"] { --rayon: 14px; }
+body[data-vue="mobile"] header {
+  position: sticky; top: 0; z-index: 20; padding: 10px 12px; gap: 8px; flex-wrap: nowrap;
+}
+body[data-vue="mobile"] header .marque h1 { font-size: 17px; }
+body[data-vue="mobile"] .choix-projet select { max-width: 40vw; font-size: 13px; padding: 6px 8px; }
+body[data-vue="mobile"] .entete-actions button { font-size: 12.5px; padding: 8px 10px; }
+body[data-vue="mobile"] main { padding: 12px 12px 88px; }
+
+/* ---- la barre du bas ---- */
+#nav-mobile {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  display: flex; align-items: stretch;
+  background: rgba(255, 255, 255, .94);
+  backdrop-filter: blur(14px) saturate(150%);
+  border-top: 1px solid var(--bord);
+  box-shadow: 0 -6px 20px rgba(22, 35, 58, .10);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+#nav-mobile button {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; padding: 9px 4px 7px; min-height: 58px;
+  background: none; border: none; border-radius: 0;
+  font-size: 11.5px; color: var(--doux); cursor: pointer; position: relative;
+}
+#nav-mobile button span[aria-hidden] { font-size: 20px; line-height: 1; }
+#nav-mobile button.actif { color: var(--accent); font-weight: 700; }
+#nav-mobile button.actif::before {
+  content: ''; position: absolute; top: 0; left: 18%; right: 18%; height: 3px;
+  border-radius: 0 0 4px 4px; background: var(--degrade-accent);
+}
+.pastille-nombre {
+  position: absolute; top: 6px; right: 50%; transform: translateX(16px);
+  background: var(--danger); color: #fff; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; padding: 1px 6px; min-width: 18px; text-align: center;
+}
+
+/* ---- un écran = une chose ---- */
+body[data-vue="mobile"][data-section="projet"] [data-mobile]:not([data-mobile="projet"]),
+body[data-vue="mobile"][data-section="groupes"] [data-mobile]:not([data-mobile="groupes"]),
+body[data-vue="mobile"][data-section="discussion"] [data-mobile]:not([data-mobile="discussion"]) { display: none !important; }
+.mobile-seule { display: none; }
+body[data-vue="mobile"][data-section="votes"] .projet-grille,
+body[data-vue="mobile"][data-section="votes"] #attente { display: none; }
+body[data-vue="mobile"][data-section="votes"] .mobile-seule[data-mobile="votes"] { display: block; }
+body[data-vue="mobile"] .projet-grille { display: block; }
+body[data-vue="mobile"] .projet-principal { gap: 12px; }
+body[data-vue="mobile"] .projet-chat {
+  position: static; min-height: calc(100vh - 210px); max-height: none;
+}
+body[data-vue="mobile"] .projet-chat .fil { max-height: none; min-height: 40vh; }
+body[data-vue="mobile"] .entete-projet { flex-wrap: wrap; gap: 8px; padding: 12px 14px; }
+body[data-vue="mobile"] button.carte-theme { min-height: 0; padding: 14px; }
+body[data-vue="mobile"] button.carte-theme .aide { -webkit-line-clamp: 2; }
+
+/* ---- la liste des notes (au lieu du tableau) ---- */
+.notes-liste { display: none; }
+body[data-vue="mobile"] .notes-liste {
+  display: flex; flex-direction: column; gap: 10px; margin-top: 10px;
+}
+body[data-vue="mobile"] #plateau { display: none; }
+body[data-vue="mobile"][data-tableau="oui"] #plateau { display: block; height: 68vh; }
+body[data-vue="mobile"][data-tableau="oui"] .notes-liste { display: none; }
+body[data-vue="mobile"] .barre-format { position: sticky; bottom: 66px; z-index: 15; }
+
+.carte-note { border-radius: var(--rayon-petit); padding: 12px 14px; box-shadow: var(--ombre-douce);
+  border: 1px solid var(--bord-clair); }
+.carte-note .note-texte-mobile { font-size: 16px; line-height: 1.45; white-space: pre-wrap;
+  word-break: break-word; min-height: 22px; outline: none; }
+.carte-note .note-meta-mobile { display: flex; align-items: center; gap: 8px; margin-top: 8px;
+  font-size: 12px; color: var(--doux); flex-wrap: wrap; }
+.carte-note .actions-note { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.carte-note .actions-note button { min-height: 40px; padding: 8px 12px; font-size: 13.5px; }
+.carte-note.choisie { outline: 3px solid var(--accent); outline-offset: 1px; }
+body[data-vue="mobile"] .onglets {
+  position: sticky; top: 56px; z-index: 18; background: var(--degrade-fond);
+  padding: 8px 0; margin: 0 0 10px;
+}
+body[data-vue="mobile"] .onglets button { min-height: 44px; padding: 10px 14px; font-size: 14px; }
+body[data-vue="mobile"] .plateau { height: 68vh; }
+body[data-vue="mobile"] .message { max-width: 100%; }
+body[data-vue="mobile"] .ligne-chat input { min-height: 44px; font-size: 16px; }
+body[data-vue="mobile"] .boite-nom { width: 92vw; padding: 20px 18px; max-height: 88vh; overflow: auto; }
+body[data-vue="mobile"] select, body[data-vue="mobile"] input, body[data-vue="mobile"] textarea {
+  font-size: 16px;   /* évite le zoom automatique des navigateurs mobiles */
+}
+
+/* Entête compacte sur téléphone : elle ne doit JAMAIS déborder (un entête trop large
+   force le navigateur mobile à dézoomer toute la page). */
+.actions-mobile { display: none; }
+body[data-vue="mobile"] .actions-mobile {
+  display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 12px;
+}
+body[data-vue="mobile"] #btn-membres { display: none; }
+body[data-vue="mobile"] header { gap: 8px; min-width: 0; }
+body[data-vue="mobile"] header .marque { min-width: 0; }
+body[data-vue="mobile"] header .marque h1 { display: none; }
+body[data-vue="mobile"] .choix-projet { min-width: 0; flex: 1 1 auto; }
+body[data-vue="mobile"] .choix-projet select { max-width: 100%; width: 100%; }
+body[data-vue="mobile"] .entete-actions { flex: 0 0 auto; margin-left: 0; }
+body[data-vue="mobile"] .entete-actions button { padding: 8px 10px; font-size: 12.5px; }
+
+/* Téléphone : on va à l'essentiel. La description du groupe est courte, les outils du
+   tableau (zoom, recentrage, rangement) disparaissent quand on lit la liste, et les
+   onglets défilent latéralement. */
+body[data-vue="mobile"] .entete-theme .aide {
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+body[data-vue="mobile"]:not([data-tableau="oui"]) #zoom-moins,
+body[data-vue="mobile"]:not([data-tableau="oui"]) #zoom-plus,
+body[data-vue="mobile"]:not([data-tableau="oui"]) #zoom-valeur,
+body[data-vue="mobile"]:not([data-tableau="oui"]) #btn-recentrer,
+body[data-vue="mobile"]:not([data-tableau="oui"]) #btn-organiser { display: none; }
+body[data-vue="mobile"] .onglets {
+  overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+body[data-vue="mobile"] .onglets::-webkit-scrollbar { display: none; }
+body[data-vue="mobile"] .barre-tableau { gap: 6px; }
+body[data-vue="mobile"] .entete-theme { gap: 8px; }
+body[data-vue="mobile"] .entete-theme button { min-height: 40px; }

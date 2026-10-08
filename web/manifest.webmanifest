@@ -1,0 +1,19 @@
+{
+  "name": "Synergie — travailler ensemble, décider ensemble",
+  "short_name": "Synergie",
+  "description": "Atelier collaboratif : groupes de travail, tableau blanc partagé, votes et sondages.",
+  "lang": "fr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#eef3fb",
+  "theme_color": "#1b2550",
+  "categories": ["productivity", "business"],
+  "icons": [
+    { "src": "/icone-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icone-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icone-maskable-512.png", "sizes": "512x512", "type": "image/png",
+      "purpose": "maskable" }
+  ]
+}

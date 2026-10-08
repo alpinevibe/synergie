@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Synergie — travailler ensemble, décider ensemble</title>
+<meta name="theme-color" content="#1b2550">
+<meta name="description" content="Synergie — atelier collaboratif : groupes de travail, tableau blanc partagé, votes et sondages.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icone-180.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%E2%9C%B7%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="synergie.css">
 </head>
@@ -24,6 +31,7 @@
 
   <div class="entete-actions">
     <button id="btn-membres" class="discret" title="Les personnes de ce projet">Membres</button>
+    <button id="btn-installer" class="discret cache" title="Installer Synergie sur cet appareil">Installer</button>
     <button id="btn-compte" class="discret" title="Mon compte et mes alertes">Mon compte</button>
   </div>
 </header>
@@ -196,16 +204,22 @@
   </div>
 
   <section id="attente" class="alerte-attente cache" aria-live="polite"
-    aria-label="Ce qui vous attend"></section>
+    aria-label="Ce qui vous attend" data-mobile="projet"></section>
+
+  <section class="mobile-seule" data-mobile="votes" aria-label="Votes et sondages du projet">
+    <h2>Votes et sondages</h2>
+    <p class="aide">Tout ce qui est ouvert dans les groupes de ce projet.</p>
+    <div id="consultations-projet"></div>
+  </section>
 
   <div class="projet-grille">
     <!-- Colonne principale : le travail du projet -->
     <div class="projet-principal">
-      <div class="entete-vue">
+      <div class="entete-vue" data-mobile="groupes">
         <h2>Groupes de travail</h2>
         <button id="btn-nouveau-theme" class="principal petit cache">+ Nouveau groupe</button>
       </div>
-      <div id="liste-themes" class="grille-themes"></div>
+      <div id="liste-themes" class="grille-themes" data-mobile="groupes"></div>
       <div id="nouveau-theme-bloc" class="carte cache">
         <input id="nouveau-theme-titre" class="champ-large" placeholder="Titre du groupe">
         <input id="nouveau-theme-description" class="champ-large" placeholder="En une phrase (facultatif)">
@@ -215,7 +229,12 @@
         </div>
       </div>
 
-      <details class="carte replie">
+      <div class="actions-mobile" data-mobile="projet">
+        <button id="btn-cadre-mobile" class="discret petit">Cadre de travail</button>
+        <button id="btn-membres-mobile" class="discret petit">Membres du projet</button>
+      </div>
+
+      <details class="carte replie" data-mobile="projet">
         <summary>Comptes rendus et documents</summary>
         <div class="ligne-depot">
           <label class="sr-only" for="cadre-fichier">Choisir des fichiers</label>
@@ -230,7 +249,8 @@
     </div>
 
     <!-- Colonne de droite : la discussion du projet, toujours visible -->
-    <aside class="carte projet-chat" aria-label="Discussion du projet">
+    <aside class="carte projet-chat" aria-label="Discussion du projet"
+      data-mobile="discussion">
       <h3>Discussion du projet</h3>
       <div id="chat-general" class="fil" aria-live="polite"></div>
       <form id="chat-general-form" class="ligne-chat">
@@ -261,6 +281,14 @@
     </div>
   </div>
 </div>
+
+<nav id="nav-mobile" class="cache" aria-label="Navigation principale">
+  <button data-section="projet" class="actif"><span aria-hidden="true">🏠</span>Projet</button>
+  <button data-section="groupes"><span aria-hidden="true">👥</span>Groupes</button>
+  <button data-section="discussion"><span aria-hidden="true">💬</span>Discussion</button>
+  <button data-section="votes"><span aria-hidden="true">🗳</span>Votes<span id="pastille-votes" class="pastille-nombre cache"></span></button>
+  <button data-section="compte"><span aria-hidden="true">👤</span>Compte</button>
+</nav>
 
 <!-- ======================= MEMBRES DU PROJET ======================= -->
 <div id="vue-membres" class="voile cache" role="dialog" aria-modal="true" aria-labelledby="titre-membres">
@@ -373,6 +401,9 @@
     <div id="plateau" class="plateau">
       <div id="monde" class="monde"></div>
     </div>
+    <!-- Téléphone : les notes se lisent et s'écrivent comme une liste de cartes -->
+    <div id="notes-liste" class="notes-liste"></div>
+    <button id="btn-voir-tableau" class="discret petit cache">Voir le tableau</button>
   </section>
 
   <!-- ---- la discussion du groupe ---- -->
