@@ -192,6 +192,15 @@ def _poser_membre(table: str, cle: str, valeur: str, compte: str, role: str | No
     with connexion() as base:
         ligne = base.execute(f"select * from {table} where {cle} = ? and compte = ?",
                              (valeur, compte)).fetchone()
+        # Un projet ne peut jamais perdre son dernier administrateur : la rétrogradation
+        # est refusée (sinon plus personne ne peut gérer les membres ni les groupes).
+        if (ligne and table == "projet_membres" and ligne["role"] == "admin"
+                and role is not None and role != "admin"):
+            autres = base.execute(
+                "select count(*) from projet_membres where projet = ? and role = 'admin'"
+                " and compte <> ?", (valeur, compte)).fetchone()[0]
+            if not autres:
+                raise ValueError("Un projet doit garder au moins un administrateur.")
         if ligne:
             # L'ordre des paramètres suit EXACTEMENT celui des « ? » de la requête : les
             # valeurs à poser d'abord, la clé et le compte ensuite (pour le WHERE).
@@ -233,7 +242,16 @@ def definir_membre_theme(theme: str, compte: str, role: str | None = None,
 
 
 def retirer_membre_projet(projet: str, compte: str) -> None:
+    """Retire un membre — mais JAMAIS le dernier administrateur du projet."""
     with connexion() as base:
+        ligne = base.execute("select role from projet_membres where projet = ? and compte = ?",
+                             (projet, compte)).fetchone()
+        if ligne and ligne["role"] == "admin":
+            autres = base.execute(
+                "select count(*) from projet_membres where projet = ? and role = 'admin'"
+                " and compte <> ?", (projet, compte)).fetchone()[0]
+            if not autres:
+                raise ValueError("Un projet doit garder au moins un administrateur.")
         base.execute("delete from projet_membres where projet = ? and compte = ?",
                      (projet, compte))
 

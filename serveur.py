@@ -212,17 +212,20 @@ def api_projet_membre(identifiant):
 @app.route("/api/projets/<identifiant>/membres/<membre>", methods=["PUT", "DELETE"])
 def api_projet_membre_un(identifiant, membre):
     _projet(identifiant, ecriture=True)
-    if request.method == "DELETE":
-        m_projets.retirer_membre_projet(identifiant, membre)
-        return jsonify({"ok": True})
-    corps = request.get_json(silent=True) or {}
-    role = corps.get("role")
-    if role is not None and role not in m_projets.ROLES:
-        return jsonify({"erreur": "Rôle inconnu."}), 400
-    notifier = corps.get("notifier")
-    return jsonify(m_projets.definir_membre_projet(
-        identifiant, membre, role, None if notifier is None else bool(notifier),
-        ajoute_par=_qui()))
+    try:
+        if request.method == "DELETE":
+            m_projets.retirer_membre_projet(identifiant, membre)
+            return jsonify({"ok": True})
+        corps = request.get_json(silent=True) or {}
+        role = corps.get("role")
+        if role is not None and role not in m_projets.ROLES:
+            return jsonify({"erreur": "Rôle inconnu."}), 400
+        notifier = corps.get("notifier")
+        return jsonify(m_projets.definir_membre_projet(
+            identifiant, membre, role, None if notifier is None else bool(notifier),
+            ajoute_par=_qui()))
+    except ValueError as erreur:                   # dernier administrateur : on refuse
+        return jsonify({"erreur": str(erreur)}), 400
 
 
 # ====================================================================================
