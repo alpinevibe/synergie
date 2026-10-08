@@ -510,3 +510,55 @@ button:disabled:hover { border-color: var(--bord); }
 /* Décisions : le vote en cours se distingue d'une décision simplement proposée. */
 .decision.en_vote { border-left-color: var(--accent); background: #f4f7ff; }
 .vote-question { font-size: 17px; font-weight: 700; margin: 10px 0 4px; }
+
+/* ============================================================================
+   VOTES ET SONDAGES — créer, répondre, dépouiller.
+   ========================================================================== */
+.liste-consultations { display: flex; flex-direction: column; gap: 12px; }
+.consultation { border-left: 5px solid #d9dfe9; }
+.consultation.brouillon { border-left-color: #e8b93a; background: #fffdf5; }
+.consultation.ouverte { border-left-color: var(--accent); background: #f6f9ff; }
+.consultation.close { border-left-color: var(--accent-2); }
+.consultation h4 { margin: 0 0 4px; font-size: 16px; }
+.questions-apercu { margin: 6px 0; padding-left: 18px; color: var(--doux); font-size: 13.5px; }
+.questions-apercu li { margin: 2px 0; }
+
+/* la fenêtre de création */
+.question-editeur { border: 1px solid var(--bord); border-radius: 12px; padding: 10px 12px;
+  margin: 10px 0; background: #fbfcfe; }
+.ligne-question { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.ligne-question select { min-height: 36px; border-radius: 9px; border: 1px solid var(--bord);
+  padding: 6px 8px; font: inherit; font-size: 13.5px; background: #fff; }
+.question-editeur input.champ-large { margin-bottom: 6px; }
+.options-question { width: 100%; border: 1px solid var(--bord); border-radius: 9px;
+  padding: 8px 10px; font: inherit; font-size: 14px; margin-top: 4px; resize: vertical; }
+.choix-consultes { border: 1px solid var(--bord); border-radius: 12px; padding: 10px 14px;
+  margin: 12px 0; }
+.choix-consultes legend { font-weight: 600; padding: 0 6px; }
+
+/* répondre */
+.vote-questions { display: flex; flex-direction: column; gap: 14px; margin: 10px 0;
+  max-height: 52vh; overflow: auto; }
+.question-reponse { border-top: 1px solid var(--bord); padding-top: 10px; }
+.question-reponse:first-child { border-top: none; padding-top: 0; }
+.question-reponse select { width: 100%; min-height: 40px; border-radius: 9px;
+  border: 1px solid var(--bord); padding: 8px 10px; font: inherit; margin-top: 6px; }
+.question-reponse input:not([type="checkbox"]) { width: 100%; border: 1px solid var(--bord);
+  border-radius: 9px; padding: 10px 12px; font: inherit; margin-top: 6px; }
+.question-reponse button.actif { background: var(--accent); border-color: var(--accent);
+  color: #fff; }
+.echelle { gap: 6px; }
+
+/* dépouillement */
+.resultats { margin-top: 12px; border-top: 1px solid var(--bord); padding-top: 10px; }
+.resultat { margin-bottom: 14px; }
+.resultat-titre { font-weight: 600; margin: 6px 0; }
+.ligne-resultat { display: flex; align-items: center; gap: 10px; margin: 4px 0; }
+.resultat-valeur { flex: 0 0 40%; font-size: 13.5px; }
+.resultat-barre { flex: 1; height: 12px; background: #eef1f6; border-radius: 999px;
+  overflow: hidden; }
+.resultat-remplie { display: block; height: 100%; background: var(--accent); }
+.resultat-nombre { flex: 0 0 auto; font-size: 13px; color: var(--doux); min-width: 70px;
+  text-align: right; }
+.nuage { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; padding: 8px 0; }
+.nuage .mot { color: var(--accent); font-weight: 600; }

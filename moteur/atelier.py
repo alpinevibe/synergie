@@ -22,6 +22,7 @@ import queue
 import secrets
 import shutil
 import sqlite3
+from contextlib import contextmanager
 import threading
 from pathlib import Path
 
@@ -48,15 +49,28 @@ def _identifiant(prefixe: str) -> str:
     return f"{prefixe}-{secrets.token_urlsafe(8)}"
 
 
-def connexion() -> sqlite3.Connection:
+@contextmanager
+def connexion():
+    """Une connexion SQLite, REFERMÉE à la sortie.
+
+    Sans la fermeture explicite, chaque appel à la base laissait un descripteur de
+    fichier ouvert : le service a fini par en avoir 509 ouverts et saturer la limite
+    système (« Too many open files », constat du 08/10/2026 — plus rien ne marchait :
+    ni la création d'une note, ni la suppression d'une décision).
+    """
     DONNEES.mkdir(parents=True, exist_ok=True)
     base = sqlite3.connect(BASE, timeout=15)
     base.row_factory = sqlite3.Row
-    base.execute("PRAGMA journal_mode=WAL")
-    base.execute("PRAGMA foreign_keys=ON")
-    return base
-
-
+    try:
+        base.execute("PRAGMA journal_mode=WAL")
+        base.execute("PRAGMA foreign_keys=ON")
+        yield base
+        base.commit()
+    except Exception:
+        base.rollback()
+        raise
+    finally:
+        base.close()
 SCHEMA = """
 create table if not exists themes (
     id text primary key, titre text not null, description text default '',
@@ -344,6 +358,11 @@ def supprimer_theme(identifiant: str) -> bool:
     with connexion() as base:
         # Les bulletins de vote partent avec les décisions du groupe (sinon ils
         # s'accumuleraient sans fin, sans pouvoir être rattachés à quoi que ce soit).
+        base.execute("delete from reponses where consultation in"
+                     " (select id from consultations where theme = ?)", (identifiant,))
+        base.execute("delete from questions where consultation in"
+                     " (select id from consultations where theme = ?)", (identifiant,))
+        base.execute("delete from consultations where theme = ?", (identifiant,))
         base.execute("delete from bulletins where theme = ?", (identifiant,))
         base.execute("delete from votes where decision in"
                      " (select id from decisions where theme = ?)", (identifiant,))

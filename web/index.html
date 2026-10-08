@@ -67,6 +67,39 @@
   </div>
 </div>
 
+<!-- ======================= CRÉER UN VOTE OU UN SONDAGE ======================= -->
+<div id="vue-consultation" class="voile cache" role="dialog" aria-modal="true"
+  aria-labelledby="titre-consultation">
+  <div class="boite-nom large">
+    <h2 id="titre-consultation">Nouveau sondage</h2>
+    <label class="etiquette-champ">Intitulé
+      <input id="consultation-intitule" maxlength="160" placeholder="La question posée, ou le titre du sondage">
+    </label>
+    <label class="etiquette-champ">Précisions (facultatif)
+      <textarea id="consultation-detail" rows="2" placeholder="Le contexte, en une ou deux phrases"></textarea>
+    </label>
+    <div id="consultation-questions"></div>
+    <div class="barre-boutons">
+      <button id="btn-ajouter-question" class="discret petit">+ Ajouter une question</button>
+    </div>
+    <fieldset class="choix-consultes">
+      <legend>Qui consulter ?</legend>
+      <label class="case"><input type="radio" name="scrutin" value="groupe" checked>
+        Les membres du groupe</label>
+      <label class="case"><input type="radio" name="scrutin" value="projet">
+        Tous les membres du projet</label>
+    </fieldset>
+    <p class="aide fin">Chaque personne recevra un lien personnel par courriel : une personne,
+      une réponse, et le dépouillement reste anonyme.</p>
+    <p id="consultation-erreur" class="erreur" role="alert"></p>
+    <div class="barre-boutons">
+      <button id="btn-consultation-ouvrir" class="principal">Enregistrer et envoyer les liens</button>
+      <button id="btn-consultation-brouillon" class="discret">Garder en brouillon</button>
+      <button id="btn-consultation-fermer" class="discret">Fermer</button>
+    </div>
+  </div>
+</div>
+
 <!-- ======================= VOTER ======================= -->
 <div id="vue-vote" class="voile cache" role="dialog" aria-modal="true" aria-labelledby="titre-vote">
   <div class="boite-nom">
@@ -75,12 +108,11 @@
     <p class="aide" id="vote-groupe"></p>
     <p class="vote-question" id="vote-question"></p>
     <p class="aide" id="vote-detail"></p>
-    <div class="barre-boutons">
-      <button class="principal" data-vote="pour">Pour</button>
-      <button class="danger" data-vote="contre">Contre</button>
-      <button class="discret" data-vote="neutre">Neutre</button>
-    </div>
+    <div id="vote-questions" class="vote-questions"></div>
     <p id="vote-etat" class="aide" role="status"></p>
+    <div class="barre-boutons">
+      <button id="btn-envoyer-reponses" class="principal">Envoyer mes réponses</button>
+    </div>
   </div>
 </div>
 
@@ -370,15 +402,19 @@
     <div id="liste-documents" class="liste-documents"></div>
   </section>
 
-  <!-- ---- les décisions ---- -->
-  <section id="onglet-decisions" class="onglet cache" aria-label="Décisions">
+  <!-- ---- les votes et les sondages ---- -->
+  <section id="onglet-consultations" class="onglet cache" aria-label="Votes et sondages">
     <div class="carte">
-      <label class="sr-only" for="intitule-decision">La décision en une phrase</label>
-      <input id="intitule-decision" class="champ-large" placeholder="La décision en une phrase">
-      <textarea id="detail-decision" rows="2" placeholder="Pourquoi, comment (facultatif)"></textarea>
-      <button id="btn-decision" class="principal petit">Proposer</button>
+      <div class="barre-boutons">
+        <button id="btn-nouveau-vote" class="principal petit">+ Nouveau vote</button>
+        <button id="btn-nouveau-sondage" class="principal petit">+ Nouveau sondage</button>
+      </div>
+      <p class="aide fin"><strong>Un vote</strong> tranche une question : oui ou non.
+        <strong>Un sondage</strong> éclaire la réflexion : plusieurs questions, plusieurs
+        façons de répondre. Dans les deux cas, on choisit qui l'on consulte, chacun reçoit
+        un lien personnel, et les réponses restent anonymes.</p>
     </div>
-    <div id="liste-decisions" class="liste-decisions"></div>
+    <div id="liste-consultations" class="liste-consultations"></div>
   </section>
 
   <!-- ---- le journal ---- -->

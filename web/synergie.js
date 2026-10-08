@@ -27,7 +27,6 @@
   let themes = [];                       // groupes du projet (même liste)
   let theme = null;                      // groupe ouvert
   let notes = [];                        // notes du tableau blanc
-  let decisions = [];
   let documents = [];
   let participants = [];
   let journal = [];                      // journal des actions du thème
@@ -193,7 +192,7 @@
       const parties = [element('h3', { texte: t.titre })];
       if (t.description) parties.push(element('p', { classe: 'aide', texte: t.description }));
       parties.push(element('p', { classe: 'compteurs', texte:
-        `${t.notes} note(s) · ${t.decisions} décision(s) · ${t.documents} document(s)` }));
+        `${t.notes} note(s) · ${t.documents} document(s)` }));
       parties.push(element('p', { classe: 'quand', texte: quand(t.maj_le) }));
       poser(carte, ...parties);
       carte.addEventListener('click', () => ouvrirTheme(t.id));
@@ -218,7 +217,8 @@
   // les fiches de poste ont quitté Synergie (elles deviennent l'application Orbis).
   const ONGLETS = [
     ['tableau', 'Tableau blanc'], ['pages', 'Pages'], ['chat', 'Discussion'],
-    ['documents', 'Documents'], ['decisions', 'Décisions'], ['journal', 'Journal']
+    ['documents', 'Documents'], ['consultations', 'Votes et sondages'],
+    ['journal', 'Journal']
   ];
 
   function construireOnglets() {
@@ -244,12 +244,13 @@
       onglet.classList.toggle('cache', onglet.id !== 'onglet-' + cle));
     if (cle === 'chat') chargerChatTheme();
     if (cle === 'pages') chargerPages();
+    if (cle === 'consultations') chargerConsultations();
     if (cle === 'journal') afficherJournal();
   }
 
   async function ouvrirTheme(identifiant, { pousser = true } = {}) {
     const donnees = await appel('/api/themes/' + encodeURIComponent(identifiant));
-    theme = donnees.theme; notes = donnees.notes || []; decisions = donnees.decisions || [];
+    theme = donnees.theme; notes = donnees.notes || [];
     documents = donnees.documents || []; participants = donnees.participants || [];
     journal = donnees.journal || []; votes = donnees.votes || {};
     mesVotes = donnees.mes_votes || [];
@@ -265,7 +266,7 @@
     afficherParticipants();
     dessinerNotes();
     afficherDocuments();
-    afficherDecisions();
+    chargerConsultations();
     afficherJournal();
     afficherMembresTheme();
     $('#btn-supprimer-theme').classList.toggle('cache', !estAdministrateurTheme());
@@ -280,7 +281,7 @@
 
   function fermerTheme() {
     if (flux) { flux.close(); flux = null; }
-    theme = null; notes = []; decisions = []; documents = []; participants = [];
+    theme = null; notes = []; documents = []; participants = [];
     journal = []; votes = {}; mesVotes = []; membresTheme = []; roleTheme = null;
     if (projet) { ouvrirProjet(projet.id, { pousser: false }); }
     else { afficherVue('projets'); }
@@ -316,7 +317,7 @@
       const donnees = await appel('/api/themes/' + theme.id);
       journal = donnees.journal || []; votes = donnees.votes || {};
       mesVotes = donnees.mes_votes || [];
-      afficherJournal(); afficherDecisions();
+      afficherJournal();
     } catch (erreur) { /* sans conséquence */ }
   }
 
@@ -366,17 +367,10 @@
         notes = notes.filter((n) => n.id !== evenement.id);
         retirerNote(evenement.id);
         break;
-      case 'decision_creee':
-      case 'decision_maj': {
-        const index = decisions.findIndex((d) => d.id === evenement.decision.id);
-        if (index === -1) decisions.unshift(evenement.decision);
-        else decisions[index] = evenement.decision;
-        afficherDecisions();
-        break;
-      }
-      case 'decision_supprimee':
-        decisions = decisions.filter((d) => d.id !== evenement.id);
-        afficherDecisions();
+      case 'consultation_creee':
+      case 'consultation_maj':
+      case 'consultation_supprimee':
+        chargerConsultations();
         break;
       case 'document_ajoute':
         documents.unshift(evenement.document);
@@ -395,8 +389,7 @@
         afficherJournal();
         break;
       case 'vote':
-        votes = Object.assign({}, votes, { [evenement.decision]: evenement.comptes });
-        afficherDecisions();
+          chargerConsultations();
         break;
       case 'message':
         if (evenement.message.theme === theme.id) chargerChatTheme();
@@ -928,166 +921,310 @@
     etat.textContent = envoyes > 1 ? `${envoyes} documents déposés.` : 'Document déposé.';
   }
 
-  // ================================================================ DÉCISIONS
-  /** Recharge les décisions et les comptes de votes (après avoir ouvert un vote). */
-  async function chargerVotes() {
-    if (!theme) return;
-    try {
-      const donnees = await appel('/api/themes/' + theme.id);
-      decisions = donnees.decisions || [];
-      votes = donnees.votes || {};
-      mesVotes = donnees.mes_votes || [];
-      afficherDecisions();
-    } catch (erreur) { /* sans conséquence */ }
-  }
-
-  function afficherDecisions() {
-    const zone = $('#liste-decisions');
-    zone.innerHTML = '';
-    if (!decisions.length) {
-      zone.append(element('p', { classe: 'vide', texte: 'Aucune décision pour ce thème.' }));
-      return;
-    }
-    const ordre = { proposee: 0, en_vote: 0, 'en attente': 1, adoptee: 2, rejetee: 3 };
-    [...decisions].sort((a, b) => (ordre[a.statut] || 0) - (ordre[b.statut] || 0))
-      .forEach((decision) => {
-        const carte = element('div', { classe: `carte decision ${decision.statut}` });
-        poser(carte,
-          element('h4', { texte: decision.intitule }),
-          decision.detail ? element('p', { classe: 'aide', texte: decision.detail }) : null,
-          element('p', { classe: 'meta', texte:
-            `Proposée par ${decision.auteur || 'quelqu\'un'} ${quand(decision.cree_le)}` +
-            (decision.decide_le ? ` · ${libelle(decision.statut)} ${quand(decision.decide_le)}${decision.decide_par ? ' par ' + decision.decide_par : ''}` : '') })
-        );
-
-        // ---- les votes : tout le monde vote une fois, et les votes sont anonymes ----
-        const comptes = votes[decision.id] || { pour: 0, contre: 0, neutre: 0, total: 0 };
-        poser(carte, element('div', { classe: 'votes' },
-          element('span', { classe: 'etiquette', texte: 'Votes anonymes' }),
-          element('span', { classe: 'compteur pour', texte: 'Pour ' + comptes.pour }),
-          element('span', { classe: 'compteur contre', texte: 'Contre ' + comptes.contre }),
-          element('span', { classe: 'compteur neutre', texte: 'Neutre ' + comptes.neutre }),
-          element('span', { classe: 'meta', texte: comptes.total
-            ? comptes.total + ' vote(s) — personne ne sait qui a voté quoi'
-            : 'aucun vote pour le moment' })));
-        if (estAdministrateurTheme() && decision.statut !== 'en_vote') {
-          // L'administrateur du groupe ouvre le vote : par courriel, avec un lien personnel.
-          const barre = element('div', { classe: 'barre-boutons' });
-          barre.append(element('span', { classe: 'etiquette', texte: 'Ouvrir le vote par courriel' }));
-          [['groupe', 'Aux membres du groupe'], ['projet', 'À tout le projet']].forEach(([portee, mot]) => {
-            const bouton = element('button', { classe: 'petit', texte: mot });
-            bouton.addEventListener('click', () => ouvrirScrutin(decision, portee));
-            barre.append(bouton);
-          });
-          carte.append(barre);
-        }
-        if (mesVotes.includes(decision.id)) {
-          carte.append(element('p', { classe: 'meta deja-vote',
-            texte: '✓ Vous avez voté (votre vote reste anonyme).' }));
-        } else {
-          const barreVote = element('div', { classe: 'barre-boutons barre-vote' });
-          [['pour', 'Pour'], ['contre', 'Contre'], ['neutre', 'Neutre']].forEach(([valeur, mot]) => {
-            const bouton = element('button', { classe: 'petit', texte: mot });
-            bouton.addEventListener('click', () => voter(decision, valeur));
-            barreVote.append(bouton);
-          });
-          carte.append(barreVote);
-        }
-        const boutons = element('div', { classe: 'barre-boutons' });
-        [['adoptee', 'Adopter'], ['rejetee', 'Rejeter'], ['en attente', 'En attente']].forEach(([statut, texte]) => {
-          const bouton = element('button', { classe: 'petit ' + (statut === 'adoptee' ? 'principal' : 'discret'),
-            texte });
-          bouton.addEventListener('click', () => changerStatut(decision, statut));
-          boutons.append(bouton);
-        });
-        const supprimer = element('button', { classe: 'petit discret danger', texte: 'Supprimer' });
-        supprimer.addEventListener('click', async () => {
-          if (!confirm('Supprimer cette décision ?')) return;
-          await appel(`/api/themes/${theme.id}/decisions/${decision.id}`, { methode: 'DELETE' });
-        });
-        boutons.append(supprimer);
-        poser(carte, boutons);
-        zone.append(carte);
-      });
-  }
-
-  /** Vote ANONYME : une seule fois par personne. Le serveur ne garde jamais le nom. */
-  /** Ouvre le vote : un lien personnel part par courriel à chaque votant. */
-  async function ouvrirScrutin(decision, portee) {
-    if (!confirm(portee === 'projet'
-      ? 'Envoyer un lien de vote à TOUS les membres du projet ?'
-      : 'Envoyer un lien de vote aux membres de ce groupe ?')) return;
-    try {
-      const donnees = await appel(`/api/themes/${theme.id}/decisions/${decision.id}/scrutin`,
-        { methode: 'POST', corps: { scrutin: portee } });
-      const nombre = (donnees.envoyes || []).length;
-      toast(nombre
-        ? nombre + ' lien(s) de vote envoyé(s) par courriel.'
-        : "Aucun lien envoyé : les personnes visées n'ont pas d'adresse de courriel.");
-      await chargerVotes();
-    } catch (erreur) {
-      toast(erreur.message);
-    }
-  }
-
-  async function voter(decision, valeur) {
-    try {
-      const resultat = await appel(
-        `/api/themes/${theme.id}/decisions/${decision.id}/votes`,
-        { methode: 'POST', corps: { valeur } });
-      if (resultat && resultat.ok) {
-        mesVotes = mesVotes.concat([decision.id]);
-        votes = Object.assign({}, votes, { [decision.id]: resultat.comptes });
-        afficherDecisions();
-      }
-    } catch (erreur) {
-      alert(erreur.message || 'Le vote n\'a pas pu être enregistré.');
-    }
-  }
-
+  // Les actions du journal, dites en français.
   const ACTIONS = {
-    theme_cree: 'a créé le thème', theme_modifie: 'a modifié le thème',
+    theme_cree: 'a créé le groupe', theme_modifie: 'a modifié le groupe',
     note_creee: 'a écrit une note', note_modifiee: 'a modifié une note',
     note_deplacee: 'a déplacé une note', note_supprimee: 'a supprimé une note',
-    decision_proposee: 'a proposé une décision', decision_modifiee: 'a modifié une décision',
-    decision_tranchee: 'a tranché une décision', decision_supprimee: 'a supprimé une décision',
-    vote: 'a voté', document_depose: 'a déposé un document',
-    document_supprime: 'a supprimé un document', arrivee: 'est arrivé dans le thème'
+    document_depose: 'a déposé un document', document_supprime: 'a supprimé un document',
+    consultation_creee: 'a créé un vote ou un sondage',
+    consultation_ouverte: 'a ouvert un vote ou un sondage',
+    consultation_repondue: 'a répondu à une consultation',
+    consultation_close: 'a clos une consultation',
+    invitation: 'a invité quelqu\'un', invitation_activee: 'a activé son accès',
+    projet_membre: 'a modifié les membres du projet', arrivee: 'est arrivé dans le groupe',
   };
 
+  /** Le journal du groupe (qui a fait quoi) — visible des administrateurs seulement. */
   function afficherJournal() {
     const zone = $('#liste-journal');
     if (!zone) return;
     zone.innerHTML = '';
     if (!journal.length) {
-      zone.append(element('p', { classe: 'vide', texte: 'Aucune action enregistrée pour le moment.' }));
+      zone.append(element('p', { classe: 'vide',
+        texte: 'Aucune action enregistrée pour le moment.' }));
       return;
     }
     journal.forEach((entree) => {
       poser(zone, element('div', { classe: 'carte entree-journal' },
         element('span', { classe: 'qui', texte: entree.qui || 'Quelqu\'un' }),
         element('span', { classe: 'quoi', texte: ACTIONS[entree.action] || entree.action }),
-        entree.details ? element('span', { classe: 'details', texte: '« ' + entree.details + ' »' }) : null,
+        entree.details ? element('span', { classe: 'details',
+          texte: '« ' + entree.details + ' »' }) : null,
         element('span', { classe: 'quand', texte: quand(entree.quand) })));
     });
   }
 
-  function libelle(statut) {
-    return { proposee: 'proposée', en_vote: 'vote en cours', adoptee: 'adoptée',
-             rejetee: 'rejetée', 'en attente': 'en attente' }[statut] || statut;
+  // ================================================================ VOTES ET SONDAGES
+  // Un VOTE tranche une question (oui / non) ; un SONDAGE éclaire la réflexion (plusieurs
+  // questions, plusieurs types de réponses). Dans les deux cas : on choisit qui l'on
+  // consulte, chacun reçoit un lien personnel, et les réponses restent anonymes.
+
+  let consultations = [];
+  let consultationOuverte = null;       // celle qu'on est en train de créer
+  let typesQuestion = [];
+
+  async function chargerConsultations() {
+    if (!theme) return;
+    try {
+      const donnees = await appel('/api/themes/' + theme.id + '/consultations');
+      consultations = donnees.consultations || [];
+      typesQuestion = donnees.types_question || [];
+      afficherConsultations();
+    } catch (erreur) { /* sans conséquence */ }
   }
 
-  async function changerStatut(decision, statut) {
-    await appel(`/api/themes/${theme.id}/decisions/${decision.id}`, { methode: 'PUT',
-      corps: { statut, decide_par: monNom() || 'Anonyme' } });
+  const STATUTS = { brouillon: 'brouillon', ouverte: 'ouvert', close: 'clos' };
+
+  function afficherConsultations() {
+    const zone = $('#liste-consultations');
+    zone.innerHTML = '';
+    if (!consultations.length) {
+      zone.append(element('p', { classe: 'vide',
+        texte: 'Aucun vote ni sondage pour le moment.' }));
+      return;
+    }
+    consultations.forEach((consultation) => {
+      const vote = consultation.type === 'vote';
+      const carte = element('div', { classe: `carte consultation ${consultation.statut}` });
+      poser(carte,
+        element('h4', { texte: (vote ? '🗳 ' : '📊 ') + consultation.intitule }),
+        consultation.detail ? element('p', { classe: 'aide', texte: consultation.detail }) : null,
+        element('p', { classe: 'meta', texte:
+          consultation.libelle_type + ' · ' + STATUTS[consultation.statut]
+          + ' · ' + (consultation.scrutin === 'projet' ? 'tout le projet' : 'membres du groupe')
+          + ` · ${consultation.repondu}/${consultation.bulletins} réponse(s)`
+          + ` · ${consultation.questions} question(s)` }));
+
+      // Les questions (aperçu)
+      if (consultation.questions_detaillees) {
+        const liste = element('ul', { classe: 'questions-apercu' });
+        consultation.questions_detaillees.forEach((question) => {
+          liste.append(element('li', { texte: question.intitule
+            + ' — ' + question.libelle_type }));
+        });
+        carte.append(liste);
+      }
+
+      const barre = element('div', { classe: 'barre-boutons' });
+      if (consultation.statut === 'brouillon' && estAdministrateurTheme()) {
+        const ouvrir = element('button', { classe: 'principal petit',
+          texte: 'Envoyer les liens' });
+        ouvrir.addEventListener('click', () => ouvrirConsultation(consultation));
+        const modifier = element('button', { classe: 'discret petit', texte: 'Modifier' });
+        modifier.addEventListener('click', () => ouvrirFenetreConsultation(consultation));
+        poser(barre, ouvrir, modifier);
+      }
+      if (consultation.statut === 'ouverte' && estAdministrateurTheme()) {
+        const fermer = element('button', { classe: 'petit discret', texte: 'Clore' });
+        fermer.addEventListener('click', async () => {
+          if (!confirm('Clore la consultation ? Les réponses resteront visibles.')) return;
+          await appel('/api/consultations/' + consultation.id + '/fermer', { methode: 'POST' });
+          await chargerConsultations();
+        });
+        barre.append(fermer);
+      }
+      const resultats = element('button', { classe: 'discret petit', texte: 'Résultats' });
+      resultats.addEventListener('click', () => afficherResultats(consultation, carte));
+      barre.append(resultats);
+      if (estAdministrateurTheme()) {
+        const supprimer = element('button', { classe: 'discret danger petit', texte: 'Supprimer' });
+        supprimer.addEventListener('click', async () => {
+          if (!confirm('Supprimer cette consultation et ses réponses ?')) return;
+          await appel('/api/consultations/' + consultation.id, { methode: 'DELETE' });
+          await chargerConsultations();
+        });
+        barre.append(supprimer);
+      }
+      carte.append(barre);
+      zone.append(carte);
+    });
   }
 
-  async function proposerDecision() {
-    const intitule = $('#intitule-decision').value.trim();
-    if (!intitule) { alert('Écrivez la décision en une phrase.'); return; }
-    await appel(`/api/themes/${theme.id}/decisions`, { methode: 'POST',
-      corps: { intitule, detail: $('#detail-decision').value.trim(), auteur: monNom() || 'Anonyme' } });
-    $('#intitule-decision').value = ''; $('#detail-decision').value = '';
+  /** Le dépouillement : barres pour les choix, nuage pour les mots, moyenne pour l'échelle. */
+  async function afficherResultats(consultation, carte) {
+    const zone = carte.querySelector('.resultats') || element('div', { classe: 'resultats' });
+    zone.innerHTML = '';
+    const donnees = await appel('/api/consultations/' + consultation.id);
+    const resultats = donnees.resultats || [];
+    if (!resultats.length) {
+      zone.append(element('p', { classe: 'aide', texte:
+        'Les résultats apparaîtront ici (ils sont visibles par tous une fois la consultation close).' }));
+      carte.append(zone);
+      return;
+    }
+    resultats.forEach((question) => {
+      const bloc = element('div', { classe: 'resultat' });
+      bloc.append(element('p', { classe: 'resultat-titre', texte: question.intitule
+        + ' (' + question.total + ' réponse(s))' }));
+      if (question.type === 'mot') {
+        const nuage = element('div', { classe: 'nuage' });
+        (question.mots || []).forEach((mot) => {
+          nuage.append(element('span', { classe: 'mot',
+            style: `font-size:${Math.min(30, 13 + mot.nombre * 3)}px`,
+            texte: mot.valeur + ' ' }));
+        });
+        bloc.append(nuage);
+      } else if (question.type === 'likert') {
+        bloc.append(element('p', { classe: 'meta',
+          texte: 'Moyenne : ' + (question.moyenne === null ? '—' : question.moyenne + ' / 5') }));
+        (question.repartition || []).forEach((note) => bloc.append(ligneResultat(note.valeur, note.nombre, question.total)));
+      } else {
+        (question.comptes || []).forEach((ligne) => bloc.append(ligneResultat(ligne.valeur, ligne.nombre, question.total)));
+        if (!(question.comptes || []).length) {
+          bloc.append(element('p', { classe: 'aide', texte: 'Aucune réponse pour le moment.' }));
+        }
+      }
+      zone.append(bloc);
+    });
+    carte.append(zone);
+  }
+
+  function ligneResultat(valeur, nombre, total) {
+    const pourcent = total ? Math.round((nombre / total) * 100) : 0;
+    const ligne = element('div', { classe: 'ligne-resultat' });
+    poser(ligne,
+      element('span', { classe: 'resultat-valeur', texte: valeur || '(vide)' }),
+      element('span', { classe: 'resultat-barre' },
+        element('span', { classe: 'resultat-remplie', style: `width:${pourcent}%` })),
+      element('span', { classe: 'resultat-nombre', texte: nombre + (total ? ` (${pourcent} %)` : '') }));
+    return ligne;
+  }
+
+  /** Créer (ou modifier) un vote ou un sondage. */
+  function ouvrirFenetreConsultation(consultation = null, typeParDefaut = 'sondage') {
+    consultationOuverte = consultation;
+    const type = consultation ? consultation.type : typeParDefaut;
+    $('#titre-consultation').textContent = consultation
+      ? 'Modifier ' + (type === 'vote' ? 'le vote' : 'le sondage')
+      : (type === 'vote' ? 'Nouveau vote' : 'Nouveau sondage');
+    $('#consultation-intitule').value = consultation ? consultation.intitule : '';
+    $('#consultation-detail').value = consultation ? consultation.detail || '' : '';
+    const questions = consultation && consultation.questions_detaillees
+      ? consultation.questions_detaillees : [{ type: type === 'vote' ? 'oui_non' : 'unique',
+                                               intitule: '', options: [] }];
+    dessinerQuestions(questions, type);
+    $('#consultation-erreur').textContent = '';
+    $('#btn-ajouter-question').classList.toggle('cache', type === 'vote');
+    $('#btn-consultation-ouvrir').textContent = consultation
+      ? 'Enregistrer' : 'Enregistrer et envoyer les liens';
+    $('#vue-consultation').classList.remove('cache');
+    setTimeout(() => $('#consultation-intitule').focus(), 200);
+  }
+
+  function dessinerQuestions(questions, type) {
+    const zone = $('#consultation-questions');
+    zone.innerHTML = '';
+    questions.forEach((question, rang) => zone.append(construireQuestion(question, type, rang)));
+  }
+
+  function construireQuestion(question, type, rang) {
+    const bloc = element('div', { classe: 'question-editeur' });
+    bloc.dataset.rang = rang;
+    const vote = type === 'vote';
+
+    const entete = element('div', { classe: 'ligne-question' });
+    entete.append(element('span', { classe: 'etiquette', texte: vote ? 'Question' : `Question ${rang + 1}` }));
+    const menu = element('select', { attrs: { 'aria-label': 'Type de réponse' } });
+    typesQuestion.forEach((t) => {
+      const option = element('option', { texte: t.libelle, attrs: { value: t.cle } });
+      if (t.cle === (question.type || 'unique')) option.selected = true;
+      menu.append(option);
+    });
+    menu.disabled = vote;
+    if (!vote) entete.append(menu);
+    bloc.append(entete);
+
+    const intitule = element('input', { classe: 'champ-large',
+      attrs: { placeholder: 'La question', maxlength: '200' } });
+    intitule.value = question.intitule || '';
+    bloc.append(intitule);
+
+    const options = element('textarea', { classe: 'options-question',
+      attrs: { rows: '3', placeholder: 'Une réponse possible par ligne' } });
+    options.value = (question.options || []).join('\n');
+    const blocOptions = element('div', {});
+    blocOptions.append(element('span', { classe: 'aide fin', texte:
+      'Réponses possibles (une par ligne) :' }), options);
+    bloc.append(blocOptions);
+
+    function majVisibilite() {
+      if (vote) { blocOptions.classList.add('cache'); return; }
+      const avecOptions = ['unique', 'multiple', 'liste'].includes(menu.value);
+      blocOptions.classList.toggle('cache', !avecOptions);
+    }
+    menu.addEventListener('change', majVisibilite);
+    majVisibilite();
+
+    if (!vote) {
+      const enlever = element('button', { classe: 'discret danger petit', texte: 'Retirer' });
+      enlever.addEventListener('click', () => bloc.remove());
+      bloc.append(enlever);
+    }
+    return bloc;
+  }
+
+  function lireQuestions() {
+    const questions = [];
+    document.querySelectorAll('#consultation-questions .question-editeur').forEach((bloc) => {
+      const menu = bloc.querySelector('select');
+      const champs = bloc.querySelectorAll('input, textarea');
+      questions.push({
+        type: menu ? menu.value : 'oui_non',
+        intitule: (champs[0].value || '').trim(),
+        options: (champs[1].value || '').split('\n').map((l) => l.trim()).filter(Boolean),
+      });
+    });
+    return questions;
+  }
+
+  /** Crée (ou met à jour) la consultation, puis l'ouvre si on l'a demandé. */
+  async function enregistrerConsultation({ ouvrirAussi = true } = {}) {
+    const erreur = $('#consultation-erreur');
+    erreur.textContent = '';
+    const corps = {
+      type: consultationOuverte ? consultationOuverte.type : 'sondage',
+      intitule: $('#consultation-intitule').value.trim(),
+      detail: $('#consultation-detail').value.trim(),
+      questions: lireQuestions(),
+    };
+    if (!corps.intitule) { erreur.textContent = 'Donnez un intitulé.'; return; }
+    try {
+      let consultation = consultationOuverte;
+      if (consultationOuverte) {
+        consultation = await appel('/api/consultations/' + consultationOuverte.id,
+          { methode: 'PUT', corps: { intitule: corps.intitule, detail: corps.detail,
+                                     questions: corps.questions } });
+      } else {
+        consultation = await appel('/api/themes/' + theme.id + '/consultations',
+          { methode: 'POST', corps });
+      }
+      if (ouvrirAussi) {
+        const scrutin = (document.querySelector('input[name="scrutin"]:checked') || {}).value
+          || 'groupe';
+        const envoi = await appel('/api/consultations/' + consultation.id + '/ouvrir',
+          { methode: 'POST', corps: { scrutin } });
+        toast((envoi.envoyes || []).length + ' lien(s) envoyé(s) par courriel.');
+      } else {
+        toast('Consultation enregistrée en brouillon.');
+      }
+      $('#vue-consultation').classList.add('cache');
+      await chargerConsultations();
+    } catch (e) {
+      erreur.textContent = e.message;
+    }
+  }
+
+  async function ouvrirConsultation(consultation) {
+    const scrutin = prompt('Qui consulter ? Écrivez « groupe » ou « projet »', 'groupe');
+    if (!scrutin) return;
+    try {
+      const envoi = await appel('/api/consultations/' + consultation.id + '/ouvrir',
+        { methode: 'POST', corps: {
+          scrutin: scrutin.trim().toLowerCase().startsWith('proj') ? 'projet' : 'groupe' } });
+      toast((envoi.envoyes || []).length + ' lien(s) envoyé(s) par courriel.');
+      await chargerConsultations();
+    } catch (e) { toast(e.message); }
   }
 
   // ================================================================ MON COMPTE
@@ -1171,18 +1308,29 @@
 
   // ---------------------------------------------------------------- VOTE
   /** Le lien de vote reçu par courriel : une personne, une voix. */
+  /** Répondre à un vote (oui / non) ou à un sondage (plusieurs questions). */
   async function ouvrirVote(jeton) {
     try {
       const donnees = await appel('/api/votes/' + encodeURIComponent(jeton));
       jetonVote = jeton;
-      $('#titre-vote').textContent = 'Vote — ' + donnees.groupe;
+      const consultation = donnees.consultation || {};
+      $('#titre-vote').textContent = (consultation.type === 'vote' ? 'Vote' : 'Sondage')
+        + ' — ' + (donnees.groupe || '');
       $('#vote-groupe').textContent = donnees.scrutin === 'projet'
-        ? 'Tous les membres du projet votent.' : 'Les membres du groupe votent.';
-      $('#vote-question').textContent = donnees.intitule;
-      $('#vote-detail').textContent = donnees.detail || '';
-      $('#vote-etat').textContent = donnees.deja_vote
-        ? 'Votre vote a déjà été enregistré. Merci !' : 'Choisissez, puis validez.';
-      document.querySelectorAll('[data-vote]').forEach((b) => { b.disabled = donnees.deja_vote; });
+        ? 'Tous les membres du projet sont consultés.' : 'Les membres du groupe sont consultés.';
+      $('#vote-question').textContent = consultation.intitule || '';
+      $('#vote-detail').textContent = consultation.detail || '';
+      const zone = $('#vote-questions');
+      zone.innerHTML = '';
+      (consultation.questions || []).forEach((question) =>
+        zone.append(construireReponse(question, consultation.type)));
+
+      const close = consultation.statut && consultation.statut !== 'ouverte';
+      $('#btn-envoyer-reponses').disabled = Boolean(donnees.deja_repondu || close);
+      $('#vote-etat').textContent = donnees.deja_repondu
+        ? 'Vous avez déjà répondu : merci !'
+        : (close ? 'Cette consultation est close : les réponses ne sont plus ouvertes.'
+                 : 'Répondez, puis envoyez.');
       afficherVue('vote');
       $('#vue-vote').classList.remove('cache');
     } catch (erreur) {
@@ -1192,13 +1340,90 @@
     }
   }
 
-  async function voter(valeur) {
+  /** Une question, dessinée selon son type (le type décide de la façon de répondre). */
+  function construireReponse(question, typeConsultation) {
+    const bloc = element('div', { classe: 'question-reponse' });
+    bloc.dataset.question = question.id;
+    bloc.append(element('p', { classe: 'vote-question', texte: question.intitule }));
+
+    if (typeConsultation === 'vote' || question.type === 'oui_non') {
+      const barre = element('div', { classe: 'barre-boutons' });
+      [['oui', 'Oui'], ['non', 'Non']].forEach(([valeur, mot]) => {
+        const bouton = element('button', { classe: 'petit', texte: mot });
+        bouton.dataset.valeur = valeur;
+        bouton.addEventListener('click', () => {
+          barre.querySelectorAll('button').forEach((b) => b.classList.remove('actif'));
+          bouton.classList.add('actif');
+        });
+        barre.append(bouton);
+      });
+      bloc.append(barre);
+      return bloc;
+    }
+    if (question.type === 'unique' || question.type === 'liste') {
+      const menu = element('select', { attrs: { 'aria-label': question.intitule } });
+      menu.append(element('option', { texte: 'Choisissez…', attrs: { value: '' } }));
+      (question.options || []).forEach((option) =>
+        menu.append(element('option', { texte: option, attrs: { value: option } })));
+      bloc.append(menu);
+      return bloc;
+    }
+    if (question.type === 'multiple') {
+      (question.options || []).forEach((option) => {
+        const case_ = element('input', { attrs: { type: 'checkbox', value: option } });
+        const ligne = element('label', { classe: 'case' });
+        poser(ligne, case_, element('span', { texte: option }));
+        bloc.append(ligne);
+      });
+      return bloc;
+    }
+    if (question.type === 'likert') {
+      const barre = element('div', { classe: 'barre-boutons echelle' });
+      [1, 2, 3, 4, 5].forEach((note) => {
+        const bouton = element('button', { classe: 'petit', texte: String(note) });
+        bouton.dataset.valeur = String(note);
+        bouton.addEventListener('click', () => {
+          barre.querySelectorAll('button').forEach((b) => b.classList.remove('actif'));
+          bouton.classList.add('actif');
+        });
+        barre.append(bouton);
+      });
+      bloc.append(barre, element('p', { classe: 'aide fin',
+        texte: '1 = pas du tout d\'accord · 5 = tout à fait d\'accord' }));
+      return bloc;
+    }
+    if (question.type === 'mot') {
+      bloc.append(element('input', { attrs: { placeholder: 'Un mot', maxlength: '40' } }));
+      return bloc;
+    }
+    return bloc;
+  }
+
+  /** Ce qui a été répondu, question par question (les vides restent vides). */
+  function lireReponses() {
+    const reponses = {};
+    document.querySelectorAll('#vote-questions .question-reponse').forEach((bloc) => {
+      const question = bloc.dataset.question;
+      const actif = bloc.querySelector('button.actif');
+      const cases = [...bloc.querySelectorAll('input[type="checkbox"]:checked')];
+      const menu = bloc.querySelector('select');
+      const champ = bloc.querySelector('input:not([type="checkbox"])');
+      if (actif) reponses[question] = [actif.dataset.valeur];
+      else if (cases.length) reponses[question] = cases.map((c) => c.value);
+      else if (menu) reponses[question] = menu.value ? [menu.value] : [];
+      else if (champ) reponses[question] = champ.value.trim() ? [champ.value.trim()] : [];
+    });
+    return reponses;
+  }
+
+  async function envoyerReponses() {
     $('#vote-etat').textContent = 'Enregistrement…';
     try {
-      await appel('/api/votes/' + jetonVote, { methode: 'POST', corps: { valeur } });
-      document.querySelectorAll('[data-vote]').forEach((b) => { b.disabled = true; });
-      $('#vote-etat').textContent = 'Votre vote est enregistré. Merci !';
-      toast('Vote enregistré.');
+      await appel('/api/votes/' + jetonVote,
+        { methode: 'POST', corps: { reponses: lireReponses() } });
+      $('#btn-envoyer-reponses').disabled = true;
+      $('#vote-etat').textContent = 'Vos réponses sont enregistrées. Merci !';
+      toast('Réponses envoyées.');
     } catch (erreur) {
       $('#vote-etat').textContent = erreur.message;
     }
@@ -1958,7 +2183,22 @@
 
     // --- documents et décisions
     $('#btn-deposer').addEventListener('click', deposerDocuments);
-    $('#btn-decision').addEventListener('click', proposerDecision);
+    $('#btn-nouveau-vote').addEventListener('click', () =>
+      ouvrirFenetreConsultation(null, 'vote'));
+    $('#btn-nouveau-sondage').addEventListener('click', () =>
+      ouvrirFenetreConsultation(null, 'sondage'));
+    $('#btn-ajouter-question').addEventListener('click', () => {
+      const type = consultationOuverte ? consultationOuverte.type : 'sondage';
+      $('#consultation-questions').append(construireQuestion({}, type,
+        $('#consultation-questions').children.length));
+    });
+    $('#btn-consultation-brouillon').addEventListener('click', () =>
+      enregistrerConsultation({ ouvrirAussi: false }));
+    $('#btn-consultation-ouvrir').addEventListener('click', () =>
+      enregistrerConsultation({ ouvrirAussi: true }));
+    $('#btn-consultation-fermer').addEventListener('click', () =>
+      $('#vue-consultation').classList.add('cache'));
+    $('#btn-envoyer-reponses').addEventListener('click', envoyerReponses);
 
     // double-clic sur le fond : une note là où l'on a cliqué
     $('#plateau').addEventListener('dblclick', (evenement) => {

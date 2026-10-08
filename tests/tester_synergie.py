@@ -16,6 +16,7 @@ RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, RACINE)
 
 from moteur import atelier as m_atelier                  # noqa: E402
+from moteur import consultations as m_consultations      # noqa: E402
 from moteur import equipe as m_equipe                    # noqa: E402
 from moteur import invitations as m_invitations          # noqa: E402
 from moteur import projets as m_projets                  # noqa: E402
@@ -166,28 +167,6 @@ def test_invitations_et_votes():
                     m_invitations.lire_invitation(invitation["jeton"])),
                 "le lien d'invitation ne sert qu'une fois")
 
-        # --- 3. le vote par lien personnel -----------------------------------------------
-        decision = m_atelier.creer_decision(theme["id"], "Faut-il ouvrir le vote ?",
-                                            "Question de test", "Tests")
-        bulletin = m_invitations.creer_bulletin(decision["id"], theme["id"],
-                                                admin["id"], "admin@exemple.fr", "groupe")
-        sujet, texte = m_invitations.courriel_vote(bulletin, decision["intitule"], "",
-                                                   theme["titre"], "groupe")
-        verifie("#vote=" in texte and bulletin["jeton"] in texte,
-                "chaque votant reçoit un lien de vote personnel")
-        verifie(m_invitations.enregistrer_vote(bulletin["jeton"], "pour")["vote_le"] != "",
-                "le vote est enregistré depuis le lien")
-        try:
-            m_invitations.enregistrer_vote(bulletin["jeton"], "contre")
-            verifie(False, "un lien de vote ne sert qu'une fois")
-        except ValueError:
-            verifie(True, "un lien de vote ne sert qu'une fois")
-        m_atelier.voter(theme["id"], decision["id"], admin["id"], "pour")
-        verifie(m_atelier.decisions_votees(theme["id"], admin["id"]) == [decision["id"]],
-                "le vote compte une voix, sans dire qui a voté quoi")
-        bulletins = m_invitations.lister_bulletins(decision["id"])
-        verifie(len(bulletins) == 1 and bulletins[0]["vote_le"],
-                "le bulletin est marqué comme voté (une personne, une voix)")
     finally:
         m_equipe.envoyer_courriel = vrai_envoi
         m_projets.supprimer_projet(projet["id"])
@@ -195,6 +174,102 @@ def test_invitations_et_votes():
             base.execute("delete from comptes where prenom like 'Test %'")
             base.execute("delete from invitations where projet = ?", (projet["id"],))
             base.execute("delete from bulletins where theme = ?", (theme["id"],))
+
+
+def test_consultations():
+    """Votes (oui/non) et sondages (questions de tous types), par lien personnel."""
+    print("\n— votes et sondages —")
+    menage()
+    m_consultations.initialiser()
+    theme = m_atelier.creer_theme("Groupe de test consultations", "", auteur="Tests")["id"]
+    try:
+        # --- un VOTE : une seule question, oui ou non -----------------------------------
+        vote = m_consultations.creer_consultation(
+            theme, "vote", "Faut-il ouvrir le vote ?", "Question de test",
+            [{"type": "unique", "intitule": "ignoré", "options": ["a", "b"]}], "Tests")
+        verifie(vote["type"] == "vote"
+                and vote["questions_detaillees"][0]["type"] == "oui_non",
+                "un vote pose UNE question, à laquelle on répond oui ou non")
+        verifie(vote["statut"] == "brouillon",
+                "une consultation naît en brouillon : rien ne part avant qu'on l'ouvre")
+
+        # --- un SONDAGE : plusieurs questions, plusieurs types de réponses ---------------
+        sondage = m_consultations.creer_consultation(
+            theme, "sondage", "Comment améliorer les transmissions ?", "Sondage de test",
+            [{"type": "unique", "intitule": "Un seul choix", "options": ["A", "B"]},
+             {"type": "multiple", "intitule": "Plusieurs choix", "options": ["X", "Y", "Z"]},
+             {"type": "liste", "intitule": "Liste déroulante", "options": ["1", "2"]},
+             {"type": "likert", "intitule": "Une échelle"},
+             {"type": "mot", "intitule": "Un mot"}], "Tests")
+        types = [q["type"] for q in sondage["questions_detaillees"]]
+        verifie(types == ["unique", "multiple", "liste", "likert", "mot"],
+                "un sondage accepte plusieurs questions, de types différents")
+        verifie(all(q["libelle_type"] for q in sondage["questions_detaillees"]),
+                "chaque question annonce son type de réponse en clair")
+
+        # --- les liens personnels : une personne, une réponse ----------------------------
+        votants = [{"compte": "cp-essai-1", "email": "un@exemple.fr"},
+                   {"compte": "cp-essai-2", "email": "deux@exemple.fr"}]
+        bulletins = [m_consultations.creer_bulletin(sondage["id"], theme, v["compte"],
+                                                    v["email"], "groupe") for v in votants]
+        verifie(len({b["jeton"] for b in bulletins}) == 2,
+                "chaque personne à consulter reçoit un lien PERSONNEL différent")
+        sujet, texte = m_consultations.courriel_consultation(bulletins[0], sondage,
+                                                             "Groupe de test")
+        verifie("#vote=" in texte and bulletins[0]["jeton"] in texte,
+                "le courriel contient le lien personnel de réponse")
+
+        # --- répondre ---------------------------------------------------------------------
+        m_consultations.ouvrir_consultation(sondage["id"], "groupe")
+        verifie(m_consultations.lire_consultation(sondage["id"])["statut"] == "ouverte",
+                "une consultation s'ouvre quand l'administrateur envoie les liens")
+        questions = sondage["questions_detaillees"]
+        try:
+            m_consultations.enregistrer_reponses(bulletins[0]["jeton"], {})
+            verifie(False, "une question sans réponse est refusée")
+        except ValueError:
+            verifie(True, "une question sans réponse est refusée")
+        m_consultations.enregistrer_reponses(bulletins[0]["jeton"], {
+            questions[0]["id"]: "A", questions[1]["id"]: ["X", "Z"],
+            questions[2]["id"]: "2", questions[3]["id"]: "4", questions[4]["id"]: "clair"})
+        verifie(m_consultations.lire_bulletin(bulletins[0]["jeton"])["repondu_le"] != "",
+                "les réponses sont enregistrées depuis le lien")
+        try:
+            m_consultations.enregistrer_reponses(bulletins[0]["jeton"], {
+                questions[0]["id"]: "B"})
+            verifie(False, "un lien ne sert qu'une fois")
+        except ValueError:
+            verifie(True, "un lien ne sert qu'une fois (une personne, une réponse)")
+
+        # --- le dépouillement, anonyme -----------------------------------------------------
+        resultats = m_consultations.resultats(sondage["id"])
+        choix = next(r for r in resultats if r["type"] == "unique")
+        verifie(choix["comptes"] == [{"valeur": "A", "nombre": 1}],
+                "le dépouillement compte les réponses, sans dire qui a répondu quoi")
+        multiple = next(r for r in resultats if r["type"] == "multiple")
+        verifie(multiple["total"] == 2, "une question à choix multiples compte chaque case")
+        echelle = next(r for r in resultats if r["type"] == "likert")
+        verifie(echelle["moyenne"] == 4.0 and len(echelle["repartition"]) == 5,
+                "une échelle donne sa moyenne et sa répartition")
+        nuage = next(r for r in resultats if r["type"] == "mot")
+        verifie(nuage["mots"] == [{"valeur": "clair", "nombre": 1}],
+                "les réponses en un mot alimentent le nuage de mots")
+        with m_consultations.connexion() as base:
+            colonnes = {l[1] for l in base.execute("pragma table_info(reponses)")}
+        verifie("empreinte" in colonnes and not ({"qui", "nom", "compte"} & colonnes),
+                "le nom de la personne n'est JAMAIS écrit dans les réponses (anonymat)")
+
+        # --- ouvrir une consultation sans adresse : on le dit clairement -------------------
+        orpheline = m_consultations.creer_consultation(theme, "vote", "Sans adresse", "",
+                                                       [], "Tests")
+        verifie(orpheline["bulletins"] == 0 and orpheline["statut"] == "brouillon",
+                "ouvrir un vote sur des personnes sans courriel ne crée aucun bulletin")
+        m_consultations.fermer_consultation(orpheline["id"])
+        verifie(m_consultations.lire_consultation(orpheline["id"])["statut"] == "close",
+                "une consultation se clôt")
+    finally:
+        # Le groupe d'essai part avec ses consultations, ses questions et ses réponses.
+        m_atelier.supprimer_theme(theme)
 
 
 def test_atelier():
@@ -375,6 +450,7 @@ def test_equipe():
 def main():
     test_projets()
     test_invitations_et_votes()
+    test_consultations()
     test_atelier()
     test_equipe()
     print(f"\n{'='*60}\n{len(REUSSIS)} test(s) réussi(s), {len(ECHECS)} échec(s).")

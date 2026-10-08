@@ -18,6 +18,7 @@ RACINE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, RACINE)
 
 from moteur import atelier as m_atelier                 # noqa: E402
+from moteur import consultations as m_consultations     # noqa: E402
 from moteur import equipe as m_equipe                   # noqa: E402
 from moteur import invitations as m_invitations         # noqa: E402
 from moteur import projets as m_projets                 # noqa: E402
@@ -597,78 +598,143 @@ def api_connexion():
 
 
 # ====================================================================================
-# VOTES — un lien personnel par votant, envoyé sur sa boîte : une personne, une voix
+# VOTES ET SONDAGES — on choisit QUI l'on consulte, chaque personne reçoit son lien
 # ====================================================================================
-@app.route("/api/themes/<identifiant>/decisions/<decision>/scrutin", methods=["POST"])
-def api_lancer_scrutin(identifiant, decision):
-    """Ouvre le vote : « membres du groupe » ou « tous les membres du projet »."""
-    theme = _theme(identifiant, ecriture=True)
-    corps = request.get_json(silent=True) or {}
-    scrutin = "projet" if corps.get("scrutin") == "projet" else "groupe"
-    dec = next((d for d in m_atelier.lister_decisions(identifiant) if d["id"] == decision), None)
-    if not dec:
-        return jsonify({"erreur": "Décision inconnue."}), 404
+def _consultation(identifiant: str, ecriture: bool = False) -> dict:
+    consultation = m_consultations.lire_consultation(identifiant)
+    if not consultation:
+        abort(404, description="Consultation inconnue.")
+    theme = _theme(consultation["theme"], ecriture=ecriture)
+    consultation["groupe"] = theme["titre"]
+    consultation["projet"] = theme.get("projet") or ""
+    return consultation
+
+
+def _votants(theme: dict, scrutin: str) -> list[dict]:
+    """Qui l'on consulte : les membres du groupe, ou tous les membres du projet."""
+    projet = theme.get("projet") or ""
+    if scrutin == "projet":
+        personnes = m_projets.membres_du_projet(projet)
+    else:
+        personnes = m_projets.membres_du_theme(theme["id"])
+        if not personnes:
+            personnes = m_projets.membres_du_projet(projet)
+    return [{"compte": p["compte"], "email": p["email"]} for p in personnes if p["email"]]
+
+
+@app.route("/api/themes/<identifiant>/consultations", methods=["GET", "POST"])
+def api_consultations(identifiant):
+    """Les votes et sondages du groupe ; on en crée un (brouillon, non envoyé)."""
+    _theme(identifiant)
+    if request.method == "POST":
+        _theme(identifiant, ecriture=True)
+        corps = request.get_json(silent=True) or {}
+        try:
+            consultation = m_consultations.creer_consultation(
+                identifiant, corps.get("type", "sondage"), corps.get("intitule", ""),
+                corps.get("detail", ""), corps.get("questions") or [], _qui())
+        except ValueError as erreur:
+            return jsonify({"erreur": str(erreur)}), 400
+        m_atelier.journaliser(identifiant, _qui(), "consultation_creee", consultation["id"],
+                              consultation["intitule"])
+        return jsonify(consultation), 201
+    return jsonify({"consultations": m_consultations.lister_consultations(identifiant),
+                    "types_question": [{"cle": t, "libelle": m_consultations.LIBELLES_QUESTION[t]}
+                                       for t in m_consultations.TYPES_QUESTION]})
+
+
+@app.route("/api/consultations/<identifiant>", methods=["GET", "PUT", "DELETE"])
+def api_consultation(identifiant):
+    if request.method == "DELETE":
+        consultation = _consultation(identifiant, ecriture=True)
+        if not m_projets.peut_administrer(getattr(request, "role_theme", None)):
+            return jsonify({"erreur": "Seul un administrateur peut supprimer."}), 403
+        m_consultations.supprimer_consultation(identifiant)
+        return jsonify({"ok": True})
+    if request.method == "PUT":
+        _consultation(identifiant, ecriture=True)
+        return jsonify(m_consultations.maj_consultation(identifiant,
+                                                        request.get_json(silent=True) or {}))
+    consultation = _consultation(identifiant)
+    consultation["resultats"] = (m_consultations.resultats(identifiant)
+                                 if consultation["statut"] == "close"
+                                 or m_projets.peut_administrer(
+                                     getattr(request, "role_theme", None)) else [])
+    return jsonify(consultation)
+
+
+@app.route("/api/consultations/<identifiant>/resultats")
+def api_resultats(identifiant):
+    consultation = _consultation(identifiant)
+    return jsonify({"resultats": m_consultations.resultats(identifiant)})
+
+
+@app.route("/api/consultations/<identifiant>/ouvrir", methods=["POST"])
+def api_ouvrir_consultation(identifiant):
+    """Envoie un lien personnel à chaque personne à consulter."""
+    consultation = _consultation(identifiant, ecriture=True)
     if not m_projets.peut_administrer(getattr(request, "role_theme", None)):
         return jsonify({"erreur": "Seul un administrateur du groupe peut ouvrir un vote."}), 403
-    projet = theme.get("projet") or ""
-
-    if scrutin == "projet":
-        votants = m_projets.membres_du_projet(projet)
-        votants = [{"compte": v["compte"], "email": v["email"]} for v in votants]
-    else:
-        votants = [{"compte": v["compte"], "email": v["email"]}
-                   for v in m_projets.membres_du_theme(identifiant)]
-        if not votants:
-            votants = [{"compte": v["compte"], "email": v["email"]}
-                       for v in m_projets.membres_du_projet(projet)]
-    votants = [v for v in votants if v["email"]]
-
-    deja = {b["compte"] for b in m_invitations.lister_bulletins(decision)}
-    votants = [v for v in votants if v["compte"] not in deja]
+    if consultation["statut"] != "brouillon":
+        return jsonify({"erreur": "Cette consultation est déjà ouverte (ou fermée)."}), 400
+    corps = request.get_json(silent=True) or {}
+    scrutin = "projet" if corps.get("scrutin") == "projet" else "groupe"
+    theme = m_atelier.lire_theme(consultation["theme"])
+    votants = _votants(theme, scrutin)
+    if not votants:
+        return jsonify({"erreur": "Personne à consulter : les personnes visées n'ont pas "
+                                  "d'adresse de courriel."}), 400
     envoyes = []
     for votant in votants:
-        bulletin = m_invitations.creer_bulletin(decision, identifiant, votant["compte"],
-                                                votant["email"], scrutin)
-        sujet, texte = m_invitations.courriel_vote(bulletin, dec["intitule"],
-                                                   dec.get("detail") or "",
-                                                   theme["titre"], scrutin)
+        bulletin = m_consultations.creer_bulletin(identifiant, consultation["theme"],
+                                                  votant["compte"], votant["email"], scrutin)
+        sujet, texte = m_consultations.courriel_consultation(bulletin, consultation,
+                                                             theme["titre"])
         m_equipe.envoyer_courriel(bulletin["email"], sujet, texte)
         envoyes.append(bulletin["email"])
-    m_atelier.maj_decision(identifiant, decision, {"statut": "en_vote"}, _qui())
-    m_atelier.journaliser(identifiant, _qui(), "vote_ouvert", decision,
-                          f"{scrutin} · {len(envoyes)} bulletin(s)")
+    m_consultations.ouvrir_consultation(identifiant, scrutin)
+    m_atelier.journaliser(consultation["theme"], _qui(), "consultation_ouverte", identifiant,
+                          f"{scrutin} · {len(envoyes)} lien(s)")
     return jsonify({"scrutin": scrutin, "envoyes": envoyes,
-                    "bulletins": m_invitations.lister_bulletins(decision)}), 201
+                    "consultation": m_consultations.lire_consultation(identifiant)}), 201
+
+
+@app.route("/api/consultations/<identifiant>/fermer", methods=["POST"])
+def api_fermer_consultation(identifiant):
+    consultation = _consultation(identifiant, ecriture=True)
+    if not m_projets.peut_administrer(getattr(request, "role_theme", None)):
+        return jsonify({"erreur": "Seul un administrateur peut clore la consultation."}), 403
+    m_consultations.fermer_consultation(identifiant)
+    m_atelier.journaliser(consultation["theme"], _qui(), "consultation_close", identifiant)
+    return jsonify(m_consultations.lire_consultation(identifiant))
 
 
 @app.route("/api/votes/<jeton>", methods=["GET", "POST"])
 def api_vote(jeton):
-    """Le lien de vote : la personne vote une fois, et le dépouillement reste anonyme."""
-    bulletin = m_invitations.lire_bulletin(jeton)
+    """Le lien personnel reçu par courriel : on répond UNE fois."""
+    bulletin = m_consultations.lire_bulletin(jeton)
     if not bulletin:
-        return jsonify({"erreur": "Ce lien de vote n'existe pas."}), 404
-    theme = m_atelier.lire_theme(bulletin["theme"])
-    dec = next((d for d in m_atelier.lister_decisions(bulletin["theme"])
-                if d["id"] == bulletin["decision"]), None)
-    if not dec:
-        return jsonify({"erreur": "Cette décision n'existe plus."}), 404
+        return jsonify({"erreur": "Ce lien n'existe pas."}), 404
+    consultation = m_consultations.lire_consultation(bulletin["consultation"])
+    if not consultation:
+        return jsonify({"erreur": "Cette consultation n'existe plus."}), 404
+    theme = m_atelier.lire_theme(consultation["theme"])
     if request.method == "GET":
-        return jsonify({"intitule": dec["intitule"], "detail": dec.get("detail") or "",
-                        "groupe": theme["titre"] if theme else "",
-                        "scrutin": bulletin["scrutin"],
-                        "deja_vote": bool(bulletin["vote_le"])})
+        return jsonify({"consultation": {
+            "intitule": consultation["intitule"], "detail": consultation["detail"],
+            "type": consultation["type"], "statut": consultation["statut"],
+            "questions": consultation["questions_detaillees"]},
+            "groupe": theme["titre"] if theme else "",
+            "scrutin": bulletin["scrutin"],
+            "deja_repondu": bool(bulletin["repondu_le"])})
     corps = request.get_json(silent=True) or {}
-    valeur = (corps.get("valeur") or "").lower()
-    if valeur not in ("pour", "contre", "neutre"):
-        return jsonify({"erreur": "Choisissez « pour », « contre » ou « neutre »."}), 400
     try:
-        m_invitations.enregistrer_vote(jeton, valeur)
-        # Le VOTE lui-même reste anonyme : on ne garde qu'une empreinte (voir atelier.voter).
-        resultat = m_atelier.voter(bulletin["theme"], bulletin["decision"],
-                                   bulletin["compte"], valeur)
+        resultat = m_consultations.enregistrer_reponses(jeton, corps.get("reponses") or {})
     except ValueError as erreur:
         return jsonify({"erreur": str(erreur)}), 400
-    return jsonify({"ok": True, "comptes": (resultat or {}).get("comptes", {})})
+    m_atelier.journaliser(consultation["theme"], "un participant", "consultation_repondue",
+                          consultation["id"], consultation["intitule"])
+    return jsonify(resultat)
 
 
 @app.route("/api/notifications", methods=["PUT"])
@@ -867,6 +933,7 @@ def principal():
     m_atelier.initialiser()
     m_projets.initialiser()
     m_invitations.initialiser()
+    m_consultations.initialiser()
     m_equipe.initialiser()
     m_equipe.demarrer_le_facteur()          # les alertes partent en arrière-plan
     # `threaded=True` : indispensable — une connexion temps réel occupe un fil, et les autres

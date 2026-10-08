@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import secrets
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -47,15 +48,28 @@ def _identifiant(prefixe: str) -> str:
     return prefixe + "-" + "".join(secrets.choice(alphabet) for _ in range(11))
 
 
-def connexion() -> sqlite3.Connection:
+@contextmanager
+def connexion():
+    """Une connexion SQLite, REFERMÉE à la sortie.
+
+    Sans la fermeture explicite, chaque appel à la base laissait un descripteur de
+    fichier ouvert : le service a fini par en avoir 509 ouverts et saturer la limite
+    système (« Too many open files », constat du 08/10/2026 — plus rien ne marchait :
+    ni la création d'une note, ni la suppression d'une décision).
+    """
     DONNEES.mkdir(parents=True, exist_ok=True)
     base = sqlite3.connect(BASE, timeout=15)
     base.row_factory = sqlite3.Row
-    base.execute("PRAGMA journal_mode=WAL")
-    base.execute("PRAGMA foreign_keys=ON")
-    return base
-
-
+    try:
+        base.execute("PRAGMA journal_mode=WAL")
+        base.execute("PRAGMA foreign_keys=ON")
+        yield base
+        base.commit()
+    except Exception:
+        base.rollback()
+        raise
+    finally:
+        base.close()
 SCHEMA = """
 create table if not exists projets (
     id text primary key, nom text not null, description text default '',

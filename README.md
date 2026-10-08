@@ -28,7 +28,7 @@ Deux idées gouvernent l'application :
 | Où mettre les documents de travail ? | Dans le groupe, ou dans le projet (comptes rendus de réunion). Chacun les télécharge ; ils ne s'affichent jamais dans le navigateur, par sécurité. |
 | Comment savoir ce qui a été tranché ? | Les **décisions** : proposées, puis **adoptées** ou **rejetées**, avec l'auteur et la date. Chacun vote une fois, **anonymement**. |
 | Comment être prévenu sans y passer sa journée ? | Chacun choisit, **projet par projet et groupe par groupe**, s'il veut un courriel — ou rien. |
-| Comment voter sans se déplacer ? | L'administrateur du groupe **ouvre le vote** : un **lien personnel** part par courriel à chaque votant (membres du groupe, ou tout le projet). **Une personne, une voix**, et les votes restent **anonymes** dans le dépouillement. |
+| Comment décider, ou simplement consulter ? | Un **vote** tranche une question (oui / non) ; un **sondage** éclaire la réflexion (plusieurs questions, plusieurs types de réponses). L'administrateur du groupe **ouvre** la consultation : chaque personne reçoit un **lien personnel**, **une personne = une réponse**, et le dépouillement reste **anonyme** (barres, moyenne, nuage de mots). |
 | Et la traçabilité ? | Le **journal** de chaque groupe dit qui a fait quoi et quand ; rien ne s'efface. |
 
 ---
@@ -78,7 +78,8 @@ ouvre le groupe, avec **les mêmes six outils pour tous** :
 | **Pages** | des pages de travail avec un traitement de texte simple (comptes rendus, procédures) |
 | **Discussion** | le fil du groupe |
 | **Documents** | les fichiers de travail, téléchargeables par tous |
-| **Décisions** | proposer, discuter, voter (anonyme), adopter ou rejeter |
+| **Votes et sondages** | **un vote** = une question, oui ou non (décision collective) ; **un sondage** = plusieurs questions, avec le type de réponse qui convient : choix unique, cases à cocher, liste déroulante, échelle de 1 à 5, un mot (nuage de mots). On choisit **qui l'on consulte** (le groupe ou tout le projet), chacun reçoit un **lien personnel par courriel**, et les réponses restent **anonymes** |
+
 | **Journal** | qui a fait quoi, quand — **réservé aux administrateurs du groupe** |
 
 Le **cadre de travail** du projet se lit en cliquant le **nom du projet**, en haut : tout le
@@ -100,6 +101,9 @@ ou pour n'y laisser qu'un droit de lecture.
 | **Administrateur du projet** | tout : membres, invitations, groupes, cadre de travail, rôles |
 | **Membre du projet** | écrire dans la discussion du projet, participer aux groupes, lire — **sauf le journal des groupes** |
 | **Visiteur du projet** | voir la discussion et les groupes, **sans rien modifier** ni voir le journal |
+
+Un **vote** est ouvert par un administrateur du groupe ; les **résultats** sont visibles par
+tous **une fois la consultation close** (et à tout moment par les administrateurs).
 | **Rôle dans un groupe** | l'emporte sur le rôle du projet : administrateur, membre participant ou visiteur |
 
 **Seul un administrateur du projet crée des groupes** (et seul un administrateur du groupe
@@ -114,7 +118,8 @@ serveur.py            API + interface (Flask) ; contrôle des rôles
 moteur/atelier.py     groupes, notes, décisions, documents, journal, diffusion temps réel
 moteur/equipe.py      comptes, discussions, pages, cadre de travail, alertes par courriel
 moteur/projets.py     projets, membres, rôles, notifications
-moteur/invitations.py invitations par courriel (liens personnels) et bulletins de vote
+moteur/invitations.py invitations par courriel (liens personnels à usage unique)
+moteur/consultations.py votes et sondages : questions, bulletins, réponses, dépouillement
 web/index.html        l'application (projets, groupes, outils)
 web/synergie.js       logique de l'application et du temps réel
 web/synergie.css      habillage (lisibilité, accessibilité)
@@ -175,8 +180,12 @@ Toutes les routes exigent le **jeton du navigateur** (`X-Synergie-Jeton`, ou le 
 | POST | `/api/connexion` | **entrer avec son identifiant personnel** → jeton + cookie |
 | GET / POST | `/api/projets/<id>/invitations` | les invitations du projet / **inviter par adresse** |
 | GET / POST | `/api/invitations/<jeton>` | ouvrir le lien reçu / **activer son compte** (prénom + identifiant) |
-| POST | `/api/themes/<id>/decisions/<d>/scrutin` | **ouvrir le vote** (membres du groupe ou tout le projet) |
-| GET / POST | `/api/votes/<jeton>` | le lien de vote : lire la question / **voter une fois** |
+| GET / POST | `/api/themes/<id>/consultations` | les votes et sondages du groupe / en créer un |
+| GET / PUT / DELETE | `/api/consultations/<id>` | lire (avec le dépouillement) / modifier / supprimer |
+| POST | `/api/consultations/<id>/ouvrir` | **envoyer les liens** (membres du groupe, ou tout le projet) |
+| POST | `/api/consultations/<id>/fermer` | clore la consultation |
+| GET | `/api/consultations/<id>/resultats` | le dépouillement, question par question |
+| GET / POST | `/api/votes/<jeton>` | le lien personnel : lire les questions / **répondre une fois** |
 | GET / PUT | `/api/comptes/moi` | mon compte, mes projets, mes rôles |
 | PUT | `/api/notifications` | mes alertes (projet et groupes) |
 | POST | `/api/alertes/essai` | essai d'envoi de courriel |
@@ -191,10 +200,11 @@ Toutes les routes exigent le **jeton du navigateur** (`X-Synergie-Jeton`, ou le 
 /home/ubuntu/synergie-venv/bin/python tests/tester_synergie.py
 ```
 
-60 contrôles, sans réseau : projets, membres, rôles et droits, notifications, invitations
-par courriel (lien personnel, activation, identifiant unique), votes par lien (une personne,
-une voix), atelier (groupes, notes et mise en forme, décisions, documents, votes anonymes,
-diffusion temps réel) et équipe (comptes, discussions, pages, cadre de travail, alertes).
+72 contrôles, sans réseau : projets, membres, rôles et droits, notifications, invitations
+par courriel (lien personnel, activation, identifiant unique), votes et sondages (questions
+de tous types, liens personnels, une réponse par personne, dépouillement anonyme), atelier
+(groupes, notes et mise en forme, documents, diffusion temps réel) et équipe (comptes,
+discussions, pages, cadre de travail, alertes).
 
 ---
 

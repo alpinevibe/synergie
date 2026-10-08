@@ -1,5 +1,28 @@
 # Synergie — état du projet
 
+## 8 octobre 2026 (fin de journée) — votes et sondages, et une panne réparée
+
+1. **La panne d'abord.** Le service laissait fuir une **connexion à la base par appel** :
+   au bout de quelques heures, 509 connexions restaient ouvertes et la limite système
+   (« Too many open files ») bloquait tout — d'où « la création d'une note ne marche plus »
+   et « la suppression d'une décision ne marche pas ». Chaque connexion est maintenant
+   **refermée** à la sortie (les quatre moteurs), la limite de descripteurs du service est
+   relevée, et les deux gestes remarchent.
+2. **Les décisions deviennent « Votes et sondages ».** Dans un groupe, on crée :
+   - un **VOTE** : UNE question, réponse **oui / non** — une prise de décision collective ;
+   - un **SONDAGE** : PLUSIEURS questions, avec le type de réponse qui convient — **choix
+     unique**, **cases à cocher**, **liste déroulante**, **échelle de 1 à 5**, **un mot**
+     (nuage de mots) : une consultation collective pour aider le groupe à réfléchir.
+   On choisit **qui l'on consulte** (les membres du groupe, ou tout le projet) ; chaque
+   personne reçoit un **lien personnel par courriel** : **une personne, une réponse**, et le
+   dépouillement reste **anonyme** (barres, moyenne, nuage de mots).
+3. Au passage : supprimer un groupe ou un projet emporte désormais **tout** son contenu
+   (consultations, questions, réponses, bulletins), et le compte-rendu de l'onglet affiche
+   des compteurs sans mélanger les unités.
+
+Tests : **72 contrôles verts**. Vérifié dans un vrai navigateur : création d'un sondage
+(échelle + nuage), réponse par lien personnel, dépouillement (moyenne 4/5, nuage « clair »).
+
 ## 8 octobre 2026 (après-midi) — identité, invitations, votes et confort d'usage
 
 Sept améliorations demandées par le cadre, appliquées le jour même :
