@@ -1,5 +1,24 @@
 # Synergie — état du projet
 
+## 8 octobre 2026 (soirée) — liens à copier, alerte d'accueil, envois suspendus
+
+1. **Les envois de courriel sont SUSPENDUS** (`SYNERGIE_ENVOI=non` dans
+   `/srv/bases/config/mail.conf`) : nos messages partent bien (Laposte les reçoit) mais la
+   messagerie du CHU les bloque. Rien n'est perdu : tout passe par des **liens à copier**.
+   Le domaine est authentifié (SPF, DKIM `ovhmo-selector-1/-2`, DMARC `p=none`) ; il reste
+   à obtenir l'accord du CHU ou à passer par un service d'envoi dédié.
+2. **ALERTE sur la page d'accueil du projet** : à l'ouverture, une personne voit **ce qui
+   l'attend** — les votes et sondages ouverts auxquels elle n'a pas répondu — et **répond
+   d'un clic**, sans courriel. L'alerte disparaît dès qu'elle a répondu.
+3. **Invitations par LIEN PERSONNEL À COPIER** : pour le **projet** comme pour **un
+   groupe** (avec son propre rôle dans le groupe), Synergie affiche un lien propre à chaque
+   personne, à copier et à transmettre par le canal de son choix. Le lien ne sert qu'une
+   fois, vaut 30 jours, et l'activation inscrit la personne au projet **et** au groupe.
+
+Tests : **80 contrôles verts**. Vérifié au navigateur : alerte d'accueil, réponse sans
+courriel, création des liens d'invitation (projet et groupe), activation d'une invitation de
+groupe (projet + rôle de groupe).
+
 ## 8 octobre 2026 (fin de journée) — votes et sondages, et une panne réparée
 
 1. **La panne d'abord.** Le service laissait fuir une **connexion à la base par appel** :

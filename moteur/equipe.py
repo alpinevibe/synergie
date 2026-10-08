@@ -432,10 +432,27 @@ def _message(destinataire: str, sujet: str, corps: str, expediteur: str) -> byte
     return message.as_bytes(policy=policy.SMTP)
 
 
+def envoi_actif() -> bool:
+    """Les envois de courriel sont-ils ouverts ?
+
+    Réglage « SYNERGIE_ENVOI » dans la configuration d'envoi (`mail.conf`) : « non »
+    suspend TOUS les envois de Synergie (demande du 08/10/2026, le temps que la
+    messagerie du CHU accepte nos messages). Rien n'est perdu : les liens personnels
+    restent disponibles dans l'application (« Liens »), à transmettre à la main.
+    """
+    config = _config_mail() or {}
+    return str(config.get("SYNERGIE_ENVOI", "oui")).strip().lower() not in (
+        "non", "no", "0", "false", "off")
+
+
 def _envoyer(destinataire: str, sujet: str, corps: str) -> bool:
     config = _config_mail()
     if not config or not config.get("SMTP_HOTE"):
         _noter("configuration d'envoi absente : alerte non partie")
+        return False
+    if not envoi_actif():
+        _noter(f"envois suspendus : message pour {destinataire} non envoyé "
+               "(les liens restent disponibles dans Synergie)")
         return False
     try:
         fichier = _ecrire_config_msmtp(config)

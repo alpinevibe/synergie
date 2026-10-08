@@ -275,6 +275,41 @@ def lister_bulletins(consultation: str) -> list[dict]:
         return [dict(l) for l in lignes]
 
 
+def bulletin_de(consultation: str, compte: str) -> dict | None:
+    """Le bulletin d'une personne pour cette consultation (None si elle n'est pas consultée)."""
+    with connexion() as base:
+        ligne = base.execute("select * from bulletins where consultation = ? and compte = ?",
+                             (consultation, compte)).fetchone()
+    return dict(ligne) if ligne else None
+
+
+def consultations_en_attente(comptes: list[str], projet: str = "") -> list[dict]:
+    """Les consultations ouvertes auxquelles ces personnes n'ont pas encore répondu.
+
+    C'est ce qui s'affiche en alerte à l'ouverture du projet : « vous n'avez pas encore
+    répondu à ce vote ».
+    """
+    if not comptes:
+        return []
+    marques = ",".join("?" for _ in comptes)
+    with connexion() as base:
+        lignes = base.execute(
+            f"select c.*, t.titre as groupe, t.projet as projet from consultations c"
+            f" join bulletins b on b.consultation = c.id"
+            f" join themes t on t.id = c.theme"
+            f" where b.compte in ({marques}) and b.repondu_le = '' and c.statut = 'ouverte'"
+            f" group by c.id order by c.ouverte_le desc", comptes).fetchall()
+    attentes = []
+    for ligne in lignes:
+        consultation = dict(ligne)
+        if projet and consultation.get("projet") != projet:
+            continue
+        consultation["libelle_type"] = ("Vote (oui / non)" if consultation["type"] == "vote"
+                                        else "Sondage")
+        attentes.append(consultation)
+    return attentes
+
+
 def enregistrer_reponses(jeton: str, reponses: dict) -> dict:
     """Enregistre les réponses d'un bulletin. Un bulletin ne sert QU'UNE fois.
 

@@ -66,7 +66,8 @@ create table if not exists invitations (
     id text primary key, email text not null, prenom text default '',
     projet text not null, role text default 'membre', jeton text not null unique,
     note text default '', cree_le text not null, expire_le text not null,
-    utilise_le text default '', cree_par text default '');
+    utilise_le text default '', cree_par text default '',
+    theme text default '', role_theme text default '');
 create index if not exists invitations_projet on invitations (projet);
 """
 
@@ -74,6 +75,12 @@ create index if not exists invitations_projet on invitations (projet);
 def initialiser() -> None:
     with connexion() as base:
         base.executescript(SCHEMA)
+        # Colonnes ajoutées après coup : une invitation peut viser UN GROUPE.
+        colonnes = {l[1] for l in base.execute("pragma table_info(invitations)")}
+        for nom, definition in (("theme", "text default ''"),
+                                ("role_theme", "text default ''")):
+            if nom not in colonnes:
+                base.execute(f"alter table invitations add column {nom} {definition}")
 
 
 def _ligne(table: str, cle: str, valeur: str) -> dict | None:
@@ -84,7 +91,8 @@ def _ligne(table: str, cle: str, valeur: str) -> dict | None:
 
 # ------------------------------------------------------------------ invitations
 def creer_invitation(email: str, prenom: str, projet: str, role: str,
-                     note: str = "", qui: str = "") -> dict:
+                     note: str = "", qui: str = "", theme: str = "",
+                     role_theme: str = "") -> dict:
     """Prépare une invitation (elle est envoyée par l'appelant, qui sait quelle adresse)."""
     adresse = (email or "").strip().lower()
     if "@" not in adresse or "." not in adresse.split("@")[-1]:
@@ -95,16 +103,18 @@ def creer_invitation(email: str, prenom: str, projet: str, role: str,
         "projet": projet, "role": role or "membre", "jeton": _identifiant("inv"),
         "note": (note or "").strip()[:200], "cree_le": _iso(moment),
         "expire_le": _iso(moment + timedelta(days=DUREE_JOURS)), "utilise_le": "",
-        "cree_par": qui or "",
+        "cree_par": qui or "", "theme": theme or "", "role_theme": role_theme or "",
     }
     with connexion() as base:
-        # Une invitation en attente pour la même adresse et le même projet est remplacée.
-        base.execute("delete from invitations where email = ? and projet = ? and utilise_le = ''",
-                     (adresse, projet))
+        # Une invitation en attente pour la même adresse (et le même groupe) est remplacée.
+        parametres = (adresse, projet) + ((theme,) if theme else ())
+        base.execute("delete from invitations where email = ? and projet = ? and utilise_le = ''"
+                     + (" and theme = ?" if theme else ""), parametres)
         base.execute(
             "insert into invitations (id, email, prenom, projet, role, jeton, note, cree_le,"
-            " expire_le, utilise_le, cree_par) values (:id, :email, :prenom, :projet, :role,"
-            " :jeton, :note, :cree_le, :expire_le, :utilise_le, :cree_par)", invitation)
+            " expire_le, utilise_le, cree_par, theme, role_theme) values (:id, :email,"
+            " :prenom, :projet, :role, :jeton, :note, :cree_le, :expire_le, :utilise_le,"
+            " :cree_par, :theme, :role_theme)", invitation)
     return invitation
 
 
@@ -132,15 +142,25 @@ def lister_invitations(projet: str) -> list[dict]:
         return [dict(l) for l in lignes]
 
 
-def courriel_invitation(invitation: dict, nom_projet: str) -> tuple[str, str]:
+def lien_invitation(jeton: str) -> str:
+    """L'adresse à transmettre : chaque personne a SON lien (usage unique)."""
+    from . import equipe as m_equipe
+
+    return f"{m_equipe.adresse_site()}/#invitation={jeton}"
+
+
+def courriel_invitation(invitation: dict, nom_projet: str,
+                        nom_groupe: str = "") -> tuple[str, str]:
     """Le texte du courriel d'invitation (objet, corps)."""
     from . import equipe as m_equipe
 
-    lien = f"{m_equipe.adresse_site()}/#invitation={invitation['jeton']}"
-    sujet = f"[Synergie] Vous êtes invité(e) à rejoindre « {nom_projet} »"
+    lien = lien_invitation(invitation["jeton"])
+    ou = (f"le groupe « {nom_groupe} » du projet « {nom_projet} »" if nom_groupe
+          else f"le projet « {nom_projet} »")
+    sujet = f"[Synergie] Vous êtes invité(e) à rejoindre {ou}"
     corps = (
         f"Bonjour,\n\n"
-        f"Vous êtes invité(e) à rejoindre le projet « {nom_projet} » dans Synergie.\n\n"
+        f"Vous êtes invité(e) à rejoindre {ou} dans Synergie.\n\n"
         f"Pour activer votre accès, ouvrez ce lien :\n{lien}\n\n"
         "Vous y choisirez votre prénom et votre identifiant personnel. Ensuite, vous vous\n"
         "connecterez avec cet identifiant : gardez-le pour vous, il vous identifie.\n\n"

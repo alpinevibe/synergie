@@ -20,7 +20,8 @@
   let membresProjet = [];
   let cadreProjet = null;
   let invitationEnCours = null;        // invitation ouverte depuis un lien de courriel
-  let jetonVote = null;                // lien de vote en cours              // cadre de travail du projet (lu en cliquant son nom)
+  let jetonVote = null;                // lien de vote en cours (venu du courriel)
+  let consultationRepondue = null;      // consultation à laquelle on répond depuis l'app              // cadre de travail du projet (lu en cliquant son nom)
   let membresTheme = [];
   let fluxGeneral = null;                // flux temps réel du projet
   let groupes = [];                      // groupes du projet
@@ -151,12 +152,45 @@
     $('#nouveau-theme-bloc').classList.add('cache');
     afficherThemes();
     afficherMembresProjet();
+    chargerAttente();
     chargerCadre();
     chargerChatGeneral();
     brancherFluxGeneral();
     if (pousser && location.hash !== '#p=' + identifiant) {
       history.replaceState(null, '', '#p=' + identifiant);
     }
+  }
+
+  /** Ce qui attend la personne ici : votes et sondages sans réponse (consigne du 08/10). */
+  async function chargerAttente() {
+    const zone = $('#attente');
+    if (!zone) return;
+    zone.innerHTML = '';
+    zone.classList.add('cache');
+    if (!projet) return;
+    let attentes = [];
+    try { attentes = (await appel('/api/projets/' + projet.id + '/attente')).attentes || []; }
+    catch (erreur) { return; }
+    if (!attentes.length) return;
+    const titre = element('p', { classe: 'alerte-titre', texte:
+      attentes.length === 1 ? 'Une consultation vous attend'
+        : attentes.length + ' consultations vous attendent' });
+    zone.append(titre);
+    attentes.forEach((attente) => {
+      const ligne = element('div', { classe: 'alerte-ligne' });
+      poser(ligne,
+        element('span', { classe: 'alerte-type', texte:
+          attente.type === 'vote' ? '🗳' : '📊' }),
+        element('span', { classe: 'alerte-texte', texte:
+          attente.intitule + ' — ' + attente.groupe }),
+        (() => {
+          const bouton = element('button', { classe: 'principal petit', texte: 'Répondre' });
+          bouton.addEventListener('click', () => repondreDansApplication(attente.id));
+          return bouton;
+        })());
+      zone.append(ligne);
+    });
+    zone.classList.remove('cache');
   }
 
   function libelleRole(role) {
@@ -1350,11 +1384,35 @@
 
   // ---------------------------------------------------------------- VOTE
   /** Le lien de vote reçu par courriel : une personne, une voix. */
+  /** Répondre depuis l'application : la personne est déjà reconnue, pas besoin de lien. */
+  async function repondreDansApplication(consultationId) {
+    try {
+      const donnees = await appel('/api/consultations/' + consultationId + '/repondre');
+      consultationRepondue = consultationId;
+      jetonVote = null;
+      afficherQuestionnaire(donnees);
+    } catch (erreur) {
+      toast(erreur.message);
+    }
+  }
+
   /** Répondre à un vote (oui / non) ou à un sondage (plusieurs questions). */
   async function ouvrirVote(jeton) {
     try {
       const donnees = await appel('/api/votes/' + encodeURIComponent(jeton));
       jetonVote = jeton;
+      consultationRepondue = null;
+      afficherQuestionnaire(donnees);
+    } catch (erreur) {
+      toast(erreur.message);
+      history.replaceState(null, '', location.pathname);
+      demarrer();
+    }
+  }
+
+  /** La fenêtre de réponse, commune au lien personnel et à la réponse depuis l'application. */
+  function afficherQuestionnaire(donnees) {
+    {
       const consultation = donnees.consultation || {};
       $('#titre-vote').textContent = (consultation.type === 'vote' ? 'Vote' : 'Sondage')
         + ' — ' + (donnees.groupe || '');
@@ -1375,10 +1433,6 @@
                  : 'Répondez, puis envoyez.');
       afficherVue('vote');
       $('#vue-vote').classList.remove('cache');
-    } catch (erreur) {
-      toast(erreur.message);
-      history.replaceState(null, '', location.pathname);
-      demarrer();
     }
   }
 
@@ -1460,12 +1514,18 @@
 
   async function envoyerReponses() {
     $('#vote-etat').textContent = 'Enregistrement…';
+    const adresse = consultationRepondue
+      ? '/api/consultations/' + consultationRepondue + '/repondre'
+      : '/api/votes/' + jetonVote;
     try {
-      await appel('/api/votes/' + jetonVote,
-        { methode: 'POST', corps: { reponses: lireReponses() } });
+      await appel(adresse, { methode: 'POST', corps: { reponses: lireReponses() } });
       $('#btn-envoyer-reponses').disabled = true;
       $('#vote-etat').textContent = 'Vos réponses sont enregistrées. Merci !';
       toast('Réponses envoyées.');
+      if (consultationRepondue) {
+        await chargerAttente();
+        await chargerConsultations();
+      }
     } catch (erreur) {
       $('#vote-etat').textContent = erreur.message;
     }
@@ -1876,8 +1936,12 @@
     if (!projet) return;
     const menu = $('#membre-role');
     menu.innerHTML = '';
-    roles.forEach((r) => menu.append(element('option', { texte: r.libelle,
-      attrs: { value: r.cle, title: r.description } })));
+    roles.forEach((r) => {
+      const option = element('option', { texte: r.libelle,
+        attrs: { value: r.cle, title: r.description } });
+      if (r.cle === 'membre') option.selected = true;
+      menu.append(option);
+    });
     if (!membresProjet.length) await rafraichirProjet(); else afficherMembresProjet();
     $('#vue-membres').classList.remove('cache');
   }
@@ -1893,10 +1957,34 @@
       await rafraichirProjet();
       toast(donnees.envoye
         ? 'Invitation envoyée à ' + email + '.'
-        : "Invitation enregistrée, mais le courriel n'est pas parti (voir le journal des alertes).");
+        : 'Lien d\'invitation créé : copiez-le ci-dessous pour le transmettre.');
     } catch (erreur) {
       toast(erreur.message);
     }
+  }
+
+  /** Une invitation : son adresse, son rôle, et SON lien personnel à copier. */
+  function ligneInvitation(invitation, message) {
+    const ligne = element('div', { classe: 'invitation' });
+    const infos = element('div', { classe: 'invitation-tete' });
+    poser(infos,
+      element('strong', { texte: invitation.email || invitation.prenom || 'invitation' }),
+      element('span', { classe: 'etiquette-role', texte: invitation.libelle_role
+        || (roles.find((r) => r.cle === (invitation.role_theme || invitation.role)) || {}).libelle
+        || '' }),
+      element('span', { classe: 'aide', texte: 'créé ' + quand(invitation.cree_le)
+        + (invitation.theme ? ' · pour ce groupe' : '') }));
+    ligne.append(infos);
+    if (message) ligne.append(element('p', { classe: 'aide fin', texte: message }));
+    const champ = element('input', { classe: 'lien-invitation',
+      attrs: { readonly: 'readonly', value: invitation.lien || '' } });
+    const copier = element('button', { classe: 'discret petit', texte: 'Copier le lien' });
+    copier.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(invitation.lien); toast('Lien copié.'); }
+      catch (e) { champ.select(); document.execCommand('copy'); toast('Lien copié.'); }
+    });
+    poser(ligne, champ, copier);
+    return ligne;
   }
 
   /** Les invitations en attente (celles dont le lien n'a pas encore été utilisé). */
@@ -1907,32 +1995,63 @@
     let invitations = [];
     try { invitations = (await appel('/api/projets/' + projet.id + '/invitations')).invitations || []; }
     catch (erreur) { return; }
-    const attente = invitations.filter((i) => !i.utilise_le && i.expire_le > new Date().toISOString().slice(0, 19) + 'Z');
+    const maintenant_ = new Date().toISOString().slice(0, 19) + 'Z';
+    const attente = invitations.filter((i) => !i.utilise_le && i.expire_le > maintenant_
+                                             && !i.theme);
     if (!attente.length) return;
     zone.append(element('p', { classe: 'aide',
-      texte: attente.length + ' invitation(s) en attente :' }));
-    attente.forEach((invitation) => {
-      const ligne = element('div', { classe: 'membre' });
-      poser(ligne,
-        element('strong', { texte: invitation.email }),
-        element('span', { classe: 'etiquette-role',
-          texte: (roles.find((r) => r.cle === invitation.role) || {}).libelle || invitation.role }),
-        element('span', { classe: 'aide', texte: 'invité ' + quand(invitation.cree_le) }));
-      zone.append(ligne);
-    });
+      texte: attente.length + ' invitation(s) en attente — copiez le lien et transmettez-le :' }));
+    attente.forEach((invitation) => zone.append(ligneInvitation(invitation)));
+  }
+
+  /** Inviter directement quelqu'un DANS CE GROUPE : un lien personnel à transmettre. */
+  async function inviterDansLeGroupe() {
+    const email = ($('#invitation-theme-email').value || '').trim();
+    if (!email) { $('#invitation-theme-email').focus(); return; }
+    try {
+      const donnees = await appel('/api/themes/' + theme.id + '/invitations',
+        { methode: 'POST', corps: { email, role: $('#invitation-theme-role').value } });
+      $('#invitation-theme-email').value = '';
+      await afficherInvitationsTheme(donnees.lien ? [donnees] : []);
+      toast('Lien d\'invitation créé : copiez-le pour le transmettre.');
+    } catch (erreur) {
+      toast(erreur.message);
+    }
+  }
+
+  async function afficherInvitationsTheme(recents = []) {
+    const zone = $('#invitations-theme');
+    if (!zone || !theme) return;
+    zone.innerHTML = '';
+    let invitations = [];
+    try { invitations = (await appel('/api/themes/' + theme.id + '/invitations')).invitations || []; }
+    catch (erreur) { return; }
+    const attente = invitations.filter((i) => !i.utilise_le);
+    attente.forEach((invitation) => zone.append(ligneInvitation(invitation,
+      'Ce lien ne sert qu\'une fois : en l\'ouvrant, la personne choisit son identifiant et '
+      + 'rejoint ce groupe.')));
   }
 
   function afficherMembresTheme() {
     const zone = $('#liste-membres-theme');
     zone.innerHTML = '';
     const administre = estAdministrateurTheme();
-    if (administre) remplirMembresThemesDisponibles();
-    else $('#inviter-theme').classList.add('cache');
+    if (administre) {
+      remplirMembresThemesDisponibles();
+      afficherInvitationsTheme();
+    } else {
+      $('#inviter-theme').classList.add('cache');
+      $('#inviter-theme-externe').classList.add('cache');
+    }
     const menu = $('#membre-theme-role');
     if (menu.options.length !== roles.length) {
       menu.innerHTML = '';
-      roles.forEach((r) => menu.append(element('option', { texte: r.libelle,
-        attrs: { value: r.cle, title: r.description } })));
+      roles.forEach((r) => {
+        const option = element('option', { texte: r.libelle,
+          attrs: { value: r.cle, title: r.description } });
+        if (r.cle === 'membre') option.selected = true;
+        menu.append(option);
+      });
     }
     if (!membresTheme.length) {
       zone.append(element('p', { classe: 'aide', texte:
@@ -1974,6 +2093,15 @@
       menu.append(element('option', { texte: membre.prenom + ' (' + (membre.email || 'sans courriel') + ')',
         attrs: { value: membre.compte } }));
     });
+    const menuRoleExterne = $('#invitation-theme-role');
+    if (menuRoleExterne && !menuRoleExterne.options.length) {
+      roles.forEach((r) => {
+        const option = element('option', { texte: r.libelle,
+          attrs: { value: r.cle, title: r.description } });
+        if (r.cle === 'membre') option.selected = true;
+        menuRoleExterne.append(option);
+      });
+    }
     const possible = libres.length > 0;
     $('#inviter-theme').classList.toggle('cache', !possible);
     $('#inviter-theme-note').classList.toggle('cache', possible);
@@ -2122,6 +2250,7 @@
     $('#membres-theme-fermer').addEventListener('click', () =>
       $('#zone-membres-theme').classList.add('cache'));
     $('#membre-theme-ajouter').addEventListener('click', inviterAuTheme);
+    $('#invitation-theme-creer').addEventListener('click', inviterDansLeGroupe);
 
     $('#btn-retour').addEventListener('click', fermerTheme);
     $('#btn-renommer-theme').addEventListener('click', enregistrerTheme);

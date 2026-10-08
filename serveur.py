@@ -531,7 +531,10 @@ def api_mon_compte():
 def api_invitations(identifiant):
     projet = _projet(identifiant, ecriture=True)
     if request.method == "GET":
-        return jsonify({"invitations": m_invitations.lister_invitations(identifiant)})
+        invitations = m_invitations.lister_invitations(identifiant)
+        for invitation in invitations:
+            invitation["lien"] = m_invitations.lien_invitation(invitation["jeton"])
+        return jsonify({"invitations": invitations})
     corps = request.get_json(silent=True) or {}
     role = corps.get("role") or "membre"
     if role not in m_projets.ROLES:
@@ -542,12 +545,50 @@ def api_invitations(identifiant):
             corps.get("note", ""), _qui())
     except ValueError as erreur:
         return jsonify({"erreur": str(erreur)}), 400
-    sujet, texte = m_invitations.courriel_invitation(invitation, projet["nom"])
-    envoye = m_equipe.envoyer_courriel(invitation["email"], sujet, texte)
+    envoye = False
+    if m_equipe.envoi_actif():
+        sujet, texte = m_invitations.courriel_invitation(invitation, projet["nom"])
+        envoye = m_equipe.envoyer_courriel(invitation["email"], sujet, texte)
     m_atelier.journaliser("", _qui(), "invitation", identifiant,
                           f"{invitation['email']} · {m_projets.LIBELLES_ROLES[role]}",
                           diffuser_aussi=False)
-    return jsonify({"invitation": invitation, "envoye": envoye}), 201
+    return jsonify({"invitation": invitation, "envoye": envoye,
+                    "lien": m_invitations.lien_invitation(invitation["jeton"])}), 201
+
+
+@app.route("/api/themes/<identifiant>/invitations", methods=["GET", "POST"])
+def api_invitations_theme(identifiant):
+    """Inviter quelqu'un DIRECTEMENT dans un groupe : un lien personnel à transmettre."""
+    theme = _theme(identifiant, ecriture=True)
+    if not m_projets.peut_administrer(getattr(request, "role_theme", None)):
+        return jsonify({"erreur": "Seul un administrateur du groupe peut inviter."}), 403
+    projet = theme.get("projet") or ""
+    if request.method == "GET":
+        invitations = [i for i in m_invitations.lister_invitations(projet)
+                       if i.get("theme") == identifiant]
+        for invitation in invitations:
+            invitation["lien"] = m_invitations.lien_invitation(invitation["jeton"])
+        return jsonify({"invitations": invitations})
+    corps = request.get_json(silent=True) or {}
+    role_theme = corps.get("role") or "membre"
+    if role_theme not in m_projets.ROLES:
+        return jsonify({"erreur": "Rôle inconnu."}), 400
+    try:
+        invitation = m_invitations.creer_invitation(
+            corps.get("email", ""), corps.get("prenom", ""), projet,
+            corps.get("role_projet") or "membre", corps.get("note", ""), _qui(),
+            theme=identifiant, role_theme=role_theme)
+    except ValueError as erreur:
+        return jsonify({"erreur": str(erreur)}), 400
+    envoye = False
+    if m_equipe.envoi_actif():
+        sujet, texte = m_invitations.courriel_invitation(invitation, projet, theme["titre"])
+        envoye = m_equipe.envoyer_courriel(invitation["email"], sujet, texte)
+    m_atelier.journaliser(identifiant, _qui(), "invitation", theme["titre"],
+                          f"{invitation['email']} · {m_projets.LIBELLES_ROLES[role_theme]}",
+                          diffuser_aussi=False)
+    return jsonify({"invitation": invitation, "envoye": envoye,
+                    "lien": m_invitations.lien_invitation(invitation["jeton"])}), 201
 
 
 @app.route("/api/invitations/<jeton>", methods=["GET", "POST"])
@@ -576,6 +617,11 @@ def api_invitation(jeton):
     m_projets.definir_membre_projet(invitation["projet"], resultat["compte"]["id"],
                                     invitation["role"], notifier=True,
                                     ajoute_par="invitation")
+    # Une invitation peut viser un GROUPE : la personne y reçoit son rôle en entrant.
+    if invitation.get("theme"):
+        m_projets.definir_membre_theme(invitation["theme"], resultat["compte"]["id"],
+                                       invitation.get("role_theme") or "membre",
+                                       notifier=True, ajoute_par="invitation")
     m_invitations.marquer_utilisee(jeton)
     m_atelier.journaliser("", prenom, "invitation_activee", invitation["projet"],
                           invitation["email"], diffuser_aussi=False)
@@ -697,6 +743,55 @@ def api_ouvrir_consultation(identifiant):
                           f"{scrutin} · {len(envoyes)} lien(s)")
     return jsonify({"scrutin": scrutin, "envoyes": envoyes,
                     "consultation": m_consultations.lire_consultation(identifiant)}), 201
+
+
+@app.route("/api/projets/<identifiant>/attente")
+def api_attente_projet(identifiant):
+    """Ce qui ATTEND la personne à l'ouverture du projet : votes et sondages sans réponse."""
+    _projet(identifiant)
+    compte = _compte(requis=True)
+    attentes = m_consultations.consultations_en_attente([compte["id"]], identifiant)
+    details = []
+    for consultation in attentes:
+        details.append({"id": consultation["id"], "intitule": consultation["intitule"],
+                        "type": consultation["type"],
+                        "libelle_type": consultation["libelle_type"],
+                        "groupe": consultation["groupe"],
+                        "repondre": f"/api/consultations/{consultation['id']}/repondre"})
+    return jsonify({"attentes": details})
+
+
+@app.route("/api/consultations/<identifiant>/repondre", methods=["GET", "POST"])
+def api_repondre_consultation(identifiant):
+    """Répondre DEPUIS l'application (lien personnel ou simple connexion)."""
+    consultation = _consultation(identifiant)
+    compte = _compte(requis=True)
+    bulletin = m_consultations.bulletin_de(identifiant, compte["id"])
+    jeton = request.args.get("jeton") or ""
+    if jeton:
+        autre = m_consultations.lire_bulletin(jeton)
+        if not autre or autre["consultation"] != identifiant:
+            return jsonify({"erreur": "Ce lien ne correspond pas à cette consultation."}), 400
+        bulletin = autre
+    if not bulletin:
+        return jsonify({"erreur": "Vous n'êtes pas invité(e) à cette consultation."}), 403
+    if request.method == "GET":
+        return jsonify({"consultation": {"intitule": consultation["intitule"],
+                                         "detail": consultation["detail"],
+                                         "type": consultation["type"],
+                                         "statut": consultation["statut"],
+                                         "questions": consultation["questions_detaillees"]},
+                        "groupe": consultation["groupe"],
+                        "deja_repondu": bool(bulletin["repondu_le"])})
+    corps = request.get_json(silent=True) or {}
+    try:
+        resultat = m_consultations.enregistrer_reponses(bulletin["jeton"],
+                                                        corps.get("reponses") or {})
+    except ValueError as erreur:
+        return jsonify({"erreur": str(erreur)}), 400
+    m_atelier.journaliser(consultation["theme"], compte["prenom"], "consultation_repondue",
+                          identifiant, consultation["intitule"])
+    return jsonify(resultat)
 
 
 @app.route("/api/consultations/<identifiant>/liens")

@@ -167,6 +167,30 @@ def test_invitations_et_votes():
                     m_invitations.lire_invitation(invitation["jeton"])),
                 "le lien d'invitation ne sert qu'une fois")
 
+        # --- le LIEN à copier, et l'invitation DIRECTE dans un groupe ------------------
+        verifie(m_invitations.lien_invitation(invitation["jeton"]).endswith(
+                    "#invitation=" + invitation["jeton"]),
+                "chaque invitation donne un lien personnel à copier et à transmettre")
+        invitation_groupe = m_invitations.creer_invitation(
+            "collegue@exemple.fr", "Collegue", projet["id"], "membre",
+            qui="Tests", theme=theme["id"], role_theme="visiteur")
+        verifie(invitation_groupe["theme"] == theme["id"]
+                and invitation_groupe["role_theme"] == "visiteur",
+                "une invitation peut viser UN GROUPE, avec son propre rôle")
+        sujet, corps = m_invitations.courriel_invitation(invitation_groupe, projet["nom"],
+                                                         "Groupe de test")
+        verifie("Groupe de test" in corps and "rejoindre" in corps,
+                "le message d'invitation nomme le groupe quand il est visé")
+
+        # --- les ENVOIS SUSPENDUS (consigne du 08/10/2026) -----------------------------
+        verifie(isinstance(m_equipe.envoi_actif(), bool),
+                "l'envoi des courriels se règle (actif ou suspendu)")
+        vrai_envoi = m_equipe.envoyer_courriel
+        m_equipe.envoyer_courriel = lambda *a, **k: False
+        verifie(m_equipe.envoyer_courriel("x@y.fr", "s", "c") is False,
+                "envois suspendus : rien ne part, et l'application le dit")
+        m_equipe.envoyer_courriel = vrai_envoi
+
     finally:
         m_equipe.envoyer_courriel = vrai_envoi
         m_projets.supprimer_projet(projet["id"])
@@ -264,6 +288,16 @@ def test_consultations():
                                                        [], "Tests")
         verifie(orpheline["bulletins"] == 0 and orpheline["statut"] == "brouillon",
                 "ouvrir un vote sur des personnes sans courriel ne crée aucun bulletin")
+        # --- l'ALERTE de la page d'accueil --------------------------------------------
+        attentes = m_consultations.consultations_en_attente(["cp-essai-2"], "")
+        verifie(any(a["id"] == sondage["id"] for a in attentes),
+                "une consultation ouverte et sans réponse APPARAÎT en attente (alerte d'accueil)")
+        verifie(all(a["id"] != sondage["id"] for a in
+                    m_consultations.consultations_en_attente(["cp-essai-1"], "")),
+                "une fois qu'on a répondu, la consultation ne figure plus dans l'alerte")
+        verifie(m_consultations.bulletin_de(sondage["id"], "cp-essai-1") is not None,
+                "le bulletin d'une personne se retrouve par son compte")
+
         m_consultations.fermer_consultation(orpheline["id"])
         verifie(m_consultations.lire_consultation(orpheline["id"])["statut"] == "close",
                 "une consultation se clôt")

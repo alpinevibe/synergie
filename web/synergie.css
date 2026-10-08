@@ -569,3 +569,31 @@ button:disabled:hover { border-color: var(--bord); }
 .lien-personne { flex: 0 0 100%; font-size: 13px; color: var(--doux); }
 .ligne-lien input { flex: 1; min-width: 220px; border: 1px solid var(--bord); border-radius: 9px;
   padding: 8px 10px; font: inherit; font-size: 13px; background: #f8fafd; }
+
+/* ============================================================================
+   Ce qui attend la personne, et les liens d'invitation à copier.
+   ========================================================================== */
+.alerte-attente {
+  background: #fff8d6; border: 1px solid #e8d98a; border-left: 6px solid #e8b93a;
+  border-radius: var(--rayon); padding: 12px 16px; margin-bottom: 14px;
+  box-shadow: var(--ombre);
+}
+.alerte-titre { margin: 0 0 8px; font-weight: 700; font-size: 15.5px; }
+.alerte-ligne { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 6px 0; border-top: 1px solid #f0e6b8; }
+.alerte-ligne:first-of-type { border-top: none; }
+.alerte-type { font-size: 18px; }
+.alerte-texte { flex: 1 1 240px; font-size: 14px; }
+
+.invitation { border: 1px solid var(--bord); border-radius: 10px; background: #fbfcfe;
+  padding: 10px 12px; margin: 8px 0; }
+.invitation-tete { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 6px; }
+input.lien-invitation { width: 100%; border: 1px solid var(--bord); border-radius: 9px;
+  padding: 8px 10px; font: inherit; font-size: 12.5px; background: #f4f7fb;
+  margin-bottom: 6px; }
+details#inviter-theme-externe { border: 1px solid var(--bord); border-radius: 12px;
+  margin-top: 10px; }
+details#inviter-theme-externe > summary { padding: 10px 14px; cursor: pointer; font-weight: 600;
+  font-size: 14px; }
+details#inviter-theme-externe > *:not(summary) { margin-left: 14px; margin-right: 14px; }

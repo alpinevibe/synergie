@@ -28,6 +28,7 @@ Deux idées gouvernent l'application :
 | Où mettre les documents de travail ? | Dans le groupe, ou dans le projet (comptes rendus de réunion). Chacun les télécharge ; ils ne s'affichent jamais dans le navigateur, par sécurité. |
 | Comment savoir ce qui a été tranché ? | Les **décisions** : proposées, puis **adoptées** ou **rejetées**, avec l'auteur et la date. Chacun vote une fois, **anonymement**. |
 | Comment être prévenu sans y passer sa journée ? | Chacun choisit, **projet par projet et groupe par groupe**, s'il veut un courriel — ou rien. |
+| Comment inviter quelqu'un ? | L'administrateur **crée l'invitation** et reçoit un **lien personnel à copier** (projet ou groupe) ; chaque personne a **son** lien, qui ne sert qu'une fois. |
 | Comment décider, ou simplement consulter ? | Un **vote** tranche une question (oui / non) ; un **sondage** éclaire la réflexion (plusieurs questions, plusieurs types de réponses). L'administrateur du groupe **ouvre** la consultation : chaque personne reçoit un **lien personnel**, **une personne = une réponse**, et le dépouillement reste **anonyme** (barres, moyenne, nuage de mots). |
 | Et la traçabilité ? | Le **journal** de chaque groupe dit qui a fait quoi et quand ; rien ne s'efface. |
 
@@ -54,10 +55,11 @@ Le **poste de travail** (navigateur, système, appareil) est enregistré automat
 le compte — un site web n'a pas le droit de lire l'identifiant de session Windows — et la
 personne peut le **corriger** dans « Mon compte ».
 
-**Comment obtient-on un identifiant ?** Un administrateur de projet invite par
-**adresse de courriel** : la personne reçoit un **lien personnel**, y choisit son **prénom**
-et son **identifiant**, et rejoint le projet. Le lien ne sert qu'une fois et vaut 30 jours.
-Le courriel n'est jamais demandé à l'entrée : il sert à recevoir l'invitation et les alertes.
+**Comment obtient-on un identifiant ?** Un administrateur **crée une invitation** (pour le
+projet, ou **directement pour un groupe**) : Synergie affiche un **lien personnel à copier**,
+que l'administrateur transmet comme il veut (courriel, message). En ouvrant le lien, la
+personne choisit son **prénom** et son **identifiant**, et rejoint le projet — et le groupe,
+avec le rôle prévu. Le lien ne sert qu'une fois et vaut 30 jours.
 
 ### 2. Mes projets, puis un projet
 
@@ -78,7 +80,7 @@ ouvre le groupe, avec **les mêmes six outils pour tous** :
 | **Pages** | des pages de travail avec un traitement de texte simple (comptes rendus, procédures) |
 | **Discussion** | le fil du groupe |
 | **Documents** | les fichiers de travail, téléchargeables par tous |
-| **Votes et sondages** | **un vote** = une question, oui ou non (décision collective) ; **un sondage** = plusieurs questions, avec le type de réponse qui convient : choix unique, cases à cocher, liste déroulante, échelle de 1 à 5, un mot (nuage de mots). On choisit **qui l'on consulte** (le groupe ou tout le projet), chacun reçoit un **lien personnel par courriel**, et les réponses restent **anonymes** |
+| **Votes et sondages** | **un vote** = une question, oui ou non (décision collective) ; **un sondage** = plusieurs questions, avec le type de réponse qui convient : choix unique, cases à cocher, liste déroulante, échelle de 1 à 5, un mot (nuage de mots). On choisit **qui l'on consulte** (le groupe ou tout le projet), les réponses restent **anonymes**, et **ce qui vous attend s'affiche en alerte à l'ouverture du projet** : on répond d'un clic, sans courriel |
 
 | **Journal** | qui a fait quoi, quand — **réservé aux administrateurs du groupe** |
 
@@ -104,6 +106,15 @@ ou pour n'y laisser qu'un droit de lecture.
 
 Un **vote** est ouvert par un administrateur du groupe ; les **résultats** sont visibles par
 tous **une fois la consultation close** (et à tout moment par les administrateurs).
+
+**Une personne qui n'a pas encore répondu voit une ALERTE sur la page d'accueil du projet**
+et répond d'un clic, sans courriel. Les **liens personnels** restent disponibles
+(bouton « Liens ») pour transmettre à la main.
+
+> **Les envois de courriel sont suspendus** (réglage `SYNERGIE_ENVOI=non` dans
+> `/srv/bases/config/mail.conf`), le temps que les messageries professionnelles acceptent
+> les messages de `contact@alpinevibe.fr` : tout passe par des **liens à copier**. Pour
+> rouvrir les envois : mettre `SYNERGIE_ENVOI=oui` puis redémarrer le service.
 | **Rôle dans un groupe** | l'emporte sur le rôle du projet : administrateur, membre participant ou visiteur |
 
 **Seul un administrateur du projet crée des groupes** (et seul un administrateur du groupe
@@ -178,7 +189,10 @@ Toutes les routes exigent le **jeton du navigateur** (`X-Synergie-Jeton`, ou le 
 |---|---|---|
 | POST | `/api/comptes` | premier rattachement (prénom, poste détecté) → jeton + cookie |
 | POST | `/api/connexion` | **entrer avec son identifiant personnel** → jeton + cookie |
-| GET / POST | `/api/projets/<id>/invitations` | les invitations du projet / **inviter par adresse** |
+| GET / POST | `/api/projets/<id>/invitations` | les invitations du projet (avec leur **lien**) / en créer une |
+| GET / POST | `/api/themes/<id>/invitations` | les invitations **du groupe** / inviter directement dans le groupe |
+| GET | `/api/projets/<id>/attente` | **ce qui attend la personne** (votes sans réponse) |
+| GET / POST | `/api/consultations/<id>/repondre` | répondre **depuis l'application** (sans lien) |
 | GET / POST | `/api/invitations/<jeton>` | ouvrir le lien reçu / **activer son compte** (prénom + identifiant) |
 | GET / POST | `/api/themes/<id>/consultations` | les votes et sondages du groupe / en créer un |
 | GET / PUT / DELETE | `/api/consultations/<id>` | lire (avec le dépouillement) / modifier / supprimer |
@@ -200,7 +214,7 @@ Toutes les routes exigent le **jeton du navigateur** (`X-Synergie-Jeton`, ou le 
 /home/ubuntu/synergie-venv/bin/python tests/tester_synergie.py
 ```
 
-72 contrôles, sans réseau : projets, membres, rôles et droits, notifications, invitations
+80 contrôles, sans réseau : projets, membres, rôles et droits, notifications, invitations
 par courriel (lien personnel, activation, identifiant unique), votes et sondages (questions
 de tous types, liens personnels, une réponse par personne, dépouillement anonyme), atelier
 (groupes, notes et mise en forme, documents, diffusion temps réel) et équipe (comptes,

@@ -195,6 +195,9 @@
     <button id="btn-renommer-projet" class="discret petit cache">Renommer</button>
   </div>
 
+  <section id="attente" class="alerte-attente cache" aria-live="polite"
+    aria-label="Ce qui vous attend"></section>
+
   <div class="projet-grille">
     <!-- Colonne principale : le travail du projet -->
     <div class="projet-principal">
@@ -274,8 +277,9 @@
         <select id="membre-role"></select>
         <button id="membre-ajouter" class="principal petit">Envoyer l'invitation</button>
       </div>
-      <p class="aide fin">La personne reçoit un <strong>lien personnel</strong> : elle y choisit
-        son prénom et son identifiant, puis entre avec cet identifiant.</p>
+      <p class="aide fin">Synergie vous donne un <strong>lien personnel</strong> à copier et à
+        transmettre par vous-même (courriel, message) : la personne y choisit son prénom et
+        son identifiant, puis entre avec cet identifiant.</p>
       <div id="invitations-en-cours" class="liste-membres"></div>
     </div>
     <div class="barre-boutons">
@@ -314,6 +318,18 @@
     </div>
     <p class="aide fin" id="inviter-theme-note">On choisit ici, parmi les membres du projet, ceux
       qui ont un rôle particulier dans ce groupe.</p>
+    <details class="replie" id="inviter-theme-externe">
+      <summary>Inviter quelqu'un qui n'est pas encore dans le projet</summary>
+      <div class="ligne-depot">
+        <input id="invitation-theme-email" type="email" placeholder="Son adresse de courriel"
+          maxlength="120">
+        <select id="invitation-theme-role"></select>
+        <button id="invitation-theme-creer" class="principal petit">Créer le lien d'invitation</button>
+      </div>
+      <p class="aide fin">Un lien personnel à copier et à lui transmettre : en l'ouvrant, la
+        personne choisit son identifiant et rejoint ce groupe.</p>
+      <div id="invitations-theme" class="liste-membres"></div>
+    </details>
     <div class="barre-boutons">
       <button id="membres-theme-fermer" class="discret petit">Fermer</button>
     </div>
