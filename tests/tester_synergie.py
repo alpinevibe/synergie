@@ -36,6 +36,9 @@ def menage():
         base.execute("delete from comptes where prenom like 'Test %'"
                      " or email like '%@exemple.fr'")
         base.execute("delete from messages where theme like 'pr-essai%'")
+        base.execute("delete from journal where theme like 'pr-essai%'"
+                     " or theme like 'pr-test%' or theme = ''")
+        base.execute("delete from pages where theme like 'pr-essai%' or theme = ''")
         # Restes des groupes d'essai (supprimés en fin de test) : pages, messages, notes.
         base.execute("delete from pages where theme not in (select id from themes)")
         base.execute("delete from messages where theme like 'th-%'"
@@ -363,9 +366,9 @@ def test_atelier():
     verifie(any(l["qui"] == "Tests" for l in lignes), "les actions portent le prénom de la personne")
 
     # --- votes anonymes, une seule fois par personne ---
-    premier = m_atelier.voter(theme["id"], decision["id"], "Camille", "pour")
+    premier = m_atelier.voter(theme["id"], decision["id"], "Collegue de test", "pour")
     verifie(premier.get("ok") and premier["comptes"]["pour"] == 1, "premier vote enregistré")
-    second = m_atelier.voter(theme["id"], decision["id"], "Camille", "contre")
+    second = m_atelier.voter(theme["id"], decision["id"], "Collegue de test", "contre")
     verifie(second.get("ok") is False and second.get("deja"),
             "la même personne ne peut pas voter deux fois")
     autre = m_atelier.voter(theme["id"], decision["id"], "Dominique", "contre")
@@ -375,7 +378,7 @@ def test_atelier():
         colonnes = {l[1] for l in base.execute("pragma table_info(votes)")}
     verifie("empreinte" in colonnes and not ({"nom", "qui", "votant"} & colonnes),
             "le nom de la personne n'est JAMAIS écrit dans les votes (anonymat)")
-    verifie(m_atelier.decisions_votees(theme["id"], "Camille") == [decision["id"]]
+    verifie(m_atelier.decisions_votees(theme["id"], "Collegue de test") == [decision["id"]]
             and m_atelier.decisions_votees(theme["id"], "Inconnu") == [],
             "chacun sait s'il a déjà voté, sans apprendre les votes des autres")
 
@@ -391,27 +394,27 @@ def test_equipe():
     theme = m_atelier.creer_theme("Groupe d'essai équipe", "Vérification", auteur="Tests")
     try:
         # Le prénom suffit : le courriel n'est pas demandé à l'entrée (08/10/2026).
-        compte = m_equipe.creer_compte("Camille", poste="Bureau des cadres")
-        verifie(bool(compte["jeton"]) and compte["compte"]["prenom"] == "Camille"
+        compte = m_equipe.creer_compte("Collegue de test", poste="Bureau des cadres")
+        verifie(bool(compte["jeton"]) and compte["compte"]["prenom"] == "Collegue de test"
                 and compte["compte"]["email"] == "",
                 "création d'un compte avec le prénom seul, sans courriel")
         verifie(compte["compte"]["poste"] == "Bureau des cadres",
                 "le poste de travail est enregistré avec le compte")
         # PLUS de reconnaissance par le prénom seul (constat du 08/10/2026) : sans cela,
         # n'importe qui pourrait prendre l'identité d'un autre en tapant son prénom.
-        autre = m_equipe.creer_compte("Camille")
+        autre = m_equipe.creer_compte("Collegue de test")
         verifie(autre["compte"]["id"] != compte["compte"]["id"],
                 "le prénom seul ne donne plus accès au compte d'une autre personne")
 
         # L'IDENTIFIANT personnel, lui, retrouve le compte — et lui seul.
-        m_equipe.definir_identifiant(compte["compte"]["id"], "camille.ecrins")
-        retrouve = m_equipe.entrer_avec_identifiant("Camille.Ecrins")
+        m_equipe.definir_identifiant(compte["compte"]["id"], "collegue.ecrins")
+        retrouve = m_equipe.entrer_avec_identifiant("Collegue.Ecrins")
         verifie(retrouve and retrouve["id"] == compte["compte"]["id"],
                 "l'identifiant personnel retrouve le compte (majuscules ignorées)")
         verifie(m_equipe.entrer_avec_identifiant("inconnu-xyz") is None,
                 "un identifiant inconnu n'ouvre aucun compte")
         try:
-            m_equipe.definir_identifiant(autre["compte"]["id"], "camille.ecrins")
+            m_equipe.definir_identifiant(autre["compte"]["id"], "collegue.ecrins")
             verifie(False, "un identifiant déjà pris est refusé")
         except ValueError:
             verifie(True, "un identifiant déjà pris est refusé")
@@ -427,25 +430,25 @@ def test_equipe():
                 "le jeton n'est jamais exposé dans la liste des comptes")
 
         # discuter
-        message = m_equipe.envoyer_message(theme["id"], "Camille", "Bonjour l'équipe")
-        verifie(message["qui"] == "Camille" and len(m_equipe.lister_messages(theme["id"])) == 1,
+        message = m_equipe.envoyer_message(theme["id"], "Collegue de test", "Bonjour l'équipe")
+        verifie(message["qui"] == "Collegue de test" and len(m_equipe.lister_messages(theme["id"])) == 1,
                 "un message est enregistré dans le fil du groupe")
-        m_equipe.envoyer_message("pr-essai", "Camille", "Message de la discussion du projet")
+        m_equipe.envoyer_message("pr-essai", "Collegue de test", "Message de la discussion du projet")
         verifie(len(m_equipe.lister_messages("pr-essai")) == 1
                 and len(m_equipe.lister_messages(theme["id"])) == 1,
                 "la discussion d'un projet est séparée de celle des groupes")
 
         # écrire une page
-        page = m_equipe.creer_page(theme["id"], "Compte rendu", "<p>Texte</p>", "Camille")
+        page = m_equipe.creer_page(theme["id"], "Compte rendu", "<p>Texte</p>", "Collegue de test")
         modifiee = m_equipe.maj_page(theme["id"], page["id"], {"contenu": "<p>Texte revu</p>"},
-                                     "Camille")
+                                     "Collegue de test")
         verifie(modifiee["contenu"] == "<p>Texte revu</p>",
                 "une page de travail s'enregistre et se relit")
 
         # le cadre de travail, propre à chaque projet
-        cadre = m_equipe.maj_cadre("Le service doit absorber une hausse d'activité.", "Camille",
+        cadre = m_equipe.maj_cadre("Le service doit absorber une hausse d'activité.", "Collegue de test",
                                    "pr-essai")
-        verifie("hausse d'activité" in cadre["contexte"] and cadre["maj_par"] == "Camille"
+        verifie("hausse d'activité" in cadre["contexte"] and cadre["maj_par"] == "Collegue de test"
                 and m_equipe.lire_cadre("pr-essai")["contexte"] == cadre["contexte"],
                 "le cadre de travail enregistre le contexte et qui l'a écrit")
         verifie(m_equipe.lire_cadre("pr-autre")["contexte"] == "",
@@ -461,7 +464,7 @@ def test_equipe():
         m_projets.definir_membre_projet(projet["id"], compte["compte"]["id"], "admin",
                                         notifier=True)
         prevenus = m_equipe.prevenit(theme["id"], theme["titre"], "Une note a été ajoutée.",
-                                     "Camille", projet["id"])
+                                     "Collegue de test", projet["id"])
         verifie(prevenus == ["camille@exemple.fr"],
                 "un changement de groupe prévient les personnes qui le suivent")
         verifie(m_projets.destinataires_theme(theme["id"], projet["id"]) == []
@@ -472,15 +475,15 @@ def test_equipe():
 
         # --- la MODÉRATION : retirer un message non adapté -------------------------------
         message = m_equipe.envoyer_message(theme["id"], "Quelqu'un", "Message à modérer")
-        verifie(m_equipe.supprimer_message(theme["id"], message["id"], "Camille") is True
+        verifie(m_equipe.supprimer_message(theme["id"], message["id"], "Collegue de test") is True
                 and all(m["id"] != message["id"]
                         for m in m_equipe.lister_messages(theme["id"])),
                 "un message de discussion se retire (modération)")
-        verifie(m_equipe.supprimer_message(theme["id"], "ms-inexistant", "Camille") is False,
+        verifie(m_equipe.supprimer_message(theme["id"], "ms-inexistant", "Collegue de test") is False,
                 "retirer un message inconnu ne casse rien")
         trace = [l for l in m_atelier.lister_journal(theme["id"])
                  if l["action"] == "message_supprime"]
-        verifie(trace and trace[0]["qui"] == "Camille" and "Quelqu'un" in (trace[0]["details"] or ""),
+        verifie(trace and trace[0]["qui"] == "Collegue de test" and "Quelqu'un" in (trace[0]["details"] or ""),
                 "le retrait d'un message est journalisé (qui a retiré, et de qui)")
 
         # le journal garde la trace des actions
@@ -490,7 +493,7 @@ def test_equipe():
     finally:
         m_atelier.supprimer_theme(theme["id"])
         with m_atelier.connexion() as base:
-            base.execute("delete from comptes where (prenom = 'Camille' and email = '')"
+            base.execute("delete from comptes where (prenom = 'Collegue de test' and email = '')"
                      " or email like '%@exemple.fr' or prenom like 'Test %'")
 
 
@@ -500,6 +503,14 @@ def main():
     test_consultations()
     test_atelier()
     test_equipe()
+    # On laisse la base telle qu'on l'a trouvée : les essais ne doivent pas laisser de
+    # trace (messages, journal, comptes) dans l'application des utilisateurs.
+    menage()
+    with m_atelier.connexion() as base:
+        base.execute("delete from messages where qui like 'Collegue%'")
+        base.execute("delete from journal where qui like 'Collegue%'"
+                     " or theme like 'pr-essai%' or theme like 'pr-test%' or theme = ''")
+        base.execute("delete from pages where theme like 'pr-essai%' or theme = ''")
     print(f"\n{'='*60}\n{len(REUSSIS)} test(s) réussi(s), {len(ECHECS)} échec(s).")
     if ECHECS:
         print("ÉCHECS :")
