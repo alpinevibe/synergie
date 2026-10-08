@@ -562,3 +562,10 @@ button:disabled:hover { border-color: var(--bord); }
   text-align: right; }
 .nuage { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; padding: 8px 0; }
 .nuage .mot { color: var(--accent); font-weight: 600; }
+
+/* Les liens personnels à transmettre à la main */
+.liste-liens { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow: auto; }
+.ligne-lien { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lien-personne { flex: 0 0 100%; font-size: 13px; color: var(--doux); }
+.ligne-lien input { flex: 1; min-width: 220px; border: 1px solid var(--bord); border-radius: 9px;
+  padding: 8px 10px; font: inherit; font-size: 13px; background: #f8fafd; }

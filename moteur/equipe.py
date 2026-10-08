@@ -406,13 +406,14 @@ def _ecrire_config_msmtp(config: dict) -> str:
     return CONFIG_MSMTP
 
 
-def _message(destinataire: str, sujet: str, corps: str, expediteur: str) -> str:
+def _message(destinataire: str, sujet: str, corps: str, expediteur: str) -> bytes:
     """Un courriel complet : expéditeur lisible, Date, Message-ID, sujet encodé, texte UTF-8.
 
     Sans ces en-têtes, les filtres anti-spam se méfient — le message part sans erreur mais
     n'arrive pas (constat du 08/10/2026 : les envois d'OVH étaient acceptés, rien dans les
     boîtes).
     """
+    from email import policy
     from email.message import EmailMessage
     from email.utils import formataddr, formatdate, make_msgid
 
@@ -426,7 +427,9 @@ def _message(destinataire: str, sujet: str, corps: str, expediteur: str) -> str:
     message["Reply-To"] = expediteur
     message["X-Mailer"] = "Synergie"
     message.set_content(corps, charset="utf-8")
-    return message.as_string()
+    # Les fins de ligne doivent être CRLF (le protocole SMTP l'exige) : avec des « \n »
+    # seuls, le message part sans erreur mais n'arrive pas (constat du 08/10/2026).
+    return message.as_bytes(policy=policy.SMTP)
 
 
 def _envoyer(destinataire: str, sujet: str, corps: str) -> bool:
@@ -439,8 +442,7 @@ def _envoyer(destinataire: str, sujet: str, corps: str) -> bool:
         message = _message(destinataire, sujet, corps,
                            config.get("EXPEDITEUR", "contact@alpinevibe.fr"))
         resultat = subprocess.run(["msmtp", "--file", fichier, destinataire],
-                                  input=message.encode("utf-8"), capture_output=True,
-                                  timeout=30)
+                                  input=message, capture_output=True, timeout=30)
         if resultat.returncode != 0:
             _noter(f"échec d'envoi à {destinataire} : "
                    f"{resultat.stderr.decode('utf-8', 'replace')[:200]}")

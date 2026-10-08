@@ -699,6 +699,20 @@ def api_ouvrir_consultation(identifiant):
                     "consultation": m_consultations.lire_consultation(identifiant)}), 201
 
 
+@app.route("/api/consultations/<identifiant>/liens")
+def api_liens_consultation(identifiant):
+    """Les liens personnels, pour les transmettre à la main si le courriel ne passe pas."""
+    consultation = _consultation(identifiant)
+    if not m_projets.peut_administrer(getattr(request, "role_theme", None)):
+        return jsonify({"erreur": "Les liens sont réservés aux administrateurs du groupe."}), 403
+    liens = []
+    for bulletin in m_consultations.lister_bulletins(identifiant):
+        liens.append({"email": bulletin["email"], "compte": bulletin["compte"],
+                      "repondu": bool(bulletin["repondu_le"]),
+                      "lien": f"{m_equipe.adresse_site()}/#vote={bulletin['jeton']}"})
+    return jsonify({"consultation": consultation, "liens": liens})
+
+
 @app.route("/api/consultations/<identifiant>/fermer", methods=["POST"])
 def api_fermer_consultation(identifiant):
     consultation = _consultation(identifiant, ecriture=True)

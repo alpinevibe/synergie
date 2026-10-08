@@ -1025,6 +1025,11 @@
         });
         barre.append(fermer);
       }
+      if (estAdministrateurTheme() && consultation.bulletins) {
+        const liens = element('button', { classe: 'discret petit', texte: 'Liens' });
+        liens.addEventListener('click', () => afficherLiens(consultation));
+        barre.append(liens);
+      }
       const resultats = element('button', { classe: 'discret petit', texte: 'Résultats' });
       resultats.addEventListener('click', () => afficherResultats(consultation, carte));
       barre.append(resultats);
@@ -1079,6 +1084,41 @@
       zone.append(bloc);
     });
     carte.append(zone);
+  }
+
+  /** Les liens personnels : de quoi consulter les gens même si le courriel ne part pas. */
+  async function afficherLiens(consultation) {
+    const donnees = await appel('/api/consultations/' + consultation.id + '/liens');
+    const zone = $('#liste-liens');
+    zone.innerHTML = '';
+    donnees.liens.forEach((entree) => {
+      const ligne = element('div', { classe: 'ligne-lien' });
+      const champ = element('input', { attrs: { readonly: 'readonly', value: entree.lien } });
+      const copier = element('button', { classe: 'discret petit', texte: 'Copier' });
+      copier.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(entree.lien); toast('Lien copié.'); }
+        catch (e) { champ.select(); document.execCommand('copy'); toast('Lien copié.'); }
+      });
+      poser(ligne,
+        element('span', { classe: 'lien-personne', texte: entree.email
+          + (entree.repondu ? ' ✓ a répondu' : '') }),
+        champ, copier);
+      zone.append(ligne);
+    });
+    if (!donnees.liens.length) {
+      zone.append(element('p', { classe: 'vide', texte:
+        "Aucun lien : ouvrez d’abord la consultation (les personnes visées ont besoin "
+        + "d’une adresse de courriel)." }));
+    }
+    $('#liens-etat').textContent = '';
+    $('#vue-liens').classList.remove('cache');
+
+    $('#btn-copier-liens').onclick = async () => {
+      const texteLiens = donnees.liens.map((e) => e.email + ' : ' + e.lien).join('\n');
+      try { await navigator.clipboard.writeText(texteLiens); }
+      catch (e) { /* le presse-papiers peut être refusé */ }
+      $('#liens-etat').textContent = donnees.liens.length + ' lien(s) copié(s).';
+    };
   }
 
   function ligneResultat(valeur, nombre, total) {
@@ -1986,7 +2026,7 @@
     // Au clavier : Échap ferme la fenêtre ouverte et rend le focus au bouton qui l'a ouverte.
     document.addEventListener('keydown', (evenement) => {
       if (evenement.key !== 'Escape') return;
-      const fenetre = ['#vue-compte', '#vue-membres', '#vue-cadre']
+      const fenetre = ['#vue-compte', '#vue-membres', '#vue-cadre', '#vue-liens']
         .find((sel) => !$(sel).classList.contains('cache'));
       if (!fenetre) return;
       $(fenetre).classList.add('cache');
@@ -2201,6 +2241,8 @@
     $('#btn-consultation-fermer').addEventListener('click', () =>
       $('#vue-consultation').classList.add('cache'));
     $('#btn-envoyer-reponses').addEventListener('click', envoyerReponses);
+    $('#liens-fermer').addEventListener('click', () =>
+      $('#vue-liens').classList.add('cache'));
 
     // double-clic sur le fond : une note là où l'on a cliqué
     $('#plateau').addEventListener('dblclick', (evenement) => {
