@@ -90,13 +90,12 @@ def principal():
             ancien = base.execute("select contexte from cadre where id = 'general'").fetchone()
             base.execute("update messages set theme = ? where theme = ''", (projet["id"],))
             base.execute("update documents set theme = ? where theme = ''", (projet["id"],))
-            # Ménage : les discussions et documents des thèmes retirés (boîte à trames,
-            # fiches de poste) n'ont plus de thème — on les enlève plutôt que de garder
-            # des lignes orphelines.
-            for table, colonne in (("notes", "theme"), ("decisions", "theme"),
-                                   ("documents", "theme"), ("messages", "theme"),
-                                   ("pages", "theme"), ("journal", "theme")):
-                base.execute(f"delete from {table} where {colonne} <> '' and {colonne} not in"
+            # Ménage : les contenus des GROUPES retirés (boîte à trames, fiches de poste)
+            # n'ont plus de thème — on les enlève plutôt que de garder des lignes
+            # orphelines. ATTENTION : les discussions et documents du PROJET portent
+            # l'identifiant du projet (pr-…), ils ne sont donc jamais concernés.
+            for table in ("notes", "decisions", "documents", "messages", "pages", "journal"):
+                base.execute(f"delete from {table} where theme like 'th-%' and theme not in"
                              " (select id from themes)")
         if ancien and ancien["contexte"]:
             cadre = m_equipe.lire_cadre(projet["id"])

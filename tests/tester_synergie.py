@@ -34,6 +34,11 @@ def menage():
         base.execute("delete from comptes where prenom like 'Test %'"
                      " or email like '%@exemple.fr'")
         base.execute("delete from messages where theme like 'pr-essai%'")
+        # Restes des groupes d'essai (supprimés en fin de test) : pages, messages, notes.
+        base.execute("delete from pages where theme not in (select id from themes)")
+        base.execute("delete from messages where theme like 'th-%'"
+                     " and theme not in (select id from themes)")
+        base.execute("delete from projets where id like 'pr-essai%'")
         base.execute("delete from projet_membres where projet like 'pr-test%'"
                      " or projet like 'pr-essai%'")
         base.execute("delete from projets where nom like 'Projet de test%'"
