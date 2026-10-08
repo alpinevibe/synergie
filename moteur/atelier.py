@@ -94,24 +94,18 @@ create index if not exists votes_decision on votes (decision);
 """
 
 
-# Thèmes FIXES (demande du 05/10/2026) : ils ne peuvent pas être supprimés. Leur
-# identifiant est stable pour que les liens ne changent jamais.
-THEMES_FIXES = (
-    {"id": "th-rythme-de-travail", "titre": "Rythme de travail", "type": "rythme", "ordre": 0,
-     "couleur": "#4a6cf7",
-     "description": "Les horaires, les postes et les trames de travail : c'est ici que "
-                    "s'ouvre la boîte à trames."},
-    {"id": "th-fiches-de-poste", "titre": "Fiches de poste", "type": "fiches", "ordre": 1,
-     "couleur": "#17a673",
-     "description": "Le travail sur les fiches de poste, tranche horaire par tranche "
-                    "horaire : d'abord le vocabulaire (codes horaires), puis les fiches."},
-)
+# Thèmes retirés le 08/10/2026 : « Rythme de travail » (boîte à trames) et « Fiches de
+# poste » partent dans l'application Orbis. Synergie ne garde que les GROUPES DE TRAVAIL
+# issus d'une lettre de cadrage, tous outillés de la même façon.
+THEMES_RETIRES = ("th-rythme-de-travail", "th-fiches-de-poste")
 
 
 def initialiser() -> None:
-    """Crée la base, le dossier des documents, les thèmes fixes et les tables de l'équipe."""
+    """Crée la base, le dossier des documents et les tables (atelier, équipe, projets)."""
+    from . import projets as m_projets          # import local : aucun cycle à l'import
     DONNEES.mkdir(parents=True, exist_ok=True)
     DOCUMENTS.mkdir(parents=True, exist_ok=True)
+    m_projets.initialiser()                     # les tables des projets d'abord
     with connexion() as base:
         base.executescript(SCHEMA)
         # Colonnes ajoutées après coup : on les crée seulement si elles manquent.
@@ -121,14 +115,14 @@ def initialiser() -> None:
                                 ("ordre", "integer default 100")):
             if nom not in colonnes:
                 base.execute(f"alter table themes add column {nom} {definition}")
-        moment = maintenant()
-        for theme in THEMES_FIXES:
-            base.execute(
-                "insert or ignore into themes (id, titre, description, couleur, projet, auteur,"
-                " cree_le, maj_le, type, fixe, ordre) values (?, ?, ?, ?, '', 'Synergie',"
-                " ?, ?, ?, 1, ?)",
-                (theme["id"], theme["titre"], theme["description"], theme["couleur"], moment,
-                 moment, theme["type"], theme["ordre"]))
+        # Migration : les deux thèmes fixes (et leurs notes, décisions, documents) quittent
+        # Synergie. Les données correspondantes ont été exportées avant (donnees à part).
+        marques = ",".join("?" for _ in THEMES_RETIRES)
+        base.execute(f"delete from notes where theme in ({marques})", THEMES_RETIRES)
+        base.execute(f"delete from decisions where theme in ({marques})", THEMES_RETIRES)
+        base.execute(f"delete from documents where theme in ({marques})", THEMES_RETIRES)
+        base.execute(f"delete from theme_membres where theme in ({marques})", THEMES_RETIRES)
+        base.execute(f"delete from themes where id in ({marques})", THEMES_RETIRES)
 
 
 # --- journal des actions -------------------------------------------------------------
@@ -266,11 +260,24 @@ def _theme_depuis(ligne: sqlite3.Row, comptes: dict | None = None) -> dict:
     return theme
 
 
-def lister_themes() -> list[dict]:
+def lister_themes(projet: str | None = None, identifiants: list[str] | None = None) -> list[dict]:
+    """Les groupes de travail, éventuellement d'un seul projet ou d'une liste donnée."""
+    requete = "select * from themes"
+    valeurs: list = []
+    conditions = []
+    if projet is not None:
+        conditions.append("projet = ?")
+        valeurs.append(projet)
+    if identifiants is not None:
+        if not identifiants:
+            return []
+        conditions.append("id in (" + ",".join("?" for _ in identifiants) + ")")
+        valeurs.extend(identifiants)
+    if conditions:
+        requete += " where " + " and ".join(conditions)
+    requete += " order by ordre, maj_le desc, titre collate nocase"
     with connexion() as base:
-        themes = [dict(l) for l in base.execute(
-            "select * from themes order by fixe desc, ordre, maj_le desc,"
-            " titre collate nocase")]
+        themes = [dict(l) for l in base.execute(requete, valeurs)]
         for theme in themes:
             theme["notes"] = base.execute(
                 "select count(*) from notes where theme = ?", (theme["id"],)).fetchone()[0]
@@ -281,6 +288,9 @@ def lister_themes() -> list[dict]:
             theme["adoptees"] = base.execute(
                 "select count(*) from decisions where theme = ? and statut = 'adoptee'",
                 (theme["id"],)).fetchone()[0]
+            theme["membres"] = base.execute(
+                "select count(*) from theme_membres where theme = ?", (theme["id"],)
+            ).fetchone()[0]
     return themes
 
 

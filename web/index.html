@@ -4,144 +4,215 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Synergie — travailler ensemble, décider ensemble</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%E2%9C%B7%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="synergie.css">
 </head>
 <body>
 
+<a class="saut-contenu" href="#vue-projet">Aller au contenu</a>
+
 <header>
-  <div class="logo">✷</div>
-  <div class="titre">
+  <div class="marque">
+    <span class="logo" aria-hidden="true">✷</span>
     <h1>Synergie</h1>
-    <p>Tous les avis comptent : on réfléchit ensemble, on décide ensemble.</p>
   </div>
-  <a class="lien-outils" href="boite-trame.html" title="Décrire le service et proposer des trames">Boîte à trames</a>
-  <button id="btn-compte" class="discret clair">Mon compte</button>
+
+  <label class="choix-projet">
+    <span class="sr-only">Projet en cours</span>
+    <select id="choix-projet" title="Changer de projet"></select>
+  </label>
+
+  <div class="entete-actions">
+    <button id="btn-membres" class="discret" title="Les personnes de ce projet">Membres</button>
+    <button id="btn-compte" class="discret" title="Mon compte et mes alertes">Mon compte</button>
+  </div>
 </header>
 
 <!-- ======================= QUI ÊTES-VOUS ? ======================= -->
-<div id="accueil-nom" class="voile cache">
+<div id="accueil-nom" class="voile cache" role="dialog" aria-modal="true" aria-labelledby="titre-accueil">
   <div class="boite-nom">
-    <div class="logo-nom">✷</div>
-    <h2>Bienvenue dans Synergie</h2>
-    <p class="aide">Pour travailler ensemble, il faut savoir qui fait quoi : indiquez votre
-      <strong>prénom</strong> et votre <strong>adresse de courriel</strong> (elle sert
-      uniquement à vous prévenir quand un thème dont vous êtes responsable change).</p>
-    <input id="prenom" placeholder="Votre prénom" autocomplete="given-name" maxlength="40">
-    <input id="email-compte" type="email" placeholder="Votre adresse de courriel"
-      autocomplete="email" maxlength="120">
-    <label class="case"><input type="checkbox" id="notifier-tout">
-      Me prévenir par courriel de toutes les nouveautés</label>
-    <button id="btn-prenom" class="principal">Entrer dans l'atelier</button>
+    <span class="logo-nom" aria-hidden="true">✷</span>
+    <h2 id="titre-accueil">Bonjour !</h2>
+    <p class="aide">Votre prénom suffit : il dit qui écrit et qui décide.</p>
+    <label class="etiquette-champ">Prénom
+      <input id="prenom" autocomplete="given-name" maxlength="40" required>
+    </label>
+    <p class="aide fin">Votre poste de travail est noté automatiquement (navigateur, appareil).</p>
+    <p id="nom-erreur" class="erreur" role="alert"></p>
+    <button id="btn-prenom" class="principal">Entrer</button>
   </div>
 </div>
 
 <!-- ======================= MON COMPTE ======================= -->
-<div id="vue-compte" class="voile cache">
+<div id="vue-compte" class="voile cache" role="dialog" aria-modal="true" aria-labelledby="titre-compte">
   <div class="boite-nom large">
-    <h2>Mon compte</h2>
-    <p class="aide">Votre compte est enregistré sur le serveur de Synergie. Il sert à savoir
-      qui agit, et à vous prévenir par courriel.</p>
-    <label class="etiquette-champ">Prénom<input id="c-prenom"></label>
-    <label class="etiquette-champ">Adresse de courriel<input id="c-email" type="email"></label>
-    <label class="case"><input type="checkbox" id="c-tout">
-      Recevoir une alerte pour TOUTES les nouveautés</label>
-    <h3>Thèmes que je veux suivre</h3>
-    <div id="c-abonnements" class="abonnements"></div>
-    <p id="c-etat" class="aide"></p>
+    <h2 id="titre-compte">Mon compte</h2>
+
+    <label class="etiquette-champ">Prénom<input id="c-prenom" autocomplete="given-name"></label>
+    <label class="etiquette-champ">Poste de travail
+      <input id="c-poste" placeholder="Ex. : bureau des cadres, poste 2">
+    </label>
+
+    <h3>Être prévenu par courriel</h3>
+    <p class="aide">Laissez vide pour ne rien recevoir.</p>
+    <label class="etiquette-champ">Courriel
+      <input id="c-email" type="email" autocomplete="email">
+    </label>
+    <div id="c-notifications" class="notifications"></div>
+
+    <p id="c-etat" class="aide" role="status"></p>
     <div class="barre-boutons">
       <button id="c-enregistrer" class="principal">Enregistrer</button>
-      <button id="c-essai" class="discret">Envoyer un courriel d'essai</button>
+      <button id="c-essai" class="discret">Essai d'alerte</button>
       <button id="c-fermer" class="discret">Fermer</button>
     </div>
   </div>
 </div>
 
-<!-- ======================= ACCUEIL : CADRE, CHAT, THÈMES ======================= -->
-<main id="vue-accueil">
-  <section class="carte cadre">
-    <h2>Cadre de travail</h2>
-    <p class="aide">Le contexte du projet, en quelques phrases : pourquoi nous nous
-      réunissons, ce que nous cherchons à améliorer, les contraintes à garder en tête.
-      Tout le monde le lit avant de travailler sur un thème.</p>
-    <textarea id="cadre-contexte" rows="5"
-      placeholder="Exemple : le service doit absorber une hausse d'activité sans effectif supplémentaire ; les tournées du matin sont trop lourdes ; les équipes demandent plus de week-ends complets…"></textarea>
-    <div class="barre-boutons">
-      <button id="cadre-enregistrer" class="principal petit">Enregistrer le contexte</button>
-      <span id="cadre-etat" class="aide"></span>
-    </div>
-
-    <h3>Comptes rendus de réunion</h3>
-    <p class="aide">Déposez ici les comptes rendus : ils restent au même endroit, au-dessus
-      des thèmes, pour que chacun retrouve l'historique des réunions.</p>
-    <div class="ligne-depot">
-      <input type="file" id="cadre-fichier" multiple>
-      <input id="cadre-note" class="recherche" placeholder="Un mot (date, objet)…">
-      <button id="cadre-deposer" class="principal petit">Déposer</button>
-    </div>
-    <p id="cadre-depot-etat" class="aide"></p>
-    <div id="cadre-documents" class="liste-documents"></div>
-  </section>
-
-  <section class="carte chat-general">
-    <h2>Discussion générale</h2>
-    <p class="aide">Le fil de discussion de tout le projet : annonces, questions, points
-      d'étape.</p>
-    <div id="chat-general" class="fil"></div>
-    <form id="chat-general-form" class="ligne-chat">
-      <input id="chat-general-texte" placeholder="Écrire un message…" autocomplete="off">
-      <button class="principal petit" type="submit">Envoyer</button>
-    </form>
-  </section>
-
-  <div class="entete-vue">
-    <h2>Thèmes de réflexion</h2>
-    <p class="aide">Un thème = un sujet sur lequel l'équipe travaille : un tableau blanc,
-      des pages, une discussion, des documents et des décisions. « Rythme de travail » et
-      « Fiches de poste » sont toujours là ; les autres se créent et se suppriment.</p>
-  </div>
-  <button id="btn-nouveau-theme" class="principal">+ Nouveau thème de réflexion</button>
-  <div id="liste-themes" class="grille-themes"></div>
+<!-- ======================= MES PROJETS ======================= -->
+<main id="vue-projets" class="cache">
+  <h2>Mes projets</h2>
+  <p id="projets-vide" class="vide cache">Vous ne participez encore à aucun projet.
+    Créez-en un, ou demandez à un administrateur de vous inviter.</p>
+  <div id="liste-projets" class="grille-themes"></div>
+  <details id="bloc-nouveau-projet" class="carte replie">
+    <summary>+ Nouveau projet</summary>
+    <label class="etiquette-champ">Nom du projet<input id="nouveau-projet-nom" maxlength="120"></label>
+    <label class="etiquette-champ">En une phrase
+      <input id="nouveau-projet-description" maxlength="200">
+    </label>
+    <button id="btn-projet" class="principal petit">Créer le projet</button>
+  </details>
 </main>
 
-<!-- ======================= UN THÈME ======================= -->
+<!-- ======================= UN PROJET ======================= -->
+<main id="vue-projet" class="cache">
+  <div class="entete-projet">
+    <div class="titre-bloc">
+      <h2 id="nom-projet">Projet</h2>
+      <p id="description-projet" class="aide"></p>
+    </div>
+    <span id="mon-role-projet" class="etiquette-role"></span>
+    <button id="btn-renommer-projet" class="discret petit cache">Renommer</button>
+  </div>
+
+  <details class="carte replie" id="bloc-cadre">
+    <summary>Cadre de travail</summary>
+    <p class="aide">Le contexte, en quelques phrases — tout le monde le lit avant de travailler.</p>
+    <textarea id="cadre-contexte" rows="4" placeholder="Pourquoi nous nous réunissons, ce que nous cherchons à améliorer, les contraintes…"></textarea>
+    <div class="barre-boutons">
+      <button id="cadre-enregistrer" class="principal petit">Enregistrer</button>
+      <span id="cadre-etat" class="aide" role="status"></span>
+    </div>
+  </details>
+
+  <div class="entete-vue">
+    <h2>Groupes de travail</h2>
+    <button id="btn-nouveau-theme" class="principal petit cache">+ Nouveau groupe</button>
+  </div>
+  <div id="liste-themes" class="grille-themes"></div>
+  <div id="nouveau-theme-bloc" class="carte cache">
+    <input id="nouveau-theme-titre" class="champ-large" placeholder="Titre du groupe">
+    <input id="nouveau-theme-description" class="champ-large" placeholder="En une phrase (facultatif)">
+    <div class="barre-boutons">
+      <button id="btn-theme-creer" class="principal petit">Créer</button>
+      <button id="btn-theme-annuler" class="discret petit">Annuler</button>
+    </div>
+  </div>
+
+  <div class="deux-colonnes">
+    <details class="carte replie">
+      <summary>Discussion du projet</summary>
+      <div id="chat-general" class="fil" aria-live="polite"></div>
+      <form id="chat-general-form" class="ligne-chat">
+        <label class="sr-only" for="chat-general-texte">Écrire un message</label>
+        <input id="chat-general-texte" placeholder="Écrire un message…" autocomplete="off">
+        <button class="principal petit" type="submit">Envoyer</button>
+      </form>
+    </details>
+
+    <details class="carte replie">
+      <summary>Comptes rendus et documents</summary>
+      <div class="ligne-depot">
+        <label class="sr-only" for="cadre-fichier">Choisir des fichiers</label>
+        <input type="file" id="cadre-fichier" multiple>
+        <label class="sr-only" for="cadre-note">Mot-clé</label>
+        <input id="cadre-note" class="recherche" placeholder="Un mot (date, objet)…">
+        <button id="cadre-deposer" class="principal petit">Déposer</button>
+      </div>
+      <p id="cadre-depot-etat" class="aide" role="status"></p>
+      <div id="cadre-documents" class="liste-documents"></div>
+    </details>
+  </div>
+</main>
+
+<!-- ======================= MEMBRES DU PROJET ======================= -->
+<div id="vue-membres" class="voile cache" role="dialog" aria-modal="true" aria-labelledby="titre-membres">
+  <div class="boite-nom large">
+    <h2 id="titre-membres">Membres du projet</h2>
+    <p class="aide" id="membres-aide">Chaque personne a un rôle : administrateur, membre
+      participant ou visiteur.</p>
+    <div id="membres-liste" class="liste-membres"></div>
+    <div id="membres-inviter" class="carte cache">
+      <h3>Inviter quelqu'un</h3>
+      <div class="ligne-depot">
+        <input id="membre-prenom" placeholder="Prénom" maxlength="40">
+        <select id="membre-role"></select>
+        <button id="membre-ajouter" class="principal petit">Inviter</button>
+      </div>
+      <p class="aide fin">La personne rejoint le projet en indiquant simplement son prénom.</p>
+    </div>
+    <div class="barre-boutons">
+      <button id="membres-fermer" class="discret">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= UN GROUPE DE TRAVAIL ======================= -->
 <main id="vue-theme" class="cache">
-  <button id="btn-retour" class="discret">← Tous les thèmes</button>
+  <button id="btn-retour" class="discret">← Le projet</button>
 
   <div class="entete-theme">
-    <input id="titre-theme" class="titre-theme" placeholder="Titre du thème">
-    <input id="description-theme" class="description-theme" placeholder="En une phrase, de quoi parle ce thème ?">
-    <div class="presents">
-      <span class="etiquette">En ligne</span>
-      <span id="participants" class="participants">—</span>
-      <span class="etiquette">Responsables</span>
-      <span id="responsables" class="participants">personne</span>
-      <button id="btn-responsables" class="discret petit">Définir</button>
+    <div class="titre-bloc">
+      <h2 id="titre-theme">Groupe</h2>
+      <p id="description-theme" class="aide"></p>
     </div>
-    <button id="btn-supprimer-theme" class="discret danger" title="Supprimer ce thème">Supprimer</button>
+    <span id="mon-role-theme" class="etiquette-role"></span>
+    <span class="presents" title="Personnes actuellement dans ce groupe">
+      <span class="point" aria-hidden="true"></span>
+      <span id="participants">—</span>
+    </span>
+    <button id="btn-membres-theme" class="discret petit">Membres</button>
+    <button id="btn-renommer-theme" class="discret petit cache">Renommer</button>
+    <button id="btn-supprimer-theme" class="discret danger petit cache">Supprimer</button>
   </div>
 
-  <div id="zone-responsables" class="carte cache">
-    <h3>Responsables de ce thème</h3>
-    <p class="aide">Ce sont eux qui reçoivent une alerte par courriel quand le thème change.
-      Chacun doit avoir créé son compte (prénom + courriel) pour figurer ici.</p>
-    <div id="liste-comptes" class="abonnements"></div>
+  <div id="zone-membres-theme" class="carte cache">
+    <h3>Membres de ce groupe</h3>
+    <p class="aide">Le rôle donné ici l'emporte sur le rôle du projet.</p>
+    <div id="liste-membres-theme" class="liste-membres"></div>
+    <div id="inviter-theme" class="ligne-depot cache">
+      <input id="membre-theme-prenom" placeholder="Prénom" maxlength="40">
+      <select id="membre-theme-role"></select>
+      <button id="membre-theme-ajouter" class="principal petit">Inviter</button>
+    </div>
     <div class="barre-boutons">
-      <button id="responsables-enregistrer" class="principal petit">Enregistrer</button>
-      <button id="responsables-fermer" class="discret petit">Fermer</button>
+      <button id="membres-theme-fermer" class="discret petit">Fermer</button>
     </div>
   </div>
 
-  <nav class="onglets" id="onglets-theme"></nav>
+  <nav class="onglets" id="onglets-theme" aria-label="Outils du groupe"></nav>
 
   <!-- ---- le tableau blanc ---- -->
-  <section id="onglet-tableau" class="onglet cache">
+  <section id="onglet-tableau" class="onglet cache" aria-label="Tableau blanc">
     <div class="barre-tableau">
-      <button id="btn-note" class="principal petit">+ Nouvelle note</button>
+      <button id="btn-note" class="principal petit">+ Note</button>
+      <label class="sr-only" for="recherche-notes">Repérer une note</label>
       <input id="recherche-notes" class="recherche" placeholder="Repérer une note…">
       <span class="espace"></span>
-      <button id="zoom-moins" class="discret" title="Réduire">−</button>
+      <button id="zoom-moins" class="discret" title="Réduire" aria-label="Réduire">−</button>
       <span id="zoom-valeur" class="zoom">100 %</span>
-      <button id="zoom-plus" class="discret" title="Agrandir">+</button>
+      <button id="zoom-plus" class="discret" title="Agrandir" aria-label="Agrandir">+</button>
       <button id="btn-recentrer" class="discret" title="Revenir au départ">Recentrer</button>
       <button id="btn-organiser" class="discret" title="Ranger les notes en colonnes">Ranger</button>
     </div>
@@ -165,18 +236,15 @@
     </div>
     <div id="plateau" class="plateau">
       <div id="monde" class="monde"></div>
-      <div class="aide-tableau">Cliquez sur une note pour l'écrire · faites glisser le fond
-        pour vous déplacer · la molette déplace, Ctrl + molette agrandit</div>
     </div>
   </section>
 
-  <!-- ---- la discussion du thème ---- -->
-  <section id="onglet-chat" class="onglet cache">
+  <!-- ---- la discussion du groupe ---- -->
+  <section id="onglet-chat" class="onglet cache" aria-label="Discussion du groupe">
     <div class="carte">
-      <h3>Discussion du thème</h3>
-      <p class="aide">Échangez ici : c'est le fil du sujet, il reste attaché au thème.</p>
-      <div id="fil-theme" class="fil"></div>
+      <div id="fil-theme" class="fil" aria-live="polite"></div>
       <form id="chat-theme-form" class="ligne-chat">
+        <label class="sr-only" for="chat-theme-texte">Écrire un message</label>
         <input id="chat-theme-texte" placeholder="Écrire un message…" autocomplete="off">
         <button class="principal petit" type="submit">Envoyer</button>
       </form>
@@ -184,20 +252,17 @@
   </section>
 
   <!-- ---- les pages de travail ---- -->
-  <section id="onglet-pages" class="onglet cache">
-    <div class="carte">
-      <h3>Pages de travail</h3>
-      <p class="aide">Des pages blanches avec un traitement de texte simple : comptes rendus,
-        notes de travail, procédures. Chacun peut les modifier, tout le monde voit.</p>
-      <div class="barre-boutons">
-        <input id="nouvelle-page-titre" class="recherche" placeholder="Titre de la nouvelle page">
-        <button id="btn-page" class="principal petit">+ Créer la page</button>
-      </div>
+  <section id="onglet-pages" class="onglet cache" aria-label="Pages de travail">
+    <div class="barre-boutons">
+      <label class="sr-only" for="nouvelle-page-titre">Titre de la page</label>
+      <input id="nouvelle-page-titre" class="recherche" placeholder="Titre de la nouvelle page">
+      <button id="btn-page" class="principal petit">+ Créer la page</button>
     </div>
     <div class="pages">
       <div id="liste-pages" class="liste-pages"></div>
       <div id="page-editeur" class="carte cache">
         <div class="barre-editeur">
+          <label class="sr-only" for="page-titre">Titre de la page</label>
           <input id="page-titre" class="titre-page" placeholder="Titre de la page">
           <span class="espace"></span>
           <button data-edition="bold" title="Gras"><b>G</b></button>
@@ -211,33 +276,30 @@
           <button id="page-supprimer" class="discret danger petit">Supprimer</button>
         </div>
         <div id="page-contenu" class="contenu-page" contenteditable="true"></div>
-        <p id="page-etat" class="aide"></p>
+        <p id="page-etat" class="aide" role="status"></p>
       </div>
     </div>
   </section>
 
   <!-- ---- les documents ---- -->
-  <section id="onglet-documents" class="onglet cache">
+  <section id="onglet-documents" class="onglet cache" aria-label="Documents du groupe">
     <div class="carte">
-      <h3>Déposer un document de travail</h3>
-      <p class="aide">Comptes rendus, tableaux, photos, plans… tout ce sur quoi le thème
-        s'appuie. Chacun peut le télécharger.</p>
       <div class="ligne-depot">
+        <label class="sr-only" for="fichier-document">Choisir des fichiers</label>
         <input type="file" id="fichier-document" multiple>
-        <input id="note-document" class="recherche" placeholder="Un mot pour dire à quoi il sert (facultatif)">
+        <label class="sr-only" for="note-document">Mot-clé</label>
+        <input id="note-document" class="recherche" placeholder="Un mot pour dire à quoi il sert">
         <button id="btn-deposer" class="principal petit">Déposer</button>
       </div>
-      <p id="etat-depot" class="aide"></p>
+      <p id="etat-depot" class="aide" role="status"></p>
     </div>
     <div id="liste-documents" class="liste-documents"></div>
   </section>
 
   <!-- ---- les décisions ---- -->
-  <section id="onglet-decisions" class="onglet cache">
+  <section id="onglet-decisions" class="onglet cache" aria-label="Décisions">
     <div class="carte">
-      <h3>Proposer une décision</h3>
-      <p class="aide">On écrit la décision, on discute, puis on la marque « adoptée » ou
-        « rejetée ». Chacun vote une fois, et les votes restent anonymes.</p>
+      <label class="sr-only" for="intitule-decision">La décision en une phrase</label>
       <input id="intitule-decision" class="champ-large" placeholder="La décision en une phrase">
       <textarea id="detail-decision" rows="2" placeholder="Pourquoi, comment (facultatif)"></textarea>
       <button id="btn-decision" class="principal petit">Proposer</button>
@@ -246,65 +308,12 @@
   </section>
 
   <!-- ---- le journal ---- -->
-  <section id="onglet-journal" class="onglet cache">
-    <div class="carte">
-      <h3>Journal du thème</h3>
-      <p class="aide">Qui a fait quoi, et quand. Rien ne s'efface : c'est la mémoire du
-        travail commun.</p>
-    </div>
+  <section id="onglet-journal" class="onglet cache" aria-label="Journal du groupe">
     <div id="liste-journal" class="liste-journal"></div>
-  </section>
-
-  <!-- ---- la boîte à trames (thème « Rythme de travail ») ---- -->
-  <section id="onglet-boite" class="onglet cache">
-    <div class="carte">
-      <h3>Boîte à trames</h3>
-      <p class="aide">Décrivez la profession, l'effectif et les postes : l'outil calcule les
-        ETP nécessaires et propose jusqu'à trois trames, vérifiées par rapport à la
-        réglementation du travail.</p>
-      <div class="barre-boutons">
-        <a class="principal petit" href="boite-trame.html" target="_blank">Ouvrir en plein écran</a>
-      </div>
-    </div>
-    <iframe id="cadre-trame" class="cadre-outil" src="boite-trame.html" title="Boîte à trames"></iframe>
-  </section>
-
-  <!-- ---- les codes horaires (thème « Fiches de poste ») ---- -->
-  <section id="onglet-codes" class="onglet cache">
-    <div class="carte">
-      <h3>Référentiel des codes horaires</h3>
-      <p class="aide">On commence par se mettre d'accord sur le vocabulaire : ce que veut
-        dire chaque code, à quelles heures, et à quoi il correspond dans la journée. C'est la
-        base des fiches de poste, et les couleurs sont celles du planning habituel.</p>
-      <div id="liste-codes" class="liste-codes"></div>
-      <div class="barre-boutons">
-        <button id="btn-code" class="principal petit">+ Ajouter un code horaire</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- ---- les fiches de poste ---- -->
-  <section id="onglet-fiches" class="onglet cache">
-    <div class="carte">
-      <h3>Fiches de poste, par tranche horaire</h3>
-      <p class="aide">Une fiche se lit par code horaire : pour chaque tranche, quelles tâches
-        sont prévues, combien de temps, à quelle fréquence et par qui. On part de l'existant,
-        on duplique, on retravaille, puis on valide ensemble.</p>
-      <div class="barre-boutons">
-        <select id="fiche-profession">
-          <option value="IDE">Infirmier(ère)</option>
-          <option value="AS">Aide-soignant(e)</option>
-          <option value="ASH">Agent de service hospitalier</option>
-          <option value="Autre">Autre métier</option>
-        </select>
-        <input id="fiche-intitule" class="recherche" placeholder="Intitulé de la fiche">
-        <button id="btn-fiche" class="principal petit">+ Créer la fiche</button>
-      </div>
-    </div>
-    <div id="liste-fiches" class="liste-fiches"></div>
   </section>
 </main>
 
+<div id="zone-toast" aria-live="polite"></div>
 <script src="synergie.js"></script>
 </body>
 </html>

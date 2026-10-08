@@ -340,3 +340,117 @@ header button.clair:hover { background: rgba(255, 255, 255, .3); }
   .pages { grid-template-columns: 1fr; }
   .table-taches { font-size: 12px; }
 }
+
+/* ============================================================================
+   v2 — 08/10/2026 : lisibilité, ergonomie et accessibilité.
+
+   Objectifs tenus ici :
+     • moins de texte visible : les explications longues passent en infobulle (title)
+       ou dans des blocs repliés (<details>), l'écran montre d'abord l'essentiel ;
+     • une seule action principale par écran, des cibles de 40 px minimum ;
+     • contrastes renforcés (texte secondaire #4c5a6e sur fond clair), contours de
+       focus visibles au clavier, libellés associés aux champs (.sr-only).
+   ========================================================================== */
+:root {
+  --doux: #4c5a6e;          /* contraste renforcé (AA) */
+  --bord: #dbe2ec;
+  --cible: 40px;
+}
+body { line-height: 1.5; }
+h2 { font-size: 20px; margin: 0 0 6px; }
+h3 { font-size: 15.5px; margin: 0 0 6px; }
+
+/* accessibilité : focus toujours visible, contenu lisible par les lecteurs d'écran */
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.saut-contenu { position: absolute; left: -9999px; top: 8px; background: #fff; color: var(--accent);
+  padding: 10px 14px; border-radius: 10px; z-index: 100; font-weight: 600; }
+.saut-contenu:focus { left: 12px; }
+button { min-height: var(--cible); }
+button.petit { min-height: 34px; }
+
+/* entête : marque, projet, actions */
+header { padding: 10px 22px; gap: 14px; }
+header .marque { display: flex; align-items: center; gap: 10px; }
+header .marque h1 { font-size: 19px; }
+header .logo { width: 36px; height: 36px; font-size: 20px; }
+.choix-projet { margin-left: 6px; }
+.choix-projet select { background: rgba(255, 255, 255, .95); border: 1px solid transparent;
+  border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 14px; color: var(--encre);
+  min-height: var(--cible); max-width: 46vw; }
+.entete-actions { margin-left: auto; display: flex; gap: 8px; }
+header button.discret { background: rgba(255, 255, 255, .16); border: none; color: #fff; }
+header button.discret:hover { background: rgba(255, 255, 255, .3); }
+
+/* tuiles : ce sont des boutons — texte à gauche, cible large */
+button.carte-theme { display: block; width: 100%; text-align: left; font: inherit;
+  min-height: 116px; color: var(--encre); }
+button.carte-theme .pastille { display: inline-block; margin-top: 8px; }
+
+/* entête de projet et de groupe */
+.entete-projet, .entete-theme {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--carte); border: 1px solid var(--bord); border-radius: var(--rayon);
+  padding: 14px 18px; box-shadow: var(--ombre); margin-bottom: 14px;
+}
+.titre-bloc { flex: 1 1 240px; min-width: 0; }
+.titre-bloc h2, .titre-bloc p { margin: 0; }
+.etiquette-role { display: inline-block; background: #eef2fb; color: #3a4a66;
+  border: 1px solid #dfe6f2; border-radius: 999px; padding: 4px 12px;
+  font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+/* Une tuile reste courte : trois lignes de description au plus (le texte entier est dans
+   le groupe). Moins de texte à l'écran, c'est ce qui rend l'outil lisible. */
+button.carte-theme .aide { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden; }
+.presents { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--doux); }
+.presents .point { width: 9px; height: 9px; border-radius: 50%; background: var(--accent-2); }
+
+/* blocs repliés : l'essentiel reste visible, le reste s'ouvre à la demande */
+details.replie { padding: 0; }
+details.replie > summary { cursor: pointer; padding: 14px 18px; font-weight: 600;
+  font-size: 15px; list-style: none; display: flex; align-items: center; gap: 8px; }
+details.replie > summary::-webkit-details-marker { display: none; }
+details.replie > summary::before { content: '▸'; color: var(--accent); font-size: 12px; }
+details.replie[open] > summary::before { content: '▾'; }
+details.replie > summary + * { margin-top: 0; }
+details.replie > *:not(summary) { margin-left: 18px; margin-right: 18px; }
+details.replie > *:last-child { margin-bottom: 16px; }
+.deux-colonnes { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px; align-items: start; }
+.deux-colonnes > .carte { margin-bottom: 0; }
+
+/* membres et rôles */
+.liste-membres { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; max-height: 46vh;
+  overflow: auto; }
+.membre { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px;
+  border: 1px solid var(--bord); border-radius: 10px; background: #fbfcfe; }
+.membre-nom { flex: 1 1 190px; font-size: 14px; }
+.membre .aide { margin: 0; }
+select.role { min-height: 38px; border-radius: 9px; border: 1px solid var(--bord);
+  padding: 6px 8px; font: inherit; font-size: 13.5px; background: #fff; }
+.notifications { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.notif-projet { border: 1px solid var(--bord); border-radius: 10px; padding: 8px 10px; }
+.case { font-size: 14px; }
+.case.sous { margin-left: 20px; font-size: 13.5px; }
+.erreur { color: var(--danger); font-size: 13.5px; min-height: 18px; margin: 6px 0 0; }
+.aide.fin { font-size: 12.5px; }
+
+/* messages discrets : jamais de fenêtre qui interrompt le travail */
+#zone-toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  z-index: 60; display: flex; flex-direction: column; gap: 8px; align-items: center;
+  pointer-events: none; }
+.toast { background: #1e2a3a; color: #fff; padding: 10px 16px; border-radius: 999px;
+  font-size: 14px; opacity: 0; transform: translateY(8px);
+  transition: opacity .2s ease, transform .2s ease; box-shadow: 0 8px 20px rgba(30, 42, 58, .25); }
+.toast.visible { opacity: 1; transform: translateY(0); }
+
+/* écrans étroits (téléphone) */
+@media (max-width: 720px) {
+  main { padding: 14px 14px 40px; }
+  header { padding: 10px 14px; flex-wrap: wrap; }
+  .choix-projet select { max-width: 60vw; }
+  .entete-projet, .entete-theme { padding: 12px 14px; }
+  .onglets { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+  .onglets button { flex: 0 0 auto; }
+}

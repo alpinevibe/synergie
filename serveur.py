@@ -18,37 +18,11 @@ RACINE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, RACINE)
 
 from moteur import atelier as m_atelier                 # noqa: E402
-from moteur import boite_trame as m_boite_trame         # noqa: E402
 from moteur import equipe as m_equipe                   # noqa: E402
-from moteur import fiches as m_fiches                   # noqa: E402
-from moteur import avis as m_avis                       # noqa: E402
-from moteur import boite as m_boite                     # noqa: E402
-from moteur import projet as m_projet                   # noqa: E402
-from moteur import regles as m_regles                   # noqa: E402
-from moteur import trames as m_trames                   # noqa: E402
+from moteur import projets as m_projets                 # noqa: E402
 
 WEB = os.path.join(RACINE, "web")
-DOSSIER_GENERATIONS = os.path.join(RACINE, "donnees", "generations")
 app = Flask(__name__, static_folder=None)
-
-
-# --- Utilitaires --------------------------------------------------------------------
-def _chemin_generation(identifiant: str) -> str:
-    return os.path.join(DOSSIER_GENERATIONS, f"{m_projet._slug(identifiant)}.json")
-
-
-def _lire_generation(identifiant: str) -> dict:
-    chemin = _chemin_generation(identifiant)
-    if os.path.exists(chemin):
-        with open(chemin, encoding="utf-8") as f:
-            return json.load(f)
-    return {"projet": identifiant, "trames": []}
-
-
-def _ecrire_generation(identifiant: str, generation: dict) -> None:
-    os.makedirs(DOSSIER_GENERATIONS, exist_ok=True)
-    with open(_chemin_generation(identifiant), "w", encoding="utf-8") as f:
-        json.dump(generation, f, ensure_ascii=False, indent=2)
 
 
 # --- Interface ----------------------------------------------------------------------
@@ -65,114 +39,9 @@ def statique(chemin):
 # --- API ----------------------------------------------------------------------------
 @app.route("/api/sante")
 def sante():
-    return jsonify({"application": "Synergie", "version": "0.1.0",
-                    "hermes": m_boite.hermes_disponible()})
+    return jsonify({"application": "Synergie", "version": "2.0.0"})
 
 
-@app.route("/api/regles")
-def api_regles():
-    return jsonify(m_regles.REGLES_DEFAUT)
-
-
-@app.route("/api/projets", methods=["GET", "POST"])
-def api_projets():
-    if request.method == "POST":
-        projet = m_projet.enregistrer(m_projet.normaliser(request.get_json(force=True) or {}))
-        return jsonify(projet), 201
-    return jsonify(m_projet.lister())
-
-
-@app.route("/api/demo", methods=["POST"])
-def api_demo():
-    projet = m_projet.projet_demo()
-    m_projet.enregistrer(projet)
-    return jsonify(projet), 201
-
-
-@app.route("/api/projets/<identifiant>", methods=["GET", "PUT", "DELETE"])
-def api_projet(identifiant):
-    if request.method == "DELETE":
-        return jsonify({"supprime": m_projet.supprimer(identifiant)})
-    if request.method == "PUT":
-        projet = m_projet.normaliser(request.get_json(force=True) or {})
-        projet["id"] = identifiant
-        return jsonify(m_projet.enregistrer(projet))
-    try:
-        return jsonify(m_projet.charger(identifiant))
-    except FileNotFoundError:
-        return jsonify({"erreur": "projet introuvable"}), 404
-
-
-@app.route("/api/projets/<identifiant>/cibles-recommandees", methods=["POST"])
-def api_cibles(identifiant):
-    projet = m_projet.charger(identifiant)
-    regles = m_regles.regles_projet(projet.get("regles"))
-    for metier in projet.get("metiers", []):
-        metier["cibles"] = m_projet.cibles_recommandees(metier, projet.get("agents", []), regles)
-    m_projet.enregistrer(projet)
-    return jsonify(projet)
-
-
-@app.route("/api/projets/<identifiant>/trames", methods=["GET", "POST"])
-def api_trames(identifiant):
-    if request.method == "GET":
-        return jsonify(_lire_generation(identifiant))
-    projet = m_projet.charger(identifiant)
-    corps = request.get_json(silent=True) or {}
-    generation = m_trames.generer_trames(
-        projet,
-        metier_code=corps.get("metier"),
-        max_semaines=int(corps.get("max_semaines") or m_trames.MAX_SEMAINES_DEFAUT),
-        duree_max_s=float(corps.get("duree_max_s") or m_trames.DUREE_SOLVEUR_S),
-    )
-    generation["nom_projet"] = projet.get("nom")
-    _ecrire_generation(identifiant, generation)
-    m_boite.ranger_generation(generation, projet=identifiant)
-    return jsonify(generation)
-
-
-@app.route("/api/projets/<identifiant>/avis", methods=["POST", "DELETE"])
-def api_avis(identifiant):
-    projet = m_projet.charger(identifiant)
-    corps = request.get_json(force=True) or {}
-    if request.method == "POST":
-        if not corps.get("agent") or not corps.get("jour"):
-            return jsonify({"erreur": "agent et jour sont obligatoires"}), 400
-        projet.setdefault("avis", []).append({
-            "agent": corps["agent"], "jour": corps["jour"],
-            "souhait": (corps.get("souhait") or "").upper(),
-            "motif": corps.get("motif", ""),
-        })
-    else:
-        index = int(corps.get("index", -1))
-        if 0 <= index < len(projet.get("avis", [])):
-            projet["avis"].pop(index)
-    m_projet.enregistrer(projet)
-    return jsonify(projet)
-
-
-@app.route("/api/projets/<identifiant>/synthese")
-def api_synthese(identifiant):
-    projet = m_projet.charger(identifiant)
-    generation = _lire_generation(identifiant)
-    if not generation.get("trames"):
-        generation = m_trames.generer_trames(projet)
-        _ecrire_generation(identifiant, generation)
-        m_boite.ranger_generation(generation, projet=identifiant)
-    return jsonify(m_avis.synthese(projet, generation))
-
-
-@app.route("/api/boite")
-def api_boite():
-    trames = m_boite.lister()
-    return jsonify({"trames": trames, "total": len(trames)})
-
-
-@app.route("/api/boite/importer-hermes", methods=["POST"])
-def api_importer_hermes():
-    corps = request.get_json(silent=True) or {}
-    pops = tuple(corps.get("populations") or ("IDE HTC", "AS HTC", "ASH"))
-    return jsonify(m_boite.importer_hermes(pops, corps.get("semaines")))
 
 
 # ====================================================================================
@@ -181,7 +50,7 @@ def api_importer_hermes():
 def _qui() -> str:
     """Le prénom de la personne qui agit : envoyé par la page dans l'en-tête
     « X-Synergie-Nom ». Il sert à journaliser les actions (demande du 05/10/2026)."""
-    jeton = request.headers.get("X-Synergie-Jeton") or request.args.get("jeton")
+    jeton = _jeton()
     if jeton:
         compte = m_equipe.lire_compte(jeton)
         if compte and compte.get("prenom"):
@@ -193,9 +62,18 @@ def _qui() -> str:
     return nom[:60] or "Anonyme"
 
 
+def _jeton() -> str:
+    """Le trousseau du navigateur : en-tête des appels ordinaires, COOKIE pour le flux
+    temps réel (un « EventSource » ne peut pas porter d'en-tête personnalisé)."""
+    return (request.headers.get("X-Synergie-Jeton")
+            or request.args.get("jeton")
+            or request.cookies.get("synergie")
+            or "")
+
+
 def _compte(requis: bool = False) -> dict | None:
     """Le compte de la personne qui agit, retrouvé grâce au jeton du navigateur."""
-    jeton = request.headers.get("X-Synergie-Jeton") or request.args.get("jeton")
+    jeton = _jeton()
     compte = m_equipe.lire_compte(jeton) if jeton else None
     if compte is None and requis:
         abort(401, description="Compte inconnu : créez votre compte dans Synergie.")
@@ -203,17 +81,59 @@ def _compte(requis: bool = False) -> dict | None:
 
 
 def _prevenir(identifiant: str, resume: str) -> None:
-    """Prévient par courriel les responsables du thème qu'il vient de changer."""
+    """Prévient par courriel les personnes qui suivent ce groupe — ou tout le projet."""
     theme = m_atelier.lire_theme(identifiant)
     if theme:
-        m_equipe.prevenit(identifiant, theme["titre"], resume, _qui())
+        m_equipe.prevenit(identifiant, theme["titre"], resume, _qui(),
+                          theme.get("projet") or "")
 
 
-def _theme(identifiant: str) -> dict:
+def _theme(identifiant: str, ecriture: bool = False) -> dict:
+    """Le groupe demandé, après vérification des droits de la personne qui agit.
+
+    Lecture : il faut être membre du projet (ou du groupe). Écriture : il faut être
+    « membre participant » ou « administrateur » — un visiteur ne modifie rien.
+    """
     theme = m_atelier.lire_theme(identifiant)
     if not theme:
-        abort(404, description="Thème inconnu")
+        abort(404, description="Groupe inconnu.")
+    compte = _compte(requis=True)
+    role = m_projets.role_effectif(theme.get("projet") or "", identifiant, compte["id"])
+    if role is None:
+        abort(403, description="Vous n'avez pas accès à ce groupe de travail.")
+    if ecriture and not m_projets.peut_ecrire(role):
+        abort(403, description="Votre rôle de visiteur ne permet pas de modifier ce groupe.")
+    request.role_theme = role
     return theme
+
+
+def _projet(identifiant: str, ecriture: bool = False) -> dict:
+    """Le projet demandé, après vérification des droits."""
+    projet = m_projets.lire_projet(identifiant)
+    if not projet:
+        abort(404, description="Projet inconnu.")
+    compte = _compte(requis=True)
+    role = m_projets.role_du_projet(identifiant, compte["id"])
+    if role is None:
+        abort(403, description="Vous n'êtes pas membre de ce projet.")
+    if ecriture and not m_projets.peut_administrer(role):
+        abort(403, description="Seul un administrateur du projet peut faire cette action.")
+    request.role_projet = role
+    return projet
+
+
+def _compte_a_ajouter(corps: dict) -> dict:
+    """La personne à inviter : un compte existant, ou un compte créé à la volée."""
+    corps = corps or {}
+    if corps.get("compte"):
+        for compte in m_equipe.lister_comptes():
+            if compte["id"] == corps["compte"]:
+                return compte
+        abort(404, description="Compte inconnu.")
+    prenom = (corps.get("prenom") or "").strip()
+    if not prenom:
+        abort(400, description="Indiquez le prénom de la personne à inviter.")
+    return m_equipe.creer_compte(prenom, (corps.get("email") or "").strip())["compte"]
 
 
 @app.route("/api/atelier/sante")
@@ -221,57 +141,192 @@ def api_atelier_sante():
     return jsonify(m_atelier.sante())
 
 
-@app.route("/api/boite-trame/analyser", methods=["POST"])
-def api_boite_trame_analyser():
-    """Boîte à trames : ce que la description du service demande (heures, ETP, écart)."""
-    try:
-        return jsonify(m_boite_trame.analyser(request.get_json(silent=True) or {}))
-    except Exception as erreur:                    # description incomplète : on le dit
-        return jsonify({"erreur": str(erreur)}), 400
+# ====================================================================================
+# PROJETS — un projet rassemble des groupes de travail, et des membres avec un rôle
+# ====================================================================================
+@app.route("/api/projets", methods=["GET", "POST"])
+def api_projets():
+    """GET : les projets dont je suis membre. POST : créer un projet (j'en suis l'admin)."""
+    compte = _compte(requis=True)
+    if request.method == "POST":
+        corps = request.get_json(silent=True) or {}
+        nom = (corps.get("nom") or "").strip()
+        if not nom:
+            return jsonify({"erreur": "Le nom du projet est obligatoire."}), 400
+        projet = m_projets.creer_projet(nom, corps.get("description", ""), compte["prenom"],
+                                        admin=compte["id"], qui=compte["prenom"])
+        m_atelier.journaliser("", compte["prenom"], "projet_cree", projet["id"], nom,
+                              diffuser_aussi=False)
+        return jsonify(projet), 201
+    projets = m_projets.lister_projets(compte["id"])
+    for projet in projets:
+        projet["role"] = projet.get("role") or "membre"
+        projet["libelle_role"] = m_projets.LIBELLES_ROLES.get(projet["role"], projet["role"])
+    return jsonify({"projets": projets,
+                    "roles": [{"cle": r, "libelle": m_projets.LIBELLES_ROLES[r],
+                               "description": m_projets.DESCRIPTIONS_ROLES[r]}
+                              for r in m_projets.ROLES]})
 
 
-@app.route("/api/boite-trame/generer", methods=["POST"])
-def api_boite_trame_generer():
-    """Boîte à trames : jusqu'à 3 trames proposées, avec leur conformité."""
-    maxi = request.args.get("trames", 3, type=int)
-    try:
-        return jsonify(m_boite_trame.generer(request.get_json(silent=True) or {}, maxi))
-    except Exception as erreur:
-        return jsonify({"erreur": str(erreur)}), 400
+@app.route("/api/projets/<identifiant>", methods=["GET", "PUT", "DELETE"])
+def api_projet(identifiant):
+    if request.method == "DELETE":
+        _projet(identifiant, ecriture=True)
+        m_projets.supprimer_projet(identifiant)
+        return jsonify({"ok": True})
+    if request.method == "PUT":
+        _projet(identifiant, ecriture=True)
+        return jsonify(m_projets.maj_projet(identifiant, request.get_json(silent=True) or {},
+                                            _qui()))
+    projet = _projet(identifiant)
+    compte = _compte(requis=True)
+    return jsonify({
+        "projet": projet,
+        "role": m_projets.role_du_projet(identifiant, compte["id"]),
+        "groupes": m_atelier.lister_themes(projet=identifiant),
+        "membres": m_projets.membres_du_projet(identifiant),
+        "roles": [{"cle": r, "libelle": m_projets.LIBELLES_ROLES[r],
+                   "description": m_projets.DESCRIPTIONS_ROLES[r]} for r in m_projets.ROLES],
+    })
 
 
+@app.route("/api/projets/<identifiant>/membres", methods=["POST"])
+def api_projet_membre(identifiant):
+    """Inviter ou régler une personne du projet : rôle et notifications."""
+    _projet(identifiant, ecriture=True)
+    corps = request.get_json(silent=True) or {}
+    compte = _compte_a_ajouter(corps)
+    role = corps.get("role") or "membre"
+    if role not in m_projets.ROLES:
+        return jsonify({"erreur": "Rôle inconnu."}), 400
+    membre = m_projets.definir_membre_projet(
+        identifiant, compte["id"], role,
+        bool(corps.get("notifier")),
+        ajoute_par=_qui())
+    m_atelier.journaliser("", _qui(), "projet_membre", identifiant,
+                          f"{compte['prenom']} · {m_projets.LIBELLES_ROLES[role]}",
+                          diffuser_aussi=False)
+    return jsonify(membre), 201
+
+
+@app.route("/api/projets/<identifiant>/membres/<membre>", methods=["PUT", "DELETE"])
+def api_projet_membre_un(identifiant, membre):
+    _projet(identifiant, ecriture=True)
+    if request.method == "DELETE":
+        m_projets.retirer_membre_projet(identifiant, membre)
+        return jsonify({"ok": True})
+    corps = request.get_json(silent=True) or {}
+    role = corps.get("role")
+    if role is not None and role not in m_projets.ROLES:
+        return jsonify({"erreur": "Rôle inconnu."}), 400
+    notifier = corps.get("notifier")
+    return jsonify(m_projets.definir_membre_projet(
+        identifiant, membre, role, None if notifier is None else bool(notifier),
+        ajoute_par=_qui()))
+
+
+# ====================================================================================
+# GROUPES DE TRAVAIL — un groupe appartient à un projet
+# ====================================================================================
 @app.route("/api/themes", methods=["GET", "POST"])
 def api_themes():
+    """GET : les groupes des projets dont je suis membre (ou d'un projet donné).
+    POST : créer un groupe — il faut administrer le projet."""
+    compte = _compte(requis=True)
     if request.method == "POST":
         corps = request.get_json(silent=True) or {}
         titre = (corps.get("titre") or "").strip()
         if not titre:
             return jsonify({"erreur": "Le titre est obligatoire."}), 400
+        projet = (corps.get("projet") or "").strip()
+        if not projet:
+            return jsonify({"erreur": "Choisissez le projet du groupe."}), 400
+        _projet(projet, ecriture=True)
         theme = m_atelier.creer_theme(titre, corps.get("description", ""),
-                                      corps.get("couleur", ""), corps.get("projet", ""),
-                                      _qui())
+                                      corps.get("couleur", ""), projet, _qui())
         return jsonify(theme), 201
-    return jsonify({"themes": m_atelier.lister_themes()})
+    demande = (request.args.get("projet") or "").strip()
+    if demande:
+        _projet(demande)
+        groupes = m_atelier.lister_themes(projet=demande)
+    else:
+        identifiants = []
+        for projet in m_projets.lister_projets(compte["id"]):
+            identifiants.extend(t["id"] for t in m_atelier.lister_themes(projet=projet["id"]))
+        groupes = m_atelier.lister_themes(identifiants=identifiants)
+    return jsonify({"themes": groupes})
 
 
 @app.route("/api/themes/<identifiant>", methods=["GET", "PUT", "DELETE"])
 def api_theme(identifiant):
     if request.method == "DELETE":
         _theme(identifiant)
+        projet = m_atelier.lire_theme(identifiant).get("projet") or ""
+        if not m_projets.peut_administrer(
+                m_projets.role_effectif(projet, identifiant, (_compte(requis=True) or {})["id"])):
+            abort(403, description="Seul un administrateur peut supprimer un groupe.")
         m_atelier.supprimer_theme(identifiant)
         return jsonify({"ok": True})
     if request.method == "PUT":
-        _theme(identifiant)
+        _theme(identifiant, ecriture=True)
         return jsonify(m_atelier.maj_theme(identifiant, request.get_json(silent=True) or {},
                                            _qui()))
+    theme = _theme(identifiant)
     contenu = m_atelier.resume(identifiant, _qui())
-    contenu["responsables"] = m_equipe.responsables(identifiant)
+    contenu["membres"] = m_projets.membres_du_theme(identifiant)
+    contenu["role"] = getattr(request, "role_theme", None)
+    contenu["role_projet"] = m_projets.role_du_projet(
+        theme.get("projet") or "", (_compte(requis=True) or {})["id"])
+    contenu["roles"] = [{"cle": r, "libelle": m_projets.LIBELLES_ROLES[r],
+                         "description": m_projets.DESCRIPTIONS_ROLES[r]}
+                        for r in m_projets.ROLES]
     return jsonify(contenu)
+
+
+@app.route("/api/themes/<identifiant>/membres", methods=["GET", "POST"])
+def api_theme_membres(identifiant):
+    """Qui participe à ce groupe, et avec quel rôle."""
+    if request.method == "GET":
+        _theme(identifiant)
+        return jsonify({"membres": m_projets.membres_du_theme(identifiant)})
+    theme = _theme(identifiant)
+    projet = theme.get("projet") or ""
+    if not m_projets.peut_administrer(
+            m_projets.role_effectif(projet, identifiant, (_compte(requis=True) or {})["id"])):
+        abort(403, description="Seul un administrateur du groupe peut inviter.")
+    corps = request.get_json(silent=True) or {}
+    compte = _compte_a_ajouter(corps)
+    role = corps.get("role") or "membre"
+    if role not in m_projets.ROLES:
+        return jsonify({"erreur": "Rôle inconnu."}), 400
+    membre = m_projets.definir_membre_theme(identifiant, compte["id"], role,
+                                            bool(corps.get("notifier")), ajoute_par=_qui())
+    return jsonify(membre), 201
+
+
+@app.route("/api/themes/<identifiant>/membres/<membre>", methods=["PUT", "DELETE"])
+def api_theme_membre_un(identifiant, membre):
+    theme = _theme(identifiant)
+    projet = theme.get("projet") or ""
+    if not m_projets.peut_administrer(
+            m_projets.role_effectif(projet, identifiant, (_compte(requis=True) or {})["id"])):
+        abort(403, description="Seul un administrateur du groupe peut modifier les rôles.")
+    if request.method == "DELETE":
+        m_projets.retirer_membre_theme(identifiant, membre)
+        return jsonify({"ok": True})
+    corps = request.get_json(silent=True) or {}
+    role = corps.get("role")
+    if role is not None and role not in m_projets.ROLES:
+        return jsonify({"erreur": "Rôle inconnu."}), 400
+    notifier = corps.get("notifier")
+    return jsonify(m_projets.definir_membre_theme(
+        identifiant, membre, role, None if notifier is None else bool(notifier),
+        ajoute_par=_qui()))
 
 
 @app.route("/api/themes/<identifiant>/notes", methods=["POST"])
 def api_note_creer(identifiant):
-    _theme(identifiant)
+    _theme(identifiant, ecriture=True)
     corps = request.get_json(silent=True) or {}
     corps["auteur"] = corps.get("auteur") or _qui()
     return jsonify(m_atelier.creer_note(identifiant, corps)), 201
@@ -279,7 +334,7 @@ def api_note_creer(identifiant):
 
 @app.route("/api/themes/<identifiant>/notes/<note>", methods=["PUT", "DELETE"])
 def api_note(identifiant, note):
-    _theme(identifiant)
+    _theme(identifiant, ecriture=True)
     if request.method == "DELETE":
         m_atelier.supprimer_note(identifiant, note, _qui())
         return jsonify({"ok": True})
@@ -292,7 +347,7 @@ def api_note(identifiant, note):
 
 @app.route("/api/themes/<identifiant>/decisions", methods=["POST"])
 def api_decision_creer(identifiant):
-    _theme(identifiant)
+    _theme(identifiant, ecriture=True)
     corps = request.get_json(silent=True) or {}
     if not (corps.get("intitule") or "").strip():
         return jsonify({"erreur": "L'intitulé est obligatoire."}), 400
@@ -303,7 +358,7 @@ def api_decision_creer(identifiant):
 
 @app.route("/api/themes/<identifiant>/decisions/<decision>", methods=["PUT", "DELETE"])
 def api_decision(identifiant, decision):
-    _theme(identifiant)
+    _theme(identifiant, ecriture=True)
     if request.method == "DELETE":
         m_atelier.supprimer_decision(identifiant, decision, _qui())
         return jsonify({"ok": True})
@@ -318,7 +373,7 @@ def api_decision(identifiant, decision):
 def api_voter(identifiant, decision):
     """Vote ANONYME sur une décision : une seule fois par personne. Le nom n'est jamais
     enregistré — seul le serveur peut reconnaître « cette personne a déjà voté »."""
-    _theme(identifiant)
+    _theme(identifiant, ecriture=True)
     corps = request.get_json(silent=True) or {}
     try:
         resultat = m_atelier.voter(identifiant, decision, _qui(), corps.get("valeur", ""))
@@ -329,7 +384,7 @@ def api_voter(identifiant, decision):
 
 @app.route("/api/themes/<identifiant>/documents", methods=["POST"])
 def api_document_ajouter(identifiant):
-    _theme(identifiant)
+    _theme(identifiant, ecriture=True)
     depot = request.files.get("fichier")
     if not depot or not depot.filename:
         return jsonify({"erreur": "Aucun fichier reçu."}), 400
@@ -356,7 +411,7 @@ def api_document_fichier(identifiant, document):
 
 @app.route("/api/themes/<identifiant>/documents/<document>", methods=["DELETE"])
 def api_document_supprimer(identifiant, document):
-    _theme(identifiant)
+    _theme(identifiant, ecriture=True)
     m_atelier.supprimer_document(identifiant, document, _qui())
     return jsonify({"ok": True})
 
@@ -364,7 +419,7 @@ def api_document_supprimer(identifiant, document):
 @app.route("/api/themes/<identifiant>/curseurs", methods=["POST"])
 def api_curseurs(identifiant):
     """« Qui travaille sur quelle note » : relayé aux autres, sans être enregistré."""
-    _theme(identifiant)
+    _theme(identifiant, ecriture=True)
     corps = request.get_json(silent=True) or {}
     m_atelier.diffuser(identifiant, {
         "type": "curseur", "qui": corps.get("qui", ""), "note": corps.get("note")})
@@ -403,69 +458,110 @@ def api_evenements(identifiant):
 # ====================================================================================
 # L'ÉQUIPE : comptes, discussions, pages de travail, cadre général, fiches de poste
 # ====================================================================================
+def _mes_notifications(compte_id: str) -> dict:
+    """Ce que je suis : mes projets et mes groupes, avec mes rôles et mes alertes."""
+    projets = []
+    for projet in m_projets.lister_projets(compte_id):
+        miens = [m for m in m_projets.membres_du_projet(projet["id"])
+                 if m["compte"] == compte_id]
+        groupes = []
+        for theme in m_atelier.lister_themes(projet=projet["id"]):
+            siens = [m for m in m_projets.membres_du_theme(theme["id"])
+                     if m["compte"] == compte_id]
+            groupes.append({"id": theme["id"], "titre": theme["titre"],
+                            "role": siens[0]["role"] if siens else projet["role"],
+                            "role_propre": bool(siens),
+                            "notifier": bool(siens[0]["notifier"]) if siens else False})
+        projets.append({"id": projet["id"], "nom": projet["nom"], "role": projet["role"],
+                        "notifier": bool(miens[0]["notifier"]) if miens else False,
+                        "groupes": groupes})
+    return {"projets": projets}
+
+
 @app.route("/api/comptes", methods=["GET", "POST"])
 def api_comptes():
-    """POST : créer (ou retrouver) son compte avec prénom et courriel → rend un jeton.
-    GET : la liste des comptes (pour désigner les responsables d'un thème)."""
+    """POST : créer (ou retrouver) son compte — seul le PRÉNOM est demandé → rend un jeton.
+    GET : la liste des comptes connus, pour inviter quelqu'un dans un projet."""
     if request.method == "POST":
         corps = request.get_json(silent=True) or {}
         try:
             resultat = m_equipe.creer_compte(corps.get("prenom", ""), corps.get("email", ""),
-                                             bool(corps.get("notifier_tout")),
+                                             corps.get("poste", ""), corps.get("appareil", ""),
                                              corps.get("jeton"))
         except ValueError as erreur:
             return jsonify({"erreur": str(erreur)}), 400
-        return jsonify(resultat), 201
+        # Le jeton part aussi en COOKIE : c'est ce qui permet au flux temps réel de
+        # s'authentifier sans exposer le jeton dans l'adresse.
+        reponse = jsonify(resultat)
+        reponse.set_cookie("synergie", resultat["jeton"], httponly=True, samesite="Lax",
+                           max_age=60 * 60 * 24 * 365)
+        return reponse, 201
+    _compte(requis=True)
     return jsonify({"comptes": m_equipe.lister_comptes()})
 
 
 @app.route("/api/comptes/moi", methods=["GET", "PUT"])
 def api_mon_compte():
+    """Mon compte : prénom, poste de travail, courriel d'alerte (facultatif) et ce que je suis."""
     compte = _compte(requis=True)
     if request.method == "PUT":
         corps = request.get_json(silent=True) or {}
         compte = m_equipe.maj_compte(compte["id"], corps) or compte
-        if "abonnements" in corps:
-            for identifiant in m_atelier.lister_themes():
-                m_equipe.abonner(identifiant["id"], compte["id"],
-                                 identifiant["id"] in (corps.get("abonnements") or []))
-    themes_responsable = [t["id"] for t in m_atelier.lister_themes()
-                          if any(r["id"] == compte["id"] for r in m_equipe.responsables(t["id"]))]
-    return jsonify({"compte": compte,
-                    "abonnements": m_equipe.abonnements_du_compte(compte["id"]),
-                    "responsable_de": themes_responsable})
+    return jsonify({"compte": compte, "notifications": _mes_notifications(compte["id"])})
 
 
-@app.route("/api/themes/<identifiant>/responsables", methods=["GET", "PUT"])
-def api_responsables(identifiant):
-    _theme(identifiant)
-    if request.method == "PUT":
-        corps = request.get_json(silent=True) or {}
-        resultat = m_equipe.definir_responsables(identifiant, corps.get("comptes") or [], _qui())
-        _prevenir(identifiant, "Les responsables du thème ont changé.")
-        return jsonify({"responsables": resultat})
-    return jsonify({"responsables": m_equipe.responsables(identifiant)})
-
-
-@app.route("/api/messages")
-def api_messages_generaux():
-    """Le chat général du projet (celui qui n'est rattaché à aucun thème)."""
-    return jsonify({"messages": m_equipe.lister_messages("")})
-
-
-@app.route("/api/messages", methods=["POST"])
-def api_message_general():
+@app.route("/api/notifications", methods=["PUT"])
+def api_notifications():
+    """Régler mes alertes : par projet entier, ou groupe par groupe."""
+    compte = _compte(requis=True)
     corps = request.get_json(silent=True) or {}
-    try:
-        message = m_equipe.envoyer_message("", _qui(), corps.get("texte", ""))
-    except ValueError as erreur:
-        return jsonify({"erreur": str(erreur)}), 400
-    return jsonify(message), 201
+    for projet in corps.get("projets") or []:
+        if m_projets.role_du_projet(projet.get("id") or "", compte["id"]) is None:
+            continue
+        m_projets.definir_membre_projet(projet["id"], compte["id"],
+                                        notifier=bool(projet.get("notifier")))
+    for theme in corps.get("groupes") or []:
+        theme_lu = m_atelier.lire_theme(theme.get("id") or "")
+        if not theme_lu:
+            continue
+        projet = theme_lu.get("projet") or ""
+        role = m_projets.role_effectif(projet, theme["id"], compte["id"])
+        if role is None:
+            continue
+        # On ne touche PAS au rôle : on garde celui du groupe, ou celui du projet à défaut
+        # (créer une ligne de groupe avec le rôle « membre » rétrograderait un administrateur).
+        siens = [m for m in m_projets.membres_du_theme(theme["id"]) if m["compte"] == compte["id"]]
+        m_projets.definir_membre_theme(theme["id"], compte["id"],
+                                       siens[0]["role"] if siens else role,
+                                       bool(theme.get("notifier")))
+    return jsonify(_mes_notifications(compte["id"]))
+
+
+@app.route("/api/projets/<identifiant>/messages", methods=["GET", "POST"])
+def api_messages_projet(identifiant):
+    """La discussion du projet (celle qui n'est rattachée à aucun groupe)."""
+    _projet(identifiant)
+    if request.method == "POST":
+        corps = request.get_json(silent=True) or {}
+        try:
+            message = m_equipe.envoyer_message(identifiant, _qui(), corps.get("texte", ""))
+        except ValueError as erreur:
+            return jsonify({"erreur": str(erreur)}), 400
+        _prevenir(identifiant, f"Nouveau message de {_qui()} : " + corps.get("texte", "")[:120])
+        return jsonify(message), 201
+    return jsonify({"messages": m_equipe.lister_messages(identifiant)})
+
+
+@app.route("/api/projets/<identifiant>/messages/<message>", methods=["DELETE"])
+def api_message_projet_supprimer(identifiant, message):
+    _projet(identifiant)
+    m_equipe.supprimer_message(identifiant, message)
+    return jsonify({"ok": True})
 
 
 @app.route("/api/themes/<identifiant>/messages", methods=["GET", "POST"])
 def api_messages(identifiant):
-    _theme(identifiant)
+    _theme(identifiant, ecriture=request.method == "POST")
     if request.method == "POST":
         corps = request.get_json(silent=True) or {}
         try:
@@ -479,14 +575,14 @@ def api_messages(identifiant):
 
 @app.route("/api/themes/<identifiant>/messages/<message>", methods=["DELETE"])
 def api_message_supprimer(identifiant, message):
-    _theme(identifiant)
+    _theme(identifiant, ecriture=True)
     m_equipe.supprimer_message(identifiant, message)
     return jsonify({"ok": True})
 
 
 @app.route("/api/themes/<identifiant>/pages", methods=["GET", "POST"])
 def api_pages(identifiant):
-    _theme(identifiant)
+    _theme(identifiant, ecriture=request.method == "POST")
     if request.method == "POST":
         corps = request.get_json(silent=True) or {}
         page = m_equipe.creer_page(identifiant, corps.get("titre", ""),
@@ -498,7 +594,7 @@ def api_pages(identifiant):
 
 @app.route("/api/themes/<identifiant>/pages/<page>", methods=["GET", "PUT", "DELETE"])
 def api_page(identifiant, page):
-    _theme(identifiant)
+    _theme(identifiant, ecriture=request.method in ("PUT", "DELETE"))
     if request.method == "DELETE":
         m_equipe.supprimer_page(identifiant, page, _qui())
         return jsonify({"ok": True})
@@ -515,42 +611,48 @@ def api_page(identifiant, page):
     return jsonify(resultat)
 
 
-@app.route("/api/cadre", methods=["GET", "PUT"])
-def api_cadre():
-    """Le cadre de travail : le contexte du projet, en quelques phrases."""
+@app.route("/api/projets/<identifiant>/cadre", methods=["GET", "PUT"])
+def api_cadre(identifiant):
+    """Le cadre de travail DU PROJET : son contexte, en quelques phrases."""
+    _projet(identifiant)
     if request.method == "PUT":
+        _projet(identifiant, ecriture=True)
         corps = request.get_json(silent=True) or {}
-        return jsonify(m_equipe.maj_cadre(corps.get("contexte", ""), _qui()))
-    return jsonify(m_equipe.lire_cadre())
+        return jsonify(m_equipe.maj_cadre(corps.get("contexte", ""), _qui(), identifiant))
+    return jsonify(m_equipe.lire_cadre(identifiant))
 
 
-@app.route("/api/cadre/documents", methods=["GET", "POST"])
-def api_cadre_documents():
-    """Les comptes rendus de réunion déposés dans le cadre de travail."""
+@app.route("/api/projets/<identifiant>/documents", methods=["GET", "POST"])
+def api_cadre_documents(identifiant):
+    """Les comptes rendus de réunion du projet (documents rangés sous le projet)."""
+    _projet(identifiant)
     if request.method == "POST":
+        _projet(identifiant, ecriture=True)
         depot = request.files.get("fichier")
         if not depot or not depot.filename:
             return jsonify({"erreur": "Aucun fichier reçu."}), 400
         try:
-            document = m_atelier.ajouter_document("", depot.filename, depot.read(),
+            document = m_atelier.ajouter_document(identifiant, depot.filename, depot.read(),
                                                   depot.mimetype or "",
                                                   request.form.get("note", ""),
                                                   request.form.get("auteur") or _qui())
         except ValueError as erreur:
             return jsonify({"erreur": str(erreur)}), 413
         return jsonify(document), 201
-    return jsonify({"documents": m_atelier.lister_documents("")})
+    return jsonify({"documents": m_atelier.lister_documents(identifiant)})
 
 
-@app.route("/api/cadre/documents/<document>", methods=["DELETE"])
-def api_cadre_document_supprimer(document):
-    m_atelier.supprimer_document("", document, _qui())
+@app.route("/api/projets/<identifiant>/documents/<document>", methods=["DELETE"])
+def api_cadre_document_supprimer(identifiant, document):
+    _projet(identifiant, ecriture=True)
+    m_atelier.supprimer_document(identifiant, document, _qui())
     return jsonify({"ok": True})
 
 
-@app.route("/api/cadre/documents/<document>/fichier")
-def api_cadre_document_fichier(document):
-    trouve = m_atelier.chemin_document("", document)
+@app.route("/api/projets/<identifiant>/documents/<document>/fichier")
+def api_cadre_document_fichier(identifiant, document):
+    _projet(identifiant)
+    trouve = m_atelier.chemin_document(identifiant, document)
     if not trouve:
         abort(404, description="Document inconnu")
     nom, chemin = trouve
@@ -558,11 +660,12 @@ def api_cadre_document_fichier(document):
                      mimetype="application/octet-stream")
 
 
-@app.route("/api/evenements")
-def api_evenements_generaux():
-    """Flux temps réel du chat général et du cadre de travail."""
+@app.route("/api/projets/<identifiant>/evenements")
+def api_evenements_generaux(identifiant):
+    """Flux temps réel de la discussion et du cadre DU PROJET."""
+    _projet(identifiant)
     nom = request.args.get("nom") or "Anonyme"
-    numero, file = m_atelier.abonner("", nom)
+    numero, file = m_atelier.abonner(identifiant, nom)
 
     def flux():
         try:
@@ -575,89 +678,11 @@ def api_evenements_generaux():
                     continue
                 yield "data: " + json.dumps(evenement, ensure_ascii=False) + "\n\n"
         finally:
-            m_atelier.desabonner("", numero)
+            m_atelier.desabonner(identifiant, numero)
 
     return Response(flux(), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
-
-@app.route("/api/themes/<identifiant>/codes")
-def api_codes(identifiant):
-    _theme(identifiant)
-    return jsonify({"codes": m_fiches.lister_codes(identifiant)})
-
-
-@app.route("/api/themes/<identifiant>/codes", methods=["POST"])
-def api_code_enregistrer(identifiant):
-    _theme(identifiant)
-    try:
-        return jsonify(m_fiches.enregistrer_code(identifiant,
-                                                 request.get_json(silent=True) or {}, _qui()))
-    except ValueError as erreur:
-        return jsonify({"erreur": str(erreur)}), 400
-
-
-@app.route("/api/themes/<identifiant>/codes/<code>", methods=["DELETE"])
-def api_code_supprimer(identifiant, code):
-    _theme(identifiant)
-    m_fiches.supprimer_code(identifiant, code, _qui())
-    return jsonify({"ok": True})
-
-
-@app.route("/api/themes/<identifiant>/fiches", methods=["GET", "POST"])
-def api_fiches(identifiant):
-    _theme(identifiant)
-    if request.method == "POST":
-        corps = request.get_json(silent=True) or {}
-        fiche = m_fiches.creer_fiche(identifiant, corps, _qui())
-        _prevenir(identifiant, f"Nouvelle fiche de poste : {fiche['intitule']}")
-        return jsonify(fiche), 201
-    return jsonify({"fiches": m_fiches.lister_fiches(identifiant)})
-
-
-@app.route("/api/themes/<identifiant>/fiches/<fiche>", methods=["GET", "PUT", "DELETE"])
-def api_fiche(identifiant, fiche):
-    _theme(identifiant)
-    if request.method == "DELETE":
-        m_fiches.supprimer_fiche(identifiant, fiche, _qui())
-        return jsonify({"ok": True})
-    if request.method == "PUT":
-        resultat = m_fiches.maj_fiche(identifiant, fiche, request.get_json(silent=True) or {},
-                                      _qui())
-        if resultat is None:
-            return jsonify({"erreur": "Fiche inconnue"}), 404
-        _prevenir(identifiant, f"Fiche de poste modifiée : {resultat['intitule']}"
-                               f" ({resultat['statut_libelle']})")
-        return jsonify(resultat)
-    resultat = m_fiches.lire_fiche(identifiant, fiche)
-    if resultat is None:
-        return jsonify({"erreur": "Fiche inconnue"}), 404
-    return jsonify(resultat)
-
-
-@app.route("/api/themes/<identifiant>/fiches/<fiche>/dupliquer", methods=["POST"])
-def api_fiche_dupliquer(identifiant, fiche):
-    _theme(identifiant)
-    try:
-        return jsonify(m_fiches.dupliquer_fiche(identifiant, fiche, _qui())), 201
-    except ValueError as erreur:
-        return jsonify({"erreur": str(erreur)}), 404
-
-
-@app.route("/api/themes/<identifiant>/fiches/<fiche>/taches", methods=["POST"])
-def api_tache_ajouter(identifiant, fiche):
-    _theme(identifiant)
-    return jsonify(m_fiches.ajouter_tache(identifiant, fiche,
-                                          request.get_json(silent=True) or {}, _qui())), 201
-
-
-@app.route("/api/themes/<identifiant>/fiches/<fiche>/taches/<tache>", methods=["PUT", "DELETE"])
-def api_tache(identifiant, fiche, tache):
-    _theme(identifiant)
-    if request.method == "DELETE":
-        return jsonify(m_fiches.supprimer_tache(identifiant, fiche, tache, _qui()))
-    return jsonify(m_fiches.maj_tache(identifiant, fiche, tache,
-                                      request.get_json(silent=True) or {}, _qui()))
 
 
 @app.route("/api/alertes/essai", methods=["POST"])
@@ -679,7 +704,7 @@ def principal():
     analyseur.add_argument("--hote", default="127.0.0.1")
     arguments = analyseur.parse_args()
     m_atelier.initialiser()
-    m_fiches.initialiser()
+    m_projets.initialiser()
     m_equipe.initialiser()
     m_equipe.demarrer_le_facteur()          # les alertes partent en arrière-plan
     # `threaded=True` : indispensable — une connexion temps réel occupe un fil, et les autres

@@ -1,5 +1,31 @@
 # Synergie — état du projet
 
+## 8 octobre 2026 — Synergie devient multi-projets, et s'allège
+
+Demandes du cadre, appliquées le jour même :
+
+1. **Plusieurs projets** : un projet rassemble des groupes de travail ; on **invite** des
+   personnes par leur prénom, avec un rôle au projet (**administrateur**, **membre
+   participant**, **visiteur**) et, si besoin, un rôle **différent dans chaque groupe**.
+   Le rôle de groupe l'emporte ; l'administrateur du projet administre tous ses groupes.
+2. **Seuls les groupes issus d'une lettre de cadrage** restent (« Rythme de travail » et
+   « Fiches de poste » sont retirés) : **tous les groupes ont désormais les mêmes outils**
+   (tableau blanc, pages, discussion, documents, décisions, journal).
+3. **Interface repensée** : moins de texte à l'écran (aides en infobulle, blocs repliés),
+   une action principale par écran, contrastes renforcés, contours de focus visibles,
+   libellés associés aux champs, cibles de 40 px.
+4. **Entrée par le prénom seul** : le **poste de travail** (navigateur, appareil) est
+   enregistré automatiquement et modifiable ; le **courriel** n'est demandé que pour
+   **activer les alertes**, projet par projet et groupe par groupe.
+5. La **boîte à trames**, les **fiches de poste** et les **codes horaires** quittent
+   Synergie : ils deviennent l'application **Orbis** (`alpinevibe/orbis`), dont le moteur et
+   les données ont été extraits le même jour.
+
+Migration : `scripts/migrer-v2-projets.py` (projet « Projet horaires diversifiés HTC
+Écrins », les 4 groupes rattachés, administrateurs désignés). Tests : 45 contrôles verts.
+
+---
+
 **Repensé le 05/10/2026 : le cœur de Synergie n'est plus le planning, c'est le travail
 collaboratif.** Le générateur de trames devient un outil parmi d'autres, rangé dans un thème.
 

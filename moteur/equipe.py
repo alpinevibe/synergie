@@ -34,6 +34,7 @@ DELAI_ENTRE_ALERTES = 600          # 10 minutes entre deux alertes pour le même
 SCHEMA = """
 create table if not exists comptes (
     id text primary key, prenom text not null, email text default '',
+    poste text default '', appareil text default '', derniere_connexion text default '',
     jeton text unique, notifier_tout integer default 0, cree_le text, maj_le text);
 create table if not exists responsables (
     theme text not null, compte text not null, cree_le text,
@@ -58,6 +59,13 @@ def initialiser() -> None:
     """Crée les tables de l'équipe (sans toucher au reste)."""
     with connexion() as base:
         base.executescript(SCHEMA)
+        # Colonnes ajoutées le 08/10/2026 : le poste de travail et la dernière connexion.
+        colonnes = {l[1] for l in base.execute("pragma table_info(comptes)")}
+        for nom, definition in (("poste", "text default ''"),
+                                ("appareil", "text default ''"),
+                                ("derniere_connexion", "text default ''")):
+            if nom not in colonnes:
+                base.execute(f"alter table comptes add column {nom} {definition}")
         base.execute("insert or ignore into cadre (id, contexte, maj_le, maj_par)"
                      " values ('general', '', ?, '')", (maintenant(),))
 
@@ -72,39 +80,55 @@ def _compte_public(ligne) -> dict:
     return compte
 
 
-def creer_compte(prenom: str, email: str = "", notifier_tout: bool = False,
+def creer_compte(prenom: str, email: str = "", poste: str = "", appareil: str = "",
                  jeton: str | None = None) -> dict:
     """Crée (ou retrouve) le compte de quelqu'un, et rend son jeton personnel.
 
-    Un même courriel ne crée pas deux comptes : on retrouve le sien. Le jeton est le
-    « trousseau » gardé par le navigateur ; il n'est jamais montré à l'écran.
+    On ne demande que le PRÉNOM (consigne du 08/10/2026) : le courriel n'est demandé que
+    plus tard, si la personne veut recevoir des alertes. On garde aussi le POSTE d'où la
+    personne se connecte (navigateur, appareil) pour savoir qui agit d'où — un navigateur
+    ne peut pas lire l'identifiant de session Windows, on enregistre donc ce qu'il expose.
+
+    Le jeton est le « trousseau » gardé par le navigateur ; il n'est jamais montré.
     """
     prenom = (prenom or "").strip()
     email = (email or "").strip().lower()
+    poste = (poste or "").strip()[:120]
+    appareil = (appareil or "").strip()[:300]
     if not prenom:
         raise ValueError("Le prénom est obligatoire.")
     moment = maintenant()
     with connexion() as base:
         ligne = None
-        if email:
-            ligne = base.execute("select * from comptes where email = ?", (email,)).fetchone()
-        if not ligne and jeton:
+        if jeton:
             ligne = base.execute("select * from comptes where jeton = ?", (jeton,)).fetchone()
+        if not ligne and email:
+            ligne = base.execute("select * from comptes where email = ?", (email,)).fetchone()
+        if not ligne and poste:
+            # Même poste, même prénom : c'est la même personne qui revient.
+            ligne = base.execute("select * from comptes where prenom = ? and poste = ?",
+                                 (prenom, poste)).fetchone()
         if not ligne:
-            ligne = base.execute("select * from comptes where prenom = ? and email = ''",
-                                 (prenom,)).fetchone() if not email else None
+            # Dernier recours : le prénom. Synergie ne demande pas de mot de passe (elle est
+            # réservée à une équipe qui se connaît) : on retrouve donc le compte existant
+            # plutôt que d'en créer un deuxième pour la même personne sur un autre appareil.
+            ligne = base.execute("select * from comptes where prenom = ? collate nocase"
+                                 " order by cree_le limit 1", (prenom,)).fetchone()
         if ligne:
-            base.execute("update comptes set prenom = ?, email = ?, jeton = ?, maj_le = ?,"
-                         " notifier_tout = ? where id = ?",
-                         (prenom, email or ligne["email"], jeton or ligne["jeton"] or _identifiant("jt"),
-                          moment, 1 if notifier_tout else ligne["notifier_tout"], ligne["id"]))
+            base.execute(
+                "update comptes set prenom = ?, email = ?, poste = ?, appareil = ?, jeton = ?,"
+                " maj_le = ?, derniere_connexion = ? where id = ?",
+                (prenom, email or ligne["email"], poste or ligne["poste"],
+                 appareil or ligne["appareil"],
+                 jeton or ligne["jeton"] or _identifiant("jt"), moment, moment, ligne["id"]))
             identifiant = ligne["id"]
         else:
             identifiant = _identifiant("cp")
-            base.execute("insert into comptes (id, prenom, email, jeton, notifier_tout,"
-                         " cree_le, maj_le) values (?, ?, ?, ?, ?, ?, ?)",
-                         (identifiant, prenom, email, jeton or _identifiant("jt"),
-                          1 if notifier_tout else 0, moment, moment))
+            base.execute("insert into comptes (id, prenom, email, poste, appareil, jeton,"
+                         " notifier_tout, cree_le, maj_le, derniere_connexion)"
+                         " values (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
+                         (identifiant, prenom, email, poste, appareil,
+                          jeton or _identifiant("jt"), moment, moment, moment))
         resultat = dict(base.execute("select * from comptes where id = ?",
                                      (identifiant,)).fetchone())
     return {"compte": _compte_public(resultat), "jeton": resultat["jeton"]}
@@ -127,7 +151,7 @@ def lister_comptes() -> list[dict]:
 
 
 def maj_compte(identifiant: str, champs: dict) -> dict | None:
-    autorises = ("prenom", "email", "notifier_tout")
+    autorises = ("prenom", "email", "poste")
     valeurs = {c: champs[c] for c in autorises if c in champs}
     if not valeurs:
         return lire_compte(identifiant=identifiant)
@@ -150,75 +174,8 @@ def trouver_par_prenom(prenom: str) -> dict | None:
     return _compte_public(ligne) if ligne else None
 
 
-# ====================================================================================
-# Responsables d'un thème et abonnements
-# ====================================================================================
-def responsables(theme: str) -> list[dict]:
-    with connexion() as base:
-        lignes = base.execute(
-            "select c.* from responsables r join comptes c on c.id = r.compte"
-            " where r.theme = ? order by c.prenom collate nocase", (theme,)).fetchall()
-    return [_compte_public(l) for l in lignes]
-
-
-def definir_responsables(theme: str, comptes: list[str], qui: str = "") -> list[dict]:
-    """Remplace la liste des responsables d'un thème (ce sont eux qui reçoivent les alertes)."""
-    with connexion() as base:
-        base.execute("delete from responsables where theme = ?", (theme,))
-        for identifiant in comptes or []:
-            base.execute("insert or ignore into responsables (theme, compte, cree_le)"
-                         " values (?, ?, ?)", (theme, identifiant, maintenant()))
-    journaliser(theme, qui or "Anonyme", "responsables", theme,
-                f"{len(comptes or [])} responsable(s)")
-    resultat = responsables(theme)
-    diffuser(theme, {"type": "responsables", "responsables": resultat})
-    return resultat
-
-
-def abonnes_du_theme(theme: str) -> list[dict]:
-    with connexion() as base:
-        lignes = base.execute(
-            "select c.* from abonnements a join comptes c on c.id = a.compte"
-            " where a.theme = ?", (theme,)).fetchall()
-    return [_compte_public(l) for l in lignes]
-
-
-def abonner(theme: str, compte: str, actif: bool = True) -> None:
-    with connexion() as base:
-        if actif:
-            base.execute("insert or ignore into abonnements (theme, compte, cree_le)"
-                         " values (?, ?, ?)", (theme, compte, maintenant()))
-        else:
-            base.execute("delete from abonnements where theme = ? and compte = ?",
-                         (theme, compte))
-
-
-def abonnements_du_compte(compte: str) -> list[str]:
-    with connexion() as base:
-        return [l["theme"] for l in base.execute(
-            "select theme from abonnements where compte = ?", (compte,)).fetchall()]
-
-
-def destinataires(theme: str) -> list[dict]:
-    """Qui doit être prévenu quand ce thème change : ses responsables, plus ceux qui ont
-    demandé à suivre tous les thèmes. Chaque compte n'apparaît qu'une fois, et seulement
-    s'il a une adresse de courriel."""
-    vus, liste = set(), []
-    for compte in responsables(theme) + abonnes_du_theme(theme):
-        if compte["id"] in vus:
-            continue
-        vus.add(compte["id"])
-        if compte.get("email"):
-            liste.append(compte)
-    with connexion() as base:
-        lignes = base.execute("select * from comptes where notifier_tout = 1").fetchall()
-    for ligne in lignes:
-        compte = _compte_public(ligne)
-        if compte["id"] in vus or not compte.get("email"):
-            continue
-        vus.add(compte["id"])
-        liste.append(compte)
-    return liste
+# Les « responsables » et « abonnements » du 05/10/2026 sont remplacés par les RÔLES et
+# les notifications portées par les projets et les groupes (moteur/projets.py, 08/10/2026).
 
 
 # ====================================================================================
@@ -320,19 +277,24 @@ def supprimer_page(theme: str, page_id: str, qui: str = "") -> None:
 # ====================================================================================
 # Cadre de travail (contexte du projet)
 # ====================================================================================
-def lire_cadre() -> dict:
+def lire_cadre(projet: str = "") -> dict:
+    """Le cadre de travail — un par PROJET (identifié par l'identifiant du projet)."""
+    identifiant = projet or "general"
     with connexion() as base:
-        ligne = base.execute("select * from cadre where id = 'general'").fetchone()
-    return dict(ligne) if ligne else {"id": "general", "contexte": "", "maj_le": None,
+        ligne = base.execute("select * from cadre where id = ?", (identifiant,)).fetchone()
+    return dict(ligne) if ligne else {"id": identifiant, "contexte": "", "maj_le": None,
                                       "maj_par": ""}
 
 
-def maj_cadre(contexte: str, qui: str = "") -> dict:
+def maj_cadre(contexte: str, qui: str = "", projet: str = "") -> dict:
+    identifiant = projet or "general"
     moment = maintenant()
     with connexion() as base:
-        base.execute("update cadre set contexte = ?, maj_le = ?, maj_par = ? where id = 'general'",
-                     (contexte or "", moment, qui or "Anonyme"))
-    cadre = lire_cadre()
+        base.execute("insert or ignore into cadre (id, contexte, maj_le, maj_par)"
+                     " values (?, '', ?, '')", (identifiant, moment))
+        base.execute("update cadre set contexte = ?, maj_le = ?, maj_par = ? where id = ?",
+                     (contexte or "", moment, qui or "Anonyme", identifiant))
+    cadre = lire_cadre(projet)
     journaliser("", qui or "Anonyme", "cadre_modifie", "general", "")
     diffuser("", {"type": "cadre", "cadre": cadre})
     return cadre
@@ -414,24 +376,26 @@ def _noter(texte: str) -> None:
         pass
 
 
-def prevenit(theme: str, titre_theme: str, resume: str, qui: str = "") -> list[str]:
-    """Prévient les responsables du thème (et les abonnés) qu'il vient de changer.
+def prevenit(theme: str, titre_theme: str, resume: str, qui: str = "",
+             projet: str = "") -> list[str]:
+    """Prévient les personnes qui suivent ce groupe — ou tout le projet — qu'il a changé.
 
-    Les alertes sont REGROUPÉES : une seule par thème toutes les dix minutes, pour ne pas
-    remplir les boîtes aux lettres quand plusieurs personnes travaillent en même temps.
+    Un seul envoi par personne et par groupe toutes les dix minutes : quand plusieurs
+    personnes travaillent en même temps, la boîte aux lettres ne se remplit pas.
     """
-    destinataires_ = destinataires(theme)
+    from . import projets as m_projets
+    destinataires_ = m_projets.destinataires_theme(theme, projet)
     if not destinataires_:
         return []
     adresse_site = os.environ.get("SYNERGIE_ADRESSE", "https://synergie.alpinevibe.fr")
     lien = f"{adresse_site}/#t={theme}" if theme else f"{adresse_site}/"
     sujet = f"[Synergie] {titre_theme or 'Thème'} : du nouveau"
     auteur = qui or "quelqu'un"
-    corps = (f"{titre_theme or 'Un thème'} vient d'être modifié par {auteur}.\n\n"
+    corps = (f"{titre_theme or 'Un groupe de travail'} : du nouveau, par {auteur}.\n\n"
              f"{resume}\n\nOuvrir : {lien}\n\n"
-             "Vous recevez ce message parce que vous êtes responsable de ce thème ou que "
-             "vous avez demandé à suivre les nouveautés. Vous pouvez régler vos "
-             "notifications dans Synergie, onglet « Mon compte ».")
+             "Vous recevez ce message parce que vous suivez ce groupe — ou tout le projet. "
+             "Vous pouvez régler vos notifications dans Synergie : « Mon compte », puis "
+             "« Notifications ».")
     enveloppes = []
     for compte in destinataires_:
         with _VERROU:
