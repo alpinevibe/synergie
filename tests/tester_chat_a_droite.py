@@ -49,6 +49,19 @@ def appel(chemin, corps=None, jeton=None, methode=None):
         return json.loads(reponse.read().decode("utf-8"))
 
 
+def menage(compte_id: str) -> None:
+    """Efface le compte d'essai de ce contrôle : aucune trace ne reste dans l'application."""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from moteur import atelier                  # noqa: E402 (même base que l'application)
+        with atelier.connexion() as base:
+            for table in ("projet_membres", "theme_membres", "abonnements", "responsables"):
+                base.execute(f"delete from {table} where compte = ?", (compte_id,))
+            base.execute("delete from comptes where id = ?", (compte_id,))
+    except Exception as erreur:                     # le ménage ne doit jamais tout casser
+        print(f"  (ménage du compte d'essai impossible : {erreur})")
+
+
 MESURE = """() => {
   const boite = (selecteur) => {
     const n = document.querySelector(selecteur);
@@ -133,6 +146,7 @@ def principal() -> int:
                 appel(chemin, jeton=jeton, methode="DELETE")
             except Exception:                       # le ménage ne doit jamais tout casser
                 pass
+        menage(compte["compte"]["id"])              # et le compte d'essai s'en va aussi
 
     echecs = sum(1 for _, ok in RESULTATS if not ok)
     print(f"\n{len(RESULTATS) - echecs}/{len(RESULTATS)} contrôles réussis")

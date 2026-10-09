@@ -490,6 +490,15 @@ def test_equipe():
         actions = {l["action"] for l in m_atelier.lister_journal(theme["id"])}
         verifie({"page_creee", "cadre_modifie"} <= actions or "page_creee" in actions,
                 "les actions de l'équipe entrent au journal")
+
+        # --- supprimer un groupe emporte sa discussion (constat du 09/10/2026) ----------
+        m_equipe.envoyer_message(theme["id"], "Quelqu'un",
+                                 "Message qui doit partir avec le groupe")
+        m_atelier.supprimer_theme(theme["id"])
+        with m_atelier.connexion() as base:
+            restants = base.execute("select count(*) from messages where theme = ?",
+                                    (theme["id"],)).fetchone()[0]
+        verifie(restants == 0, "supprimer un groupe efface aussi les messages de sa discussion")
     finally:
         m_atelier.supprimer_theme(theme["id"])
         with m_atelier.connexion() as base:

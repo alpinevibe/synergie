@@ -366,7 +366,9 @@ def supprimer_theme(identifiant: str) -> bool:
         base.execute("delete from bulletins where theme = ?", (identifiant,))
         base.execute("delete from votes where decision in"
                      " (select id from decisions where theme = ?)", (identifiant,))
-        for table in ("notes", "decisions", "documents"):
+        # Les MESSAGES du groupe partent avec lui (constat du 09/10/2026 : ils restaient
+        # orphelins en base, invisibles mais conservés pour rien).
+        for table in ("notes", "decisions", "documents", "messages"):
             base.execute(f"delete from {table} where theme = ?", (identifiant,))
         base.execute("delete from themes where id = ?", (identifiant,))
     dossier = DOCUMENTS / identifiant
