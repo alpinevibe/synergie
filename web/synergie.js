@@ -254,8 +254,10 @@
   // ================================================================ UN GROUPE DE TRAVAIL
   // TOUS les groupes ont les mêmes outils (consigne du 08/10/2026) : la boîte à trames et
   // les fiches de poste ont quitté Synergie (elles deviennent l'application Orbis).
+  // La DISCUSSION n'est plus un onglet (demande de l'utilisateur, 09/10/2026) : elle vit
+  // dans la colonne de droite, toujours visible, comme la discussion du projet.
   const ONGLETS = [
-    ['tableau', 'Tableau blanc'], ['pages', 'Pages'], ['chat', 'Discussion'],
+    ['tableau', 'Tableau blanc'], ['pages', 'Pages'],
     ['documents', 'Documents'], ['consultations', 'Votes et sondages'],
     ['journal', 'Journal']
   ];
@@ -281,7 +283,6 @@
       bouton.classList.toggle('actif', bouton.dataset.onglet === cle));
     document.querySelectorAll('.onglet').forEach((onglet) =>
       onglet.classList.toggle('cache', onglet.id !== 'onglet-' + cle));
-    if (cle === 'chat') chargerChatTheme();
     if (cle === 'pages') chargerPages();
     if (cle === 'consultations') chargerConsultations();
     if (cle === 'journal') afficherJournal();
@@ -2645,16 +2646,27 @@
     });
   }
 
-  /** On entre dans l'atelier : mes projets, puis le dernier projet ouvert (ou le seul). */
+  /** On entre dans l'atelier : mes projets, puis le dernier projet ouvert (ou le seul).
+
+      Le groupe visé par l'adresse (`#t=…`) est lu AVANT d'ouvrir le projet : ouvrir un
+      projet réécrit l'adresse (`#p=…`), ce qui effaçait le groupe visé et faisait ouvrir
+      le projet au lieu du groupe (constat du 09/10/2026, en corrigeant la discussion de
+      groupe). Un lien de groupe ouvre donc bien le groupe, même sans projet mémorisé. */
   async function entrerDansLAtelier() {
     await chargerProjets();
+    const groupe = (location.hash.match(/#t=(.+)/) || [])[1];
     const garde = localStorage.getItem('synergie.projet');
-    const cible = (location.hash.match(/#p=(.+)/) || [])[1]
+    let cible = (location.hash.match(/#p=(.+)/) || [])[1]
       || (projets.some((p) => p.id === garde) ? garde : '')
       || (projets.length === 1 ? projets[0].id : '');
+    if (!cible && groupe) {                       // le groupe dit à quel projet il appartient
+      try {
+        const fiche = await appel('/api/themes/' + encodeURIComponent(groupe));
+        cible = (fiche.theme || {}).projet || '';
+      } catch (erreur) { cible = ''; }
+    }
     if (!cible) { afficherVue('projets'); return; }
     await ouvrirProjet(cible);
-    const groupe = (location.hash.match(/#t=(.+)/) || [])[1];
     if (groupe) { try { await ouvrirTheme(groupe, { pousser: false }); } catch (e) { /* inconnu */ } }
   }
 

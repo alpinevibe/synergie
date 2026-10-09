@@ -486,30 +486,37 @@ select.role { min-height: 38px; border-radius: 9px; border: 1px solid var(--bord
 }
 
 /* ============================================================================
-   Accueil d'un projet : le travail à gauche, la DISCUSSION À DROITE.
+   Accueil d'un projet et d'un groupe : le travail à gauche, la DISCUSSION À DROITE.
 
    La discussion reste sous les yeux sans quitter la page : elle est collante
    (sticky) et défile toute seule quand les messages sont nombreux. Sur un écran
    étroit, elle repasse simplement sous le contenu.
+
+   Dans un GROUPE, la discussion n'est plus un onglet (demande de l'utilisateur,
+   09/10/2026) : elle occupe la même colonne de droite que celle du projet, avec
+   les onglets (Tableau blanc, Pages, Documents, Votes, Journal) à gauche.
    ========================================================================== */
-.projet-grille {
+.projet-grille, .theme-grille {
   display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start;
 }
 .projet-principal { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
 .projet-principal > * { margin-bottom: 0; }
-.projet-chat {
+.theme-principal { min-width: 0; }
+.projet-chat, .theme-chat {
   position: sticky; top: 14px; display: flex; flex-direction: column;
   min-height: min(560px, calc(100vh - 28px));
   max-height: calc(100vh - 28px); margin-bottom: 0;
 }
-.projet-chat h3 { margin-bottom: 8px; }
-.projet-chat .fil { flex: 1 1 auto; overflow-y: auto; min-height: 140px; max-height: none; }
-.projet-chat .ligne-chat { margin-top: 10px; }
+.projet-chat h3, .theme-chat h3 { margin-bottom: 8px; }
+.projet-chat .fil, .theme-chat .fil {
+  flex: 1 1 auto; overflow-y: auto; min-height: 140px; max-height: none;
+}
+.projet-chat .ligne-chat, .theme-chat .ligne-chat { margin-top: 10px; }
 
 @media (max-width: 1100px) {
-  .projet-grille { grid-template-columns: minmax(0, 1fr); }
-  .projet-chat { position: static; max-height: none; }
-  .projet-chat .fil { max-height: 320px; }
+  .projet-grille, .theme-grille { grid-template-columns: minmax(0, 1fr); }
+  .projet-chat, .theme-chat { position: static; max-height: none; }
+  .projet-chat .fil, .theme-chat .fil { max-height: 320px; }
 }
 
 /* Le nom du projet ouvre le cadre de travail : c'est un bouton, il doit en avoir l'air. */
@@ -724,12 +731,14 @@ body[data-vue="mobile"][data-section="discussion"] [data-mobile]:not([data-mobil
 body[data-vue="mobile"][data-section="votes"] .projet-grille,
 body[data-vue="mobile"][data-section="votes"] #attente { display: none; }
 body[data-vue="mobile"][data-section="votes"] .mobile-seule[data-mobile="votes"] { display: block; }
-body[data-vue="mobile"] .projet-grille { display: block; }
+body[data-vue="mobile"] .projet-grille, body[data-vue="mobile"] .theme-grille { display: block; }
 body[data-vue="mobile"] .projet-principal { gap: 12px; }
-body[data-vue="mobile"] .projet-chat {
+body[data-vue="mobile"] .projet-chat, body[data-vue="mobile"] .theme-chat {
   position: static; min-height: calc(100vh - 210px); max-height: none;
 }
-body[data-vue="mobile"] .projet-chat .fil { max-height: none; min-height: 40vh; }
+body[data-vue="mobile"] .projet-chat .fil, body[data-vue="mobile"] .theme-chat .fil {
+  max-height: none; min-height: 40vh;
+}
 body[data-vue="mobile"] .entete-projet { flex-wrap: wrap; gap: 8px; padding: 12px 14px; }
 body[data-vue="mobile"] button.carte-theme { min-height: 0; padding: 14px; }
 body[data-vue="mobile"] button.carte-theme .aide { -webkit-line-clamp: 2; }

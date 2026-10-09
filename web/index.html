@@ -363,126 +363,129 @@
     </div>
   </div>
 
-  <nav class="onglets" id="onglets-theme" aria-label="Outils du groupe"></nav>
+  <div class="theme-grille">
+    <!-- Colonne principale : les outils du groupe (onglets) -->
+    <div class="theme-principal">
+      <nav class="onglets" id="onglets-theme" aria-label="Outils du groupe"></nav>
+      <!-- ---- le tableau blanc ---- -->
+      <section id="onglet-tableau" class="onglet cache" aria-label="Tableau blanc">
+        <div class="barre-tableau">
+          <button id="btn-note" class="principal petit">+ Note</button>
+          <button id="btn-annuler" class="discret petit" title="Revenir en arrière (Ctrl + Z)"
+            disabled>↶ Annuler</button>
+          <label class="sr-only" for="recherche-notes">Repérer une note</label>
+          <input id="recherche-notes" class="recherche" placeholder="Repérer une note…">
+          <span class="espace"></span>
+          <button id="zoom-moins" class="discret" title="Réduire" aria-label="Réduire">−</button>
+          <span id="zoom-valeur" class="zoom">100 %</span>
+          <button id="zoom-plus" class="discret" title="Agrandir" aria-label="Agrandir">+</button>
+          <button id="btn-recentrer" class="discret" title="Revenir au départ">Recentrer</button>
+          <button id="btn-organiser" class="discret" title="Ranger les notes en colonnes">Ranger</button>
+        </div>
+        <div id="barre-format" class="barre-format cache">
+          <span class="etiquette">Mise en forme</span>
+          <button data-format="taille-moins" title="Plus petit">A−</button>
+          <button data-format="taille-plus" title="Plus grand">A+</button>
+          <button data-format="gras" class="gras" title="Gras">G</button>
+          <button data-format="italique" class="italique" title="Italique">I</button>
+          <button data-format="souligne" class="souligne" title="Souligné">S</button>
+          <button data-format="gauche" title="Aligner à gauche">⇤</button>
+          <button data-format="centre" title="Centrer">↔</button>
+          <button data-format="droite" title="Aligner à droite">⇥</button>
+          <span class="etiquette">Texte</span>
+          <span id="couleurs-texte" class="pastilles"></span>
+          <span class="etiquette">Fond</span>
+          <span id="couleurs-fond" class="pastilles"></span>
+          <button data-format="dupliquer" title="Copier la note">⧉</button>
+          <button data-format="devant" title="Mettre au premier plan">▲</button>
+          <button data-format="supprimer" class="danger" title="Supprimer la note">🗑</button>
+        </div>
+        <div id="plateau" class="plateau">
+          <div id="monde" class="monde"></div>
+        </div>
+        <!-- Téléphone : les notes se lisent et s'écrivent comme une liste de cartes -->
+        <div id="notes-liste" class="notes-liste"></div>
+        <button id="btn-voir-tableau" class="discret petit cache">Voir le tableau</button>
+      </section>
 
-  <!-- ---- le tableau blanc ---- -->
-  <section id="onglet-tableau" class="onglet cache" aria-label="Tableau blanc">
-    <div class="barre-tableau">
-      <button id="btn-note" class="principal petit">+ Note</button>
-      <button id="btn-annuler" class="discret petit" title="Revenir en arrière (Ctrl + Z)"
-        disabled>↶ Annuler</button>
-      <label class="sr-only" for="recherche-notes">Repérer une note</label>
-      <input id="recherche-notes" class="recherche" placeholder="Repérer une note…">
-      <span class="espace"></span>
-      <button id="zoom-moins" class="discret" title="Réduire" aria-label="Réduire">−</button>
-      <span id="zoom-valeur" class="zoom">100 %</span>
-      <button id="zoom-plus" class="discret" title="Agrandir" aria-label="Agrandir">+</button>
-      <button id="btn-recentrer" class="discret" title="Revenir au départ">Recentrer</button>
-      <button id="btn-organiser" class="discret" title="Ranger les notes en colonnes">Ranger</button>
-    </div>
-    <div id="barre-format" class="barre-format cache">
-      <span class="etiquette">Mise en forme</span>
-      <button data-format="taille-moins" title="Plus petit">A−</button>
-      <button data-format="taille-plus" title="Plus grand">A+</button>
-      <button data-format="gras" class="gras" title="Gras">G</button>
-      <button data-format="italique" class="italique" title="Italique">I</button>
-      <button data-format="souligne" class="souligne" title="Souligné">S</button>
-      <button data-format="gauche" title="Aligner à gauche">⇤</button>
-      <button data-format="centre" title="Centrer">↔</button>
-      <button data-format="droite" title="Aligner à droite">⇥</button>
-      <span class="etiquette">Texte</span>
-      <span id="couleurs-texte" class="pastilles"></span>
-      <span class="etiquette">Fond</span>
-      <span id="couleurs-fond" class="pastilles"></span>
-      <button data-format="dupliquer" title="Copier la note">⧉</button>
-      <button data-format="devant" title="Mettre au premier plan">▲</button>
-      <button data-format="supprimer" class="danger" title="Supprimer la note">🗑</button>
-    </div>
-    <div id="plateau" class="plateau">
-      <div id="monde" class="monde"></div>
-    </div>
-    <!-- Téléphone : les notes se lisent et s'écrivent comme une liste de cartes -->
-    <div id="notes-liste" class="notes-liste"></div>
-    <button id="btn-voir-tableau" class="discret petit cache">Voir le tableau</button>
-  </section>
+      <!-- ---- les pages de travail ---- -->
+      <section id="onglet-pages" class="onglet cache" aria-label="Pages de travail">
+        <div class="barre-boutons">
+          <label class="sr-only" for="nouvelle-page-titre">Titre de la page</label>
+          <input id="nouvelle-page-titre" class="recherche" placeholder="Titre de la nouvelle page">
+          <button id="btn-page" class="principal petit">+ Créer la page</button>
+        </div>
+        <div class="pages">
+          <div id="liste-pages" class="liste-pages"></div>
+          <div id="page-editeur" class="carte cache">
+            <div class="barre-editeur">
+              <label class="sr-only" for="page-titre">Titre de la page</label>
+              <input id="page-titre" class="titre-page" placeholder="Titre de la page">
+              <span class="espace"></span>
+              <button data-edition="bold" title="Gras"><b>G</b></button>
+              <button data-edition="italic" title="Italique"><i>I</i></button>
+              <button data-edition="underline" title="Souligné"><u>S</u></button>
+              <button data-edition="insertUnorderedList" title="Liste à puces">•</button>
+              <button data-edition="insertOrderedList" title="Liste numérotée">1.</button>
+              <button data-edition="formatBlock:h3" title="Titre de section">T</button>
+              <button data-edition="removeFormat" title="Effacer la mise en forme">⌫</button>
+              <button id="page-annuler" class="discret petit" title="Revenir en arrière (Ctrl + Z)">↶</button>
+              <button id="page-enregistrer" class="principal petit">Enregistrer</button>
+              <button id="page-supprimer" class="discret danger petit">Supprimer</button>
+            </div>
+            <div id="page-contenu" class="contenu-page" contenteditable="true"></div>
+            <p id="page-etat" class="aide" role="status"></p>
+          </div>
+        </div>
+      </section>
 
-  <!-- ---- la discussion du groupe ---- -->
-  <section id="onglet-chat" class="onglet cache" aria-label="Discussion du groupe">
-    <div class="carte">
+      <!-- ---- les documents ---- -->
+      <section id="onglet-documents" class="onglet cache" aria-label="Documents du groupe">
+        <div class="carte">
+          <div class="ligne-depot">
+            <label class="sr-only" for="fichier-document">Choisir des fichiers</label>
+            <input type="file" id="fichier-document" multiple>
+            <label class="sr-only" for="note-document">Mot-clé</label>
+            <input id="note-document" class="recherche" placeholder="Un mot pour dire à quoi il sert">
+            <button id="btn-deposer" class="principal petit">Déposer</button>
+          </div>
+          <p id="etat-depot" class="aide" role="status"></p>
+        </div>
+        <div id="liste-documents" class="liste-documents"></div>
+      </section>
+
+      <!-- ---- les votes et les sondages ---- -->
+      <section id="onglet-consultations" class="onglet cache" aria-label="Votes et sondages">
+        <div class="carte">
+          <div class="barre-boutons">
+            <button id="btn-nouveau-vote" class="principal petit">+ Nouveau vote</button>
+            <button id="btn-nouveau-sondage" class="principal petit">+ Nouveau sondage</button>
+          </div>
+          <p class="aide fin"><strong>Un vote</strong> tranche une question : oui ou non.
+            <strong>Un sondage</strong> éclaire la réflexion : plusieurs questions, plusieurs
+            façons de répondre. Dans les deux cas, on choisit qui l'on consulte, chacun reçoit
+            un lien personnel, et les réponses restent anonymes.</p>
+        </div>
+        <div id="liste-consultations" class="liste-consultations"></div>
+      </section>
+
+      <!-- ---- le journal ---- -->
+      <section id="onglet-journal" class="onglet cache" aria-label="Journal du groupe">
+        <div id="liste-journal" class="liste-journal"></div>
+      </section>
+    </div>
+
+    <!-- Colonne de droite : la discussion du groupe, toujours visible -->
+    <aside class="carte theme-chat" aria-label="Discussion du groupe">
+      <h3>Discussion du groupe</h3>
       <div id="fil-theme" class="fil" aria-live="polite"></div>
       <form id="chat-theme-form" class="ligne-chat">
         <label class="sr-only" for="chat-theme-texte">Écrire un message</label>
         <input id="chat-theme-texte" placeholder="Écrire un message…" autocomplete="off">
         <button class="principal petit" type="submit">Envoyer</button>
       </form>
-    </div>
-  </section>
-
-  <!-- ---- les pages de travail ---- -->
-  <section id="onglet-pages" class="onglet cache" aria-label="Pages de travail">
-    <div class="barre-boutons">
-      <label class="sr-only" for="nouvelle-page-titre">Titre de la page</label>
-      <input id="nouvelle-page-titre" class="recherche" placeholder="Titre de la nouvelle page">
-      <button id="btn-page" class="principal petit">+ Créer la page</button>
-    </div>
-    <div class="pages">
-      <div id="liste-pages" class="liste-pages"></div>
-      <div id="page-editeur" class="carte cache">
-        <div class="barre-editeur">
-          <label class="sr-only" for="page-titre">Titre de la page</label>
-          <input id="page-titre" class="titre-page" placeholder="Titre de la page">
-          <span class="espace"></span>
-          <button data-edition="bold" title="Gras"><b>G</b></button>
-          <button data-edition="italic" title="Italique"><i>I</i></button>
-          <button data-edition="underline" title="Souligné"><u>S</u></button>
-          <button data-edition="insertUnorderedList" title="Liste à puces">•</button>
-          <button data-edition="insertOrderedList" title="Liste numérotée">1.</button>
-          <button data-edition="formatBlock:h3" title="Titre de section">T</button>
-          <button data-edition="removeFormat" title="Effacer la mise en forme">⌫</button>
-          <button id="page-annuler" class="discret petit" title="Revenir en arrière (Ctrl + Z)">↶</button>
-          <button id="page-enregistrer" class="principal petit">Enregistrer</button>
-          <button id="page-supprimer" class="discret danger petit">Supprimer</button>
-        </div>
-        <div id="page-contenu" class="contenu-page" contenteditable="true"></div>
-        <p id="page-etat" class="aide" role="status"></p>
-      </div>
-    </div>
-  </section>
-
-  <!-- ---- les documents ---- -->
-  <section id="onglet-documents" class="onglet cache" aria-label="Documents du groupe">
-    <div class="carte">
-      <div class="ligne-depot">
-        <label class="sr-only" for="fichier-document">Choisir des fichiers</label>
-        <input type="file" id="fichier-document" multiple>
-        <label class="sr-only" for="note-document">Mot-clé</label>
-        <input id="note-document" class="recherche" placeholder="Un mot pour dire à quoi il sert">
-        <button id="btn-deposer" class="principal petit">Déposer</button>
-      </div>
-      <p id="etat-depot" class="aide" role="status"></p>
-    </div>
-    <div id="liste-documents" class="liste-documents"></div>
-  </section>
-
-  <!-- ---- les votes et les sondages ---- -->
-  <section id="onglet-consultations" class="onglet cache" aria-label="Votes et sondages">
-    <div class="carte">
-      <div class="barre-boutons">
-        <button id="btn-nouveau-vote" class="principal petit">+ Nouveau vote</button>
-        <button id="btn-nouveau-sondage" class="principal petit">+ Nouveau sondage</button>
-      </div>
-      <p class="aide fin"><strong>Un vote</strong> tranche une question : oui ou non.
-        <strong>Un sondage</strong> éclaire la réflexion : plusieurs questions, plusieurs
-        façons de répondre. Dans les deux cas, on choisit qui l'on consulte, chacun reçoit
-        un lien personnel, et les réponses restent anonymes.</p>
-    </div>
-    <div id="liste-consultations" class="liste-consultations"></div>
-  </section>
-
-  <!-- ---- le journal ---- -->
-  <section id="onglet-journal" class="onglet cache" aria-label="Journal du groupe">
-    <div id="liste-journal" class="liste-journal"></div>
-  </section>
+    </aside>
+  </div>
 </main>
 
 <div id="zone-toast" aria-live="polite"></div>

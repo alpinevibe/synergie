@@ -1,5 +1,30 @@
 # Synergie — état du projet
 
+## 9 octobre 2026 — la discussion du groupe passe à droite
+
+Demande de l'utilisateur : « retire l'onglet discussion dans les groupes et mets la fenêtre de
+chat sur la droite ».
+
+- **L'onglet « Discussion » disparaît** de la barre d'onglets d'un groupe (`web/synergie.js`) :
+  il ne reste que **Tableau blanc · Pages · Documents · Votes et sondages · Journal**.
+- **La discussion du groupe occupe la colonne de droite**, toujours visible — la même mise en
+  page que la discussion du projet (`web/index.html` : `aside.theme-chat` dans
+  `.theme-grille` ; `web/synergie.css` : colonne de 340 px, collante en haut, qui défile
+  seule). Sur un écran étroit (moins de 1100 px) et sur téléphone, elle repasse **sous** le
+  contenu, sans jamais disparaître.
+- **Défaut corrigé au passage** : un lien direct vers un groupe (`#t=…`) ouvrait le projet au
+  lieu du groupe — ouvrir un projet réécrit l'adresse (`#p=…`) et effaçait le groupe visé. Le
+  groupe est désormais lu **avant** l'ouverture du projet, et un lien de groupe retrouve son
+  projet tout seul, même sur un navigateur neuf.
+- **Contrôle de bout en bout** : `python3 tests/tester_chat_a_droite.py` crée un compte, un
+  projet et un groupe d'essai, écrit un message, puis vérifie dans un **vrai navigateur**
+  (1440 × 900 et 900 × 900) que l'onglet a disparu, que la discussion est **à droite** des
+  onglets, qu'elle passe sous le contenu sur écran étroit et que le message s'y affiche —
+  **9 contrôles, 0 échec**, puis efface l'essai. Captures
+  `captures/synergie-chat-droite-<largeur>x<hauteur>.png`.
+- **Non-régression** : `python3 tests/tester_synergie.py` → **83 tests, 0 échec**.
+  `CACHE_VERSION` du service worker passe à **2**.
+
 ## 8 octobre 2026 (nuit) — plus tendance, et une vraie version téléphone
 
 1. **Les couleurs de fond ont été retravaillées** : la page n'est plus d'un blanc/bleu uni

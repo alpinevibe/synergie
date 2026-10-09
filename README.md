@@ -10,8 +10,9 @@ Deux idées gouvernent l'application :
 
 - **plusieurs projets** peuvent vivre côte à côte (un projet = une réorganisation, un
   service, un sujet) — chacun avec **ses groupes**, **ses membres** et **ses rôles** ;
-- **chaque groupe a les mêmes outils** : tableau blanc, pages, discussion, documents,
-  décisions, journal. Aucun outil « réservé » : l'outil ne complique pas la méthode.
+- **chaque groupe a les mêmes outils** : tableau blanc, pages, documents, décisions, journal
+  — et sa **discussion**, toujours visible dans une colonne à droite. Aucun outil « réservé » :
+  l'outil ne complique pas la méthode.
 
 > La construction des cycles de planning (boîte à trames, fiches de poste, codes horaires) a
 > **quitté Synergie le 08/10/2026** : elle devient l'application **Orbis**.
@@ -72,17 +73,23 @@ coup d'œil, personne ne le subit.
 ### 3. Les groupes de travail
 
 Chaque groupe est une **tuile** : titre, description, compteurs, dernier mouvement. Un clic
-ouvre le groupe, avec **les mêmes six outils pour tous** :
+ouvre le groupe : **la discussion à droite** (toujours visible, comme celle du projet) et, à
+gauche, **les mêmes outils pour tous** :
 
 | Outil | Ce qu'on y fait |
 |---|---|
 | **Tableau blanc** | notes libres, déplaçables, redimensionnables, mises en forme (6 couleurs de texte, 6 fonds), rangement automatique en colonnes, recherche |
 | **Pages** | des pages de travail avec un traitement de texte simple (comptes rendus, procédures) |
-| **Discussion** | le fil du groupe ; **modération** : l'auteur peut retirer son message, un administrateur peut retirer n'importe lequel (le journal garde la trace du retrait) |
 | **Documents** | les fichiers de travail, téléchargeables par tous |
 | **Votes et sondages** | **un vote** = une question, oui ou non (décision collective) ; **un sondage** = plusieurs questions, avec le type de réponse qui convient : choix unique, cases à cocher, liste déroulante, échelle de 1 à 5, un mot (nuage de mots). On choisit **qui l'on consulte** (le groupe ou tout le projet), les réponses restent **anonymes**, et **ce qui vous attend s'affiche en alerte à l'ouverture du projet** : on répond d'un clic, sans courriel |
 
 | **Journal** | qui a fait quoi, quand — **réservé aux administrateurs du groupe** |
+
+La **discussion du groupe** occupe la **colonne de droite**, sous les yeux pendant qu'on
+travaille sur le tableau ou les pages (elle n'est plus un onglet depuis le 09/10/2026) ;
+**modération** : l'auteur peut retirer son message, un administrateur peut retirer n'importe
+lequel (le journal garde la trace du retrait). Sur un écran étroit, elle passe simplement
+sous le contenu.
 
 Le **cadre de travail** du projet se lit en cliquant le **nom du projet**, en haut : tout le
 monde le lit, seul l'administrateur le modifie. Sur le tableau blanc, **↶ Annuler** (ou
