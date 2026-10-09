@@ -1,5 +1,35 @@
 # Synergie — état du projet
 
+## 9 octobre 2026 — les membres, comme dans un groupe de discussion
+
+Demandes de l'utilisateur : « adopte un affichage du plus moderne des membres du projet. La case
+cochée ne sert à rien. Je veux plutôt un affichage comme les membres d'un groupe WhatsApp et la
+possibilité de changer leur rôle ou de les supprimer. Affichage identique pour le projet et les
+groupes. »
+
+- **Une liste de personnes** (`web/synergie.js` → `ligneMembre`, `pastilleMembre`) : chacun a sa
+  **pastille d'initiales** (couleur stable par personne), son **nom**, son adresse, et son
+  **rôle** en pastille. Fini les cases à cocher et les menus déroulants dans la liste.
+- **Un appui sur la ligne** ouvre les actions : les trois rôles **Administrateur · Membre
+  participant · Visiteur** (le rôle actuel est en évidence ; un appui change le rôle tout de
+  suite) et **Retirer du projet / du groupe**.
+- **Le même affichage, au mot près, pour le projet et pour les groupes** — une seule fonction
+  les dessine ; seule la portée change (« du projet » / « du groupe »).
+- **La case « me prévenir par courriel » a disparu** : chacun règle ses alertes lui-même, dans
+  « Mon compte ». Un membre qui n'administre pas voit la liste, **sans** les actions.
+- **Défaut corrigé au passage** : les boutons d'une fenêtre sont larges par défaut
+  (`.boite-nom button { width: 100% }`), ce qui **étirait les pastilles de rôle** sur toute la
+  largeur et repoussait « Visiteur » et « Retirer » hors de vue.
+- **Contrôle automatisé ajouté** : `python3 tests/tester_membres_affichage.py` → **10 contrôles,
+  0 échec** (pastilles et rôles, aucune case à cocher ni menu, actions ouvertes par l'appui,
+  changement de rôle réellement enregistré, affichage identique dans un groupe, membre simple
+  en lecture seule). Captures `captures/synergie-membres-moderne.png` et
+  `synergie-membres-actions.png`.
+- **Non-régression** : `tester_synergie.py` **96**, `tester_entete_mobile.py` **6/6**,
+  `tester_comptes_identifiant.py` **8/8**, `tester_invitations_envoi.py` **11/11**,
+  `tester_membres_a_la_volee.py` **10/10**, `tester_chat_a_droite.py` **9/9**,
+  `tester_fenetres.py` **10/10**. `CACHE_VERSION` du service worker → **8**.
+
 ## 9 octobre 2026 — l'entête du téléphone s'allège
 
 Demande de l'utilisateur : « dans l'affichage téléphone, n'affiche pas mon compte en haut de

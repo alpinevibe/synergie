@@ -462,12 +462,36 @@ details.replie > *:last-child { margin-bottom: 16px; }
 .deux-colonnes > .carte { margin-bottom: 0; }
 
 /* membres et rôles */
+/* Les MEMBRES — projet et groupes, le MÊME affichage (demande de l'utilisateur,
+   09/10/2026) : une liste de personnes comme dans un groupe de discussion — pastille
+   d'initiales, nom, rôle. Un appui sur la ligne ouvre de quoi changer le rôle ou retirer la
+   personne. La case « me prévenir » a disparu : chacun règle ses alertes dans « Mon compte ». */
 .liste-membres { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; max-height: 46vh;
   overflow: auto; }
-.membre { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px;
-  border: 1px solid var(--bord); border-radius: 10px; background: #fbfcfe; }
-.membre-nom { flex: 1 1 190px; font-size: 14px; }
-.membre .aide { margin: 0; }
+.membre { border: 1px solid var(--bord); border-radius: 12px; background: #fff; overflow: hidden; }
+.membre-tete { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px;
+  background: none; border: none; border-radius: 0; text-align: left; }
+.membre-tete:hover { background: #f6f9fd; }
+.membre-tete[disabled] { cursor: default; }
+.pastille-membre { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%; color: #fff;
+  display: grid; place-items: center; font-weight: 700; font-size: 16px; letter-spacing: .5px; }
+.membre-identite { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.membre-identite strong { font-size: 15px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.membre-detail { font-size: 12.5px; color: var(--doux); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.membre-chevron { flex: 0 0 auto; color: var(--doux); font-size: 18px; line-height: 1; }
+.membre-actions { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px;
+  border-top: 1px solid var(--bord-clair); background: #fafbfe; }
+.membre-actions .aide { margin: 0; }
+.roles-choix { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Les boutons d'une FENÊTRE sont larges par défaut (`width: 100%`) : ici, les pastilles de
+   rôle et « Retirer » doivent garder leur taille (constat du 09/10/2026 — elles s'étiraient). */
+.membre-actions .role-choix { width: auto; border: 1px solid var(--bord); border-radius: 999px;
+  background: #fff; padding: 8px 13px; font-size: 13px; min-height: 36px; }
+.membre-actions .role-choix.actif { background: var(--encre); border-color: var(--encre);
+  color: #fff; font-weight: 600; }
+.membre-actions > button.danger { width: auto; align-self: flex-start; padding: 8px 13px; }
 
 /* Ajouter PLUSIEURS personnes d'un coup (demande de l'utilisateur, 09/10/2026) : on coche qui
    l'on veut dans une liste, on choisit un rôle, et tout est ajouté en un seul geste. */

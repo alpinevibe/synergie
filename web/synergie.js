@@ -2081,55 +2081,84 @@
   // ================================================================ RESPONSABLES
   // ================================================================ LES MEMBRES
   /** Un rôle : un menu déroulant avec les trois rôles possibles. */
-  function menuRole(valeur, { projets_ = false } = {}) {
-    const menu = element('select', { classe: 'role' });
-    roles.forEach((r) => {
-      const option = element('option', { texte: r.libelle, attrs: { value: r.cle,
-        title: r.description } });
-      if (r.cle === valeur) option.selected = true;
-      menu.append(option);
-    });
-    menu.dataset.portee = projets_ ? 'projet' : 'theme';
-    return menu;
+  /** La pastille d'une personne : ses initiales sur une couleur stable — comme la photo de
+      profil d'un groupe de discussion, mais dessinée (demande de l'utilisateur, 09/10/2026). */
+  function pastilleMembre(prenom) {
+    const mots = (prenom || '?').trim().split(/\s+/).filter(Boolean);
+    const initiales = ((mots[0] || '?')[0] + (mots[1] ? mots[1][0] : '')).toUpperCase();
+    const teintes = ['#3a56c9', '#12907d', '#b0561b', '#7a3ea8', '#b3261e', '#0f6d8c', '#4a6cf7'];
+    let somme = 0;
+    for (const lettre of (prenom || '')) somme += lettre.codePointAt(0);
+    return element('span', { classe: 'pastille-membre', texte: initiales,
+      style: 'background:' + teintes[somme % teintes.length],
+      attrs: { 'aria-hidden': 'true' } });
   }
 
-  /** Une ligne de membre : son nom, son rôle, ses alertes, et les actions. */
-  function ligneMembre(membre, { portee, identifiant }) {
-    const ligne = element('div', { classe: 'membre' });
-    const infos = element('div', { classe: 'membre-nom' });
-    poser(infos,
-      element('strong', { texte: membre.prenom }),
-      element('span', { classe: 'aide', texte: membre.poste ? ' · ' + membre.poste : '' }),
-      membre.email ? element('span', { classe: 'aide', texte: ' · ' + membre.email })
-        : element('span', { classe: 'aide', texte: ' · pas de courriel' }));
-    const menu = menuRole(membre.role, { projets_: portee === 'projet' });
-    menu.setAttribute('aria-label', 'Rôle de ' + membre.prenom);
-    const alerte = element('input', { attrs: { type: 'checkbox', title: 'Me prévenir par courriel' } });
-    alerte.checked = Boolean(membre.notifier);
-    alerte.setAttribute('aria-label', 'Prévenir ' + membre.prenom + ' par courriel');
-    const enlever = element('button', { classe: 'discret danger petit', texte: 'Retirer' });
+  /** Un membre, à la manière d'un groupe de discussion : sa pastille, son nom, son rôle — et
+      un appui sur la ligne ouvre de quoi CHANGER SON RÔLE ou LE RETIRER.
 
-    async function enregistrer() {
-      const chemin = portee === 'projet'
-        ? `/api/projets/${identifiant}/membres/${membre.compte}`
-        : `/api/themes/${identifiant}/membres/${membre.compte}`;
-      await appel(chemin, { methode: 'PUT', corps: { role: menu.value, notifier: alerte.checked } });
-      if (portee === 'projet') { await rafraichirProjet(); } else { await rafraichirMembresTheme(); }
-      toast('Rôle enregistré.');
+      Le même affichage sert au PROJET et aux GROUPES (demande de l'utilisateur, 09/10/2026) ;
+      la case « me prévenir par courriel » a disparu : chacun règle ses alertes lui-même dans
+      « Mon compte ». */
+  function ligneMembre(membre, { portee, identifiant, administre = true }) {
+    const quoi = portee === 'projet' ? 'du projet' : 'du groupe';
+    const chemin = portee === 'projet'
+      ? `/api/projets/${identifiant}/membres/${membre.compte}`
+      : `/api/themes/${identifiant}/membres/${membre.compte}`;
+    const rafraichir = async () => {
+      if (portee === 'projet') await rafraichirProjet(); else await rafraichirMembresTheme();
+    };
+
+    const tete = element('button', { classe: 'membre-tete',
+      attrs: { type: 'button', 'aria-expanded': 'false' } });
+    poser(tete,
+      pastilleMembre(membre.prenom),
+      element('span', { classe: 'membre-identite' },
+        element('strong', { texte: membre.prenom }),
+        element('span', { classe: 'membre-detail', texte: membre.email || 'pas de courriel' })),
+      element('span', { classe: 'etiquette-role', texte: membre.libelle_role || membre.role }));
+
+    if (!administre) {                        // simple lecture : personne ne se modifie ici
+      tete.disabled = true;
+      return element('div', { classe: 'membre' }, tete);
     }
-    menu.addEventListener('change', enregistrer);
-    alerte.addEventListener('change', enregistrer);
-    enlever.addEventListener('click', async () => {
-      if (!confirm('Retirer ' + membre.prenom + ' ?')) return;
-      const chemin = portee === 'projet'
-        ? `/api/projets/${identifiant}/membres/${membre.compte}`
-        : `/api/themes/${identifiant}/membres/${membre.compte}`;
-      await appel(chemin, { methode: 'DELETE' });
-      if (portee === 'projet') { await rafraichirProjet(); } else { await rafraichirMembresTheme(); }
-      toast(membre.prenom + ' a été retiré.');
+    tete.append(element('span', { classe: 'membre-chevron', texte: '⋯', attrs: { 'aria-hidden': 'true' } }));
+
+    // --- ce que l'on peut faire : le rôle, puis le retrait ---------------------------------
+    const choix = element('div', { classe: 'roles-choix' });
+    roles.forEach((r) => {
+      const pastille = element('button', { classe: 'role-choix' + (r.cle === membre.role ? ' actif' : ''),
+        texte: r.libelle, attrs: { type: 'button', title: r.description || '' } });
+      pastille.addEventListener('click', async () => {
+        if (r.cle === membre.role) return;
+        try {
+          await appel(chemin, { methode: 'PUT', corps: { role: r.cle } });
+          await rafraichir();
+          toast(membre.prenom + ' est ' + r.libelle.toLowerCase() + ' ' + quoi + '.');
+        } catch (erreur) { toast(erreur.message); }
+      });
+      choix.append(pastille);
     });
-    poser(ligne, infos, menu, alerte, enlever);
-    return ligne;
+    const retirer = element('button', { classe: 'danger petit', texte: 'Retirer ' + quoi,
+      attrs: { type: 'button' } });
+    retirer.addEventListener('click', async () => {
+      if (!confirm('Retirer ' + membre.prenom + ' ' + quoi + ' ?')) return;
+      try {
+        await appel(chemin, { methode: 'DELETE' });
+        await rafraichir();
+        toast(membre.prenom + ' ne fait plus partie ' + quoi + '.');
+      } catch (erreur) { toast(erreur.message); }
+    });
+    const actions = element('div', { classe: 'membre-actions cache' },
+      element('span', { classe: 'aide', texte: 'Rôle ' + quoi }),
+      choix, retirer);
+
+    tete.addEventListener('click', () => {
+      const ouvert = !actions.classList.contains('cache');
+      actions.classList.toggle('cache', ouvert);
+      tete.setAttribute('aria-expanded', ouvert ? 'false' : 'true');
+    });
+    return element('div', { classe: 'membre' }, tete, actions);
   }
 
   async function rafraichirProjet() {
@@ -2156,16 +2185,11 @@
       zone.append(element('p', { classe: 'vide', texte: 'Personne pour le moment.' }));
     }
     if (administre) afficherInvitations();
+    // Le MÊME affichage pour le projet et pour les groupes (demande de l'utilisateur,
+    // 09/10/2026) ; seuls les administrateurs peuvent changer un rôle ou retirer quelqu'un.
     membresProjet.forEach((membre) => {
-      if (administre) {
-        zone.append(ligneMembre(membre, { portee: 'projet', identifiant: projet.id }));
-      } else {
-        const ligne = element('div', { classe: 'membre' });
-        poser(ligne,
-          element('strong', { texte: membre.prenom }),
-          element('span', { classe: 'etiquette-role', texte: membre.libelle_role || membre.role }));
-        zone.append(ligne);
-      }
+      zone.append(ligneMembre(membre, { portee: 'projet', identifiant: projet.id,
+                                        administre }));
     });
   }
 
@@ -2415,14 +2439,7 @@
       return;
     }
     membresTheme.forEach((membre) => {
-      if (administre) {
-        zone.append(ligneMembre(membre, { portee: 'theme', identifiant: theme.id }));
-      } else {
-        const ligne = element('div', { classe: 'membre' });
-        poser(ligne, element('strong', { texte: membre.prenom }),
-          element('span', { classe: 'etiquette-role', texte: membre.libelle_role || membre.role }));
-        zone.append(ligne);
-      }
+      zone.append(ligneMembre(membre, { portee: 'theme', identifiant: theme.id, administre }));
     });
   }
 

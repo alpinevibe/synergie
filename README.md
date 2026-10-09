@@ -359,3 +359,20 @@ Vérifications : `python3 tests/tester_entete_mobile.py` → **6 contrôles, 0 �
 bouton toujours dans l'entête).
 
 Version **CACHE_VERSION 7** du service worker.
+
+## Les membres, comme dans un groupe de discussion (9 octobre 2026)
+
+Le panneau « Membres » (du projet comme d'un groupe — **même affichage**) présente désormais une
+**liste de personnes** : une **pastille d'initiales** colorée, le nom, l'adresse et le rôle. Plus
+de case à cocher ni de menu déroulant dans la liste.
+
+**Un appui sur une ligne** ouvre les actions : changer le rôle (**Administrateur · Membre
+participant · Visiteur**, un appui suffit) ou **retirer** la personne. Un membre qui n'administre
+pas voit la même liste, sans les actions. Chacun règle ses alertes par courriel lui-même, dans
+« Mon compte ».
+
+Vérifications : `python3 tests/tester_membres_affichage.py` → **10 contrôles, 0 échec** (pastilles
+et rôles, aucune case à cocher, actions à l'appui, changement de rôle vraiment enregistré,
+affichage identique dans un groupe, lecture seule pour un membre simple).
+
+Version **CACHE_VERSION 8** du service worker.
