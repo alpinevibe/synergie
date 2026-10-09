@@ -155,8 +155,15 @@ def principal() -> int:
             nav.close()
     finally:
         if projet:
+            # Le jeton du début ne vaut plus rien : l'essai s'est DÉCONNECTÉ (c'est le but).
+            # On reprend un jeton neuf avec l'identifiant posé pendant l'essai.
+            jeton_propre = premier["jeton"]
             try:
-                appel(f"/api/projets/{projet['id']}", jeton=premier["jeton"], methode="DELETE")
+                jeton_propre = appel("/api/connexion", {"identifiant": IDENTIFIANT})["jeton"]
+            except Exception:
+                pass
+            try:
+                appel(f"/api/projets/{projet['id']}", jeton=jeton_propre, methode="DELETE")
             except Exception:
                 pass
         menage(identifiants)
