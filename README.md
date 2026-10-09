@@ -329,3 +329,20 @@ l'inscription, connexion de la personne inscrite ; adresses d'essai en `.invalid
 courriel réellement envoyé pendant les tests).
 
 Version **CACHE_VERSION 5** du service worker.
+
+## Se connecter avec son identifiant, et se déconnecter (9 octobre 2026)
+
+L'écran « Mon compte » laisse poser son **identifiant personnel** (au moins 6 caractères). Il
+est vérifié : s'il est **déjà utilisé**, l'application le dit clairement (« entrez avec lui, ou
+choisissez-en un autre ») — auparavant elle répondait par une panne technique, incompréhensible.
+
+Un bouton **« Se déconnecter »** a été ajouté au même endroit : il invalide le jeton gardé par
+le navigateur et ramène à l'écran d'entrée par identifiant. C'était indispensable pour reprendre
+son identifiant personnel sur un appareil où l'on s'était identifié autrement (un téléphone
+partagé, par exemple).
+
+Vérifications : `python3 tests/tester_comptes_identifiant.py` → **8 contrôles, 0 échec** (poser
+son identifiant ; refus clair d'un identifiant déjà pris, sans panne ; déconnexion ; entrée de
+nouveau avec l'identifiant et retour à ses projets).
+
+Version **CACHE_VERSION 6** du service worker.

@@ -168,6 +168,25 @@ def test_invitations_et_votes():
                 "le message dit qui vient de rejoindre le projet"
                 + ("" if (envois and "rejoindre" in envois[-1][1]) else f" — {envois[-1:] }"))
 
+        # --- l'identifiant personnel et la déconnexion (défaut du 09/10/2026) -------------
+        voisin = m_equipe.creer_compte("Voisin", "voisin@exemple.fr")
+        m_equipe.definir_identifiant(voisin["compte"]["id"], "voisin.essai")
+        autre = m_equipe.creer_compte("Voisine", "voisine@exemple.fr")
+        try:
+            m_equipe.definir_identifiant(autre["compte"]["id"], "voisin.essai")
+            verifie(False, "un identifiant déjà pris est refusé")
+        except ValueError as erreur:
+            verifie("déjà utilisé" in str(erreur),
+                    "un identifiant déjà pris est refusé, avec un message clair — " + str(erreur))
+        ancien = autre["jeton"]                      # le jeton donné au navigateur
+        verifie(m_equipe.lire_compte(jeton=ancien) is not None,
+                "le jeton du navigateur identifie la personne")
+        m_equipe.oublier_jeton(autre["compte"]["id"])
+        verifie(m_equipe.lire_compte(jeton=ancien) is None,
+                "après déconnexion, l'ancien jeton ne vaut plus rien")
+        verifie(m_equipe.jeton_de(autre["compte"]["id"]) != ancien,
+                "un nouveau jeton prend sa place")
+
         # --- 2. l'activation : prénom + identifiant, sur un seul et même compte ---------
         resultat = {}
         sujet, corps = m_invitations.courriel_invitation(invitation, projet["nom"])

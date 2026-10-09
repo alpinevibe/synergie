@@ -151,7 +151,8 @@ def definir_identifiant(compte_id: str, identifiant: str) -> dict:
         autre = base.execute("select id from comptes where identifiant_min = ? and id <> ?",
                              (propre.lower(), compte_id)).fetchone()
         if autre:
-            raise ValueError("Cet identifiant est déjà pris : choisissez-en un autre.")
+            raise ValueError("Cet identifiant est déjà utilisé : entrez avec lui, "
+                             "ou choisissez-en un autre.")
         base.execute("update comptes set identifiant = ?, identifiant_min = ?, maj_le = ?"
                      " where id = ?", (propre, propre.lower(), maintenant(), compte_id))
     return lire_compte(identifiant=compte_id)
@@ -169,6 +170,17 @@ def entrer_avec_identifiant(identifiant: str) -> dict | None:
             base.execute("update comptes set derniere_connexion = ?, maj_le = ? where id = ?",
                          (maintenant(), maintenant(), ligne["id"]))
     return _compte_public(ligne) if ligne else None
+
+
+def oublier_jeton(compte_id: str) -> None:
+    """Rend inutilisable le jeton gardé par le navigateur (déconnexion).
+
+    On en donne un NOUVEAU plutôt que de le vider : la colonne est unique, deux comptes ne
+    peuvent pas partager la même valeur — et l'ancien jeton cesse aussitôt de valoir.
+    """
+    with connexion() as base:
+        base.execute("update comptes set jeton = ?, maj_le = ? where id = ?",
+                     (_identifiant("jt"), maintenant(), compte_id))
 
 
 def jeton_de(compte_id: str) -> str:

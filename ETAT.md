@@ -1,5 +1,35 @@
 # Synergie — état du projet
 
+## 9 octobre 2026 — identifiant personnel : message clair, et déconnexion
+
+Défaut rapporté par l'utilisateur : « dans l'application synergie, je n'arrive pas à me
+connecter avec mon identifiant ».
+
+- **Cause 1 — une panne au lieu d'un message** : quand l'identifiant saisi était déjà utilisé
+  (par exemple le sien, sur un autre appareil ou un autre compte), `POST /api/comptes/moi`
+  laissait remonter l'erreur du moteur : le serveur répondait **500** et l'écran « Mon compte »
+  restait muet (« INTERNAL SERVER ERROR »). La route attrape désormais l'erreur et répond **400**
+  avec un message lisible : « Cet identifiant est déjà utilisé : entrez avec lui, ou choisissez-
+  en un autre. »
+- **Cause 2 — aucune déconnexion** : l'application n'en proposait pas. Un appareil restait donc
+  « collé » au compte gardé par le navigateur, sans moyen de reprendre son identifiant
+  personnel. Nouveau bouton **« Se déconnecter »** dans « Mon compte »
+  (`web/index.html`, `web/synergie.js`), et nouveau point d'entrée `POST /api/deconnexion`
+  (`moteur/equipe.py` → `oublier_jeton`, qui **change** le jeton : la colonne est unique, l'ancien
+  cesse aussitôt de valoir). Le navigateur oublie jeton, projet et nom, et l'écran d'entrée par
+  identifiant revient.
+- **Contrôle de bout en bout** : `python3 tests/tester_comptes_identifiant.py` → **8 contrôles,
+  0 échec** (poser son identifiant, refus clair d'un identifiant déjà pris **sans panne**,
+  déconnexion, puis entrée de nouveau avec l'identifiant et retour à ses projets).
+- **Non-régression** : `tester_synergie.py` **96** (dont deux nouveaux contrôles sur le jeton),
+  `tester_invitations_envoi.py` **11/11**, `tester_membres_a_la_volee.py` **10/10**,
+  `tester_chat_a_droite.py` **9/9**, `tester_fenetres.py` **10/10**.
+- **Rattachement** : le compte personnel de l'utilisateur (`pierre.nicolas`,
+  pierrenicolas@laposte.net) est désormais **administrateur du projet** — il était resté en
+  dehors, si bien qu'une entrée avec cet identifiant ouvrait l'application **sans aucun
+  projet** (de quoi croire à un échec de connexion). Sans alerte courriel : l'adresse du CHU
+  (`pierre.nicolas.pro`) les reçoit déjà. `CACHE_VERSION` du service worker → **6**.
+
 ## 9 octobre 2026 — les courriels sont rouverts : invitations et alerte d'inscription
 
 Demandes de l'utilisateur : « réactive l'envoi des mails car ils ont été débloqués par mon

@@ -1809,6 +1809,30 @@
     }
   }
 
+  /** Quitter proprement : le jeton du navigateur ne vaut plus rien, et l'on revient à
+      l'entrée par identifiant personnel (demande de l'utilisateur, 09/10/2026 : il fallait
+      pouvoir reprendre son identifiant sur un appareil où l'on s'était identifié autrement —
+      sans cela, l'application restait collée au compte du navigateur). */
+  async function seDeconnecter() {
+    if (!confirm('Se déconnecter de Synergie sur cet appareil ?')) return;
+    try {
+      await appel('/api/deconnexion', { methode: 'POST' });
+    } catch (erreur) {                          // réseau capricieux : on quitte quand même
+      /* on efface de toute façon ce que garde le navigateur */
+    }
+    if (flux) { flux.close(); flux = null; }
+    if (fluxGeneral) { fluxGeneral.close(); fluxGeneral = null; }
+    ['synergie.jeton', 'synergie.projet', 'synergie.nom', 'synergie.identifiant']
+      .forEach((cle) => localStorage.removeItem(cle));
+    compte = null; projet = null; theme = null;
+    membresProjet = []; membresTheme = [];
+    $('#vue-compte').classList.add('cache');
+    $('#liste-projets').innerHTML = '';
+    afficherVue('projets');
+    demanderPrenom();                           // l'écran d'entrée par identifiant
+    toast('Vous êtes déconnecté(e) : entrez avec votre identifiant.');
+  }
+
   // ================================================================ CADRE DE TRAVAIL
   /** Le cadre de travail : on le lit en cliquant le NOM DU PROJET (consigne du
       08/10/2026), il n'occupe plus la page. Seul l'administrateur du projet le modifie. */
@@ -2567,9 +2591,9 @@
     });
     $('#btn-compte').addEventListener('click', ouvrirMonCompte);
     $('#c-enregistrer').addEventListener('click', enregistrerMonCompte);
+    $('#c-deconnecter').addEventListener('click', seDeconnecter);
     $('#c-fermer').addEventListener('click', () => $('#vue-compte').classList.add('cache'));
-    $('#c-essai').addEventListener('click', async () => {
-      $('#c-etat').textContent = 'Envoi de l\'essai…';
+    $('#c-essai').addEventListener('click', async () => {      $('#c-etat').textContent = 'Envoi de l\'essai…';
       try {
         const resultat = await appel('/api/alertes/essai', { methode: 'POST', corps: {} });
         $('#c-etat').textContent = resultat.envoye

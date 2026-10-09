@@ -533,8 +533,29 @@ def api_mon_compte():
     compte = _compte(requis=True)
     if request.method == "PUT":
         corps = request.get_json(silent=True) or {}
-        compte = m_equipe.maj_compte(compte["id"], corps) or compte
+        try:
+            compte = m_equipe.maj_compte(compte["id"], corps) or compte
+        except ValueError as erreur:
+            # Un identifiant déjà utilisé (ou trop court) est une ERREUR DE SAISIE, pas une
+            # panne : l'application doit le dire clairement (constat du 09/10/2026 : l'écran
+            # « Mon compte » répondait 500 et rien ne se comprenait).
+            return jsonify({"erreur": str(erreur)}), 400
     return jsonify({"compte": compte, "notifications": _mes_notifications(compte["id"])})
+
+
+@app.route("/api/deconnexion", methods=["POST"])
+def api_deconnexion():
+    """Quitter : le jeton du navigateur ne vaut plus rien.
+
+    Demande de l'utilisateur (09/10/2026) : pouvoir reprendre son identifiant personnel, y
+    compris sur un appareil où l'on s'était identifié autrement. Sans cela, l'application
+    restait « collée » au compte du navigateur.
+    """
+    compte = _compte(requis=True)
+    m_equipe.oublier_jeton(compte["id"])
+    reponse = jsonify({"ok": True})
+    reponse.delete_cookie("synergie")
+    return reponse
 
 
 # ====================================================================================

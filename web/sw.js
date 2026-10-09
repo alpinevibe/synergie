@@ -9,7 +9,7 @@
        on verrait un vote ou une note périmés ;
      • à chaque nouvelle version, la réserve est remplacée (CACHE_VERSION).
 */
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 const RESERVE = `synergie-${CACHE_VERSION}`;
 const FICHIERS = [
   '/', '/synergie.css', '/synergie.js', '/manifest.webmanifest',
