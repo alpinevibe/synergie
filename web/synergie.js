@@ -2407,6 +2407,26 @@
     bouton.disabled = !combien;                   // rien de coché : on n'ajoute rien
   }
 
+  /** Un ✕ en haut à droite de chaque grande fenêtre : on la ferme sans chercher le bouton du
+      bas (défaut rapporté le 09/10/2026 : « je ne vois pas le bouton fermé »). Le ✕ déclenche
+      le MÊME bouton de fermeture que celui du bas, pour garder exactement le même effet. */
+  function poserCroixDeFermeture() {
+    document.querySelectorAll('.boite-nom.large').forEach((boite) => {
+      if (boite.querySelector('.croix-fermeture')) return;
+      const titre = boite.querySelector('h2');
+      if (!titre) return;
+      const fermer = [...boite.querySelectorAll('button')].find((b) => /-fermer$/.test(b.id));
+      const croix = element('button', { classe: 'croix-fermeture discret', texte: '✕',
+        attrs: { type: 'button', 'aria-label': 'Fermer', title: 'Fermer' } });
+      croix.addEventListener('click', () => {
+        if (fermer) { fermer.click(); return; }
+        const voile = boite.closest('.voile');
+        if (voile) voile.classList.add('cache');
+      });
+      titre.append(croix);                        // dans le titre : il reste visible en défilant
+    });
+  }
+
   /** Petit message en bas de l'écran (jamais de fenêtre qui bloque le travail). */
   function toast(texte) {
     const zone = $('#zone-toast');
@@ -2449,6 +2469,7 @@
   // ================================================================ BRANCHEMENTS
   function brancher() {
     brancherInstallation();
+    poserCroixDeFermeture();
     // --- la barre de navigation du téléphone
     document.querySelectorAll('#nav-mobile button').forEach((bouton) => {
       bouton.addEventListener('click', () => {

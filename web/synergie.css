@@ -287,6 +287,17 @@ header button.clair:hover { background: rgba(255, 255, 255, .3); }
 
 /* ---- formulaires du compte et cases à cocher ---- */
 .boite-nom.large { max-width: 620px; text-align: left; }
+/* Une grande fenêtre (membres, cadre, compte, liens) ne dépasse JAMAIS l'écran : elle défile
+   en interne, et sa barre de fermeture reste collée en bas — on la voit sans chercher
+   (défaut rapporté par l'utilisateur le 09/10/2026 : « je ne vois pas le bouton fermé »). */
+.boite-nom.large { position: relative; max-height: 90svh; overflow: auto; }
+.boite-nom.large > h2 { position: sticky; top: 0; z-index: 4; background: var(--carte);
+  padding: 6px 52px 8px 0; }
+.boite-nom.large > .barre-boutons { position: sticky; bottom: 0; z-index: 4;
+  background: var(--carte); padding: 10px 0 2px; border-top: 1px solid var(--bord);
+  box-shadow: 0 -10px 14px -12px rgba(30, 42, 58, .45); }
+.croix-fermeture { position: absolute; top: 8px; right: 10px; width: auto; padding: 6px 11px;
+  font-size: 15px; line-height: 1; border-radius: 9px; z-index: 5; }
 .boite-nom .etiquette-champ { display: block; margin: 10px 0 4px; font-size: 13px;
   color: var(--doux); font-weight: 600; }
 .boite-nom .etiquette-champ input { width: 100%; margin-top: 4px; }

@@ -292,3 +292,19 @@ navigateur, essai entièrement effacé) ; `python3 tests/tester_synergie.py` →
 0 échec**.
 
 Version **CACHE_VERSION 3** du service worker.
+
+## Le bouton « Fermer » reste visible (9 octobre 2026)
+
+Une grande fenêtre (Membres, Cadre de travail, Compte, Liens) pouvait **dépasser l'écran** :
+son bouton « Fermer », tout en bas, partait sous le bord et devenait introuvable.
+
+Désormais ces fenêtres ne dépassent plus l'écran : elles défilent en interne et leur **barre
+« Fermer » reste collée en bas**, toujours visible. Une **croix ✕** est aussi posée en haut de
+chaque grande fenêtre, qui reste en place pendant le défilement — elle ferme la fenêtre comme
+le bouton du bas.
+
+Vérifications : `python3 tests/tester_fenetres.py` → **10 contrôles, 0 échec** (projet d'essai
+de sept membres, écran d'ordinateur 1024 × 700 et écran de téléphone 390 × 740 : fenêtre
+contenue dans l'écran, barre « Fermer » et croix visibles, croix qui ferme bien).
+
+Version **CACHE_VERSION 4** du service worker.

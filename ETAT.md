@@ -1,5 +1,25 @@
 # Synergie — état du projet
 
+## 9 octobre 2026 — le bouton « Fermer » des fenêtres reste visible
+
+Défaut rapporté par l'utilisateur : « problème d'affichage de la fenêtre membre, je ne vois pas
+le bouton fermé ».
+
+- Une grande fenêtre (Membres, Cadre de travail, Compte, Liens) **débordait de l'écran** : sa
+  barre de fermeture partait sous le bord, invisible. `web/synergie.css` la borne à `90svh` et
+  la fait **défiler en interne**, avec la barre `.barre-boutons` **collée en bas** — on la voit
+  sans rien chercher.
+- Une **croix ✕** est ajoutée en haut de chaque grande fenêtre (`poserCroixDeFermeture`), dans
+  le titre qui reste collé en haut pendant le défilement ; elle déclenche **le même bouton de
+  fermeture** que celui du bas, pour un effet identique.
+- **Contrôle automatisé ajouté** : `python3 tests/tester_fenetres.py` crée un projet d'essai
+  avec sept membres et vérifie, dans un vrai navigateur, sur **1024 × 700 et 390 × 740**, que la
+  fenêtre ne dépasse pas l'écran, que la barre « Fermer » et la croix restent visibles, et que
+  la croix ferme bien la fenêtre — **10 contrôles, 0 échec**, essai effacé. Captures
+  `captures/synergie-fenetre-membres-<largeur>x<hauteur>.png`.
+- **Non-régression** : `tester_synergie.py` **88**, `tester_chat_a_droite.py` **9/9**,
+  `tester_membres_a_la_volee.py` **10/10**. `CACHE_VERSION` du service worker → **4**.
+
 ## 9 octobre 2026 — ajouter plusieurs membres à la volée
 
 Demande de l'utilisateur : « la possibilité d'ajouter plusieurs membres à la volée dans
