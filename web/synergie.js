@@ -204,7 +204,10 @@
   }
 
   function estAdministrateurTheme() {
-    return roleTheme === 'admin' || (roleTheme === null && roleProjet === 'admin');
+    // L'administrateur du PROJET administre tous ses groupes, quel que soit son rôle dans le
+    // groupe (règle appliquée aussi côté serveur — sinon « Tout cocher » pouvait retirer
+    // l'administration en se donnant un rôle de simple membre, constat du 09/10/2026).
+    return roleProjet === 'admin' || roleTheme === 'admin';
   }
 
   // ================================================================ LES GROUPES DE TRAVAIL
@@ -2155,21 +2158,56 @@
     $('#vue-membres').classList.remove('cache');
   }
 
-  /** Inviter par ADRESSE : la personne reçoit un lien personnel et choisit son identifiant. */
-  async function inviterAuProjet() {
-    const email = ($('#membre-email').value || '').trim();
-    if (!email) { $('#membre-email').focus(); return; }
-    try {
-      const donnees = await appel('/api/projets/' + projet.id + '/invitations',
-        { methode: 'POST', corps: { email, role: $('#membre-role').value } });
-      $('#membre-email').value = '';
-      await rafraichirProjet();
-      toast(donnees.envoye
-        ? 'Invitation envoyée à ' + email + '.'
-        : 'Lien d\'invitation créé : copiez-le ci-dessous pour le transmettre.');
-    } catch (erreur) {
-      toast(erreur.message);
+  /** Les adresses saisies : une par ligne, ou séparées par des virgules ou des points-virgules. */
+  function adressesSaisies(champ) {
+    const brut = (champ && champ.value) || '';
+    return [...new Set(brut.split(/[\s,;]+/)
+      .map((adresse) => adresse.trim().toLowerCase())
+      .filter(Boolean))];
+  }
+
+  /** Ajouter PLUSIEURS personnes d'un coup : une invitation par adresse, en un seul geste.
+
+      « À la volée » (demande de l'utilisateur, 09/10/2026) : on colle la liste des adresses et
+      tout part d'un coup. Une adresse refusée est signalée, jamais silencieuse. */
+  async function ajouterPlusieurs(chemin, champ, corps) {
+    const adresses = adressesSaisies(champ);
+    if (!adresses.length) { champ.focus(); return null; }
+    const faites = [], refusees = [];
+    for (const email of adresses) {
+      try {
+        faites.push(await appel(chemin, { methode: 'POST', corps: { ...corps, email } }));
+      } catch (erreur) {
+        refusees.push(email);
+      }
     }
+    if (faites.length) champ.value = '';
+    return { faites, refusees };
+  }
+
+  /** Le compte rendu d'un ajout en série, en une phrase. */
+  function direAjout(faites, refusees, suite) {
+    const morceaux = [];
+    if (faites.length) {
+      morceaux.push(faites.length === 1 ? '1 personne ajoutée'
+        : faites.length + ' personnes ajoutées');
+    }
+    if (refusees.length) {
+      morceaux.push(refusees.length + ' adresse(s) refusée(s) : ' + refusees.join(', '));
+    }
+    if (!morceaux.length) { toast('Aucune adresse à ajouter.'); return; }
+    toast(morceaux.join(' · ') + (suite ? ' — ' + suite : ''));
+  }
+
+  /** Ajouter PLUSIEURS personnes au PROJET : une adresse par ligne, un seul geste. */
+  async function inviterAuProjet() {
+    const resultat = await ajouterPlusieurs('/api/projets/' + projet.id + '/invitations',
+      $('#membres-emails'), { role: $('#membre-role').value });
+    if (!resultat) return;
+    await rafraichirProjet();
+    const aTransmettre = resultat.faites.filter((donnees) => !donnees.envoye).length;
+    direAjout(resultat.faites, resultat.refusees,
+      aTransmettre ? 'les liens personnels sont en dessous, à copier et transmettre.' : '');
   }
 
   /** Une invitation : son adresse, son rôle, et SON lien personnel à copier. */
@@ -2211,21 +2249,35 @@
     zone.append(element('p', { classe: 'aide',
       texte: attente.length + ' invitation(s) en attente — copiez le lien et transmettez-le :' }));
     attente.forEach((invitation) => zone.append(ligneInvitation(invitation)));
+    zone.append(boutonCopierLiens(attente));
   }
 
-  /** Inviter directement quelqu'un DANS CE GROUPE : un lien personnel à transmettre. */
+  /** Copier d'un geste les liens de plusieurs invitations (un par ligne). */
+  function boutonCopierLiens(invitations) {
+    const bouton = element('button', { classe: 'discret petit', attrs: { type: 'button' },
+      texte: invitations.length > 1 ? 'Copier les ' + invitations.length + ' liens'
+                                    : 'Copier le lien' });
+    bouton.addEventListener('click', async () => {
+      const liste = invitations.map((invitation) => (invitation.prenom
+        ? invitation.prenom + ' : ' : '') + invitation.lien).join('\n');
+      try {
+        await navigator.clipboard.writeText(liste);
+        toast(invitations.length + ' lien(s) copié(s) — il n\'y a plus qu\'à les transmettre.');
+      } catch (erreur) {
+        toast('Copie automatique impossible : copiez les liens un par un.');
+      }
+    });
+    return bouton;
+  }
+
+  /** Inviter PLUSIEURS personnes dans CE GROUPE : un lien personnel par adresse. */
   async function inviterDansLeGroupe() {
-    const email = ($('#invitation-theme-email').value || '').trim();
-    if (!email) { $('#invitation-theme-email').focus(); return; }
-    try {
-      const donnees = await appel('/api/themes/' + theme.id + '/invitations',
-        { methode: 'POST', corps: { email, role: $('#invitation-theme-role').value } });
-      $('#invitation-theme-email').value = '';
-      await afficherInvitationsTheme(donnees.lien ? [donnees] : []);
-      toast('Lien d\'invitation créé : copiez-le pour le transmettre.');
-    } catch (erreur) {
-      toast(erreur.message);
-    }
+    const resultat = await ajouterPlusieurs('/api/themes/' + theme.id + '/invitations',
+      $('#invitation-theme-email'), { role: $('#invitation-theme-role').value });
+    if (!resultat) return;
+    await afficherInvitationsTheme();
+    direAjout(resultat.faites, resultat.refusees,
+      'les liens personnels sont en dessous, à copier et transmettre.');
   }
 
   async function afficherInvitationsTheme(recents = []) {
@@ -2239,6 +2291,7 @@
     attente.forEach((invitation) => zone.append(ligneInvitation(invitation,
       'Ce lien ne sert qu\'une fois : en l\'ouvrant, la personne choisit son identifiant et '
       + 'rejoint ce groupe.')));
+    if (attente.length) zone.append(boutonCopierLiens(attente));
   }
 
   function afficherMembresTheme() {
@@ -2279,29 +2332,52 @@
     });
   }
 
-  /** Ajouter au groupe un membre DU PROJET, avec un rôle propre au groupe. */
+  /** Ajouter au groupe PLUSIEURS membres du projet, avec un rôle propre au groupe. */
   async function inviterAuTheme() {
-    const menu = $('#membre-theme-compte');
-    const compteId = menu.value;
-    if (!compteId) return;
-    const choisi = (menu.options[menu.selectedIndex] || {}).textContent || '';
-    await appel('/api/themes/' + theme.id + '/membres', { methode: 'POST', corps: {
-      compte: compteId, role: $('#membre-theme-role').value, notifier: true } });
+    const cases = [...document.querySelectorAll('#membre-theme-comptes input:checked')];
+    if (!cases.length) { toast('Cochez au moins une personne.'); return; }
+    const role = $('#membre-theme-role').value;
+    const noms = cases.map((c) => c.dataset.nom || '');
+    for (const cochee of cases) {
+      await appel('/api/themes/' + theme.id + '/membres', { methode: 'POST', corps: {
+        compte: cochee.value, role, notifier: true } });
+    }
     await rafraichirMembresTheme();
-    toast(choisi + ' a rejoint le groupe.');
+    toast(cases.length === 1 ? noms[0] + ' a rejoint le groupe.'
+      : cases.length + ' personnes ont rejoint le groupe.');
   }
 
-  /** Le menu des personnes à ajouter : les membres du projet qui n'ont pas de rôle ici. */
+  /** La liste des personnes du projet qui n'ont pas encore de rôle ici, à cocher.
+
+      Plusieurs à la fois (demande de l'utilisateur, 09/10/2026) : on coche qui l'on veut, on
+      choisit UN rôle, et tout est ajouté d'un coup. */
   function remplirMembresThemesDisponibles() {
-    const menu = $('#membre-theme-compte');
-    if (!menu) return;
+    const zone = $('#membre-theme-comptes');
+    if (!zone) return;
     const dejaLa = new Set(membresTheme.map((m) => m.compte));
-    menu.innerHTML = '';
+    zone.innerHTML = '';
     const libres = membresProjet.filter((m) => !dejaLa.has(m.compte));
     libres.forEach((membre) => {
-      menu.append(element('option', { texte: membre.prenom + ' (' + (membre.email || 'sans courriel') + ')',
-        attrs: { value: membre.compte } }));
+      const etiquette = element('label', { classe: 'choix-membre' });
+      const coche = element('input', { attrs: { type: 'checkbox', value: membre.compte } });
+      coche.dataset.nom = membre.prenom;
+      etiquette.append(coche,
+        element('span', { texte: membre.prenom }),
+        element('span', { classe: 'aide',
+          texte: membre.email || 'pas de courriel' }));
+      zone.append(etiquette);
     });
+    if (libres.length > 1) {                      // tout prendre d'un geste
+      const tout = element('button', { classe: 'discret petit', texte: 'Tout cocher',
+        attrs: { type: 'button' } });
+      tout.addEventListener('click', () => {
+        const cases = [...zone.querySelectorAll('input')];
+        const aCocher = cases.some((c) => !c.checked);
+        cases.forEach((c) => { c.checked = aCocher; });
+        majBoutonAjoutTheme();
+      });
+      zone.append(tout);
+    }
     const menuRoleExterne = $('#invitation-theme-role');
     if (menuRoleExterne && !menuRoleExterne.options.length) {
       roles.forEach((r) => {
@@ -2317,6 +2393,18 @@
     if (!possible) {
       $('#inviter-theme-note').textContent = 'Tous les membres du projet ont déjà un rôle dans ce groupe.';
     }
+    majBoutonAjoutTheme();
+  }
+
+  /** Le bouton dit combien de personnes seront ajoutées : « Ajouter au groupe (3) ». */
+  function majBoutonAjoutTheme() {
+    const bouton = $('#membre-theme-ajouter');
+    const zone = $('#membre-theme-comptes');
+    if (!bouton || !zone) return;
+    const combien = zone.querySelectorAll('input:checked').length;
+    bouton.textContent = combien ? 'Ajouter au groupe (' + combien + ')'
+                                 : 'Ajouter au groupe';
+    bouton.disabled = !combien;                   // rien de coché : on n'ajoute rien
   }
 
   /** Petit message en bas de l'écran (jamais de fenêtre qui bloque le travail). */
@@ -2476,6 +2564,7 @@
     $('#membres-theme-fermer').addEventListener('click', () =>
       $('#zone-membres-theme').classList.add('cache'));
     $('#membre-theme-ajouter').addEventListener('click', inviterAuTheme);
+    $('#membre-theme-comptes').addEventListener('change', majBoutonAjoutTheme);
     $('#invitation-theme-creer').addEventListener('click', inviterDansLeGroupe);
 
     $('#btn-retour').addEventListener('click', fermerTheme);

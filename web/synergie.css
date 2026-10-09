@@ -457,6 +457,20 @@ details.replie > *:last-child { margin-bottom: 16px; }
   border: 1px solid var(--bord); border-radius: 10px; background: #fbfcfe; }
 .membre-nom { flex: 1 1 190px; font-size: 14px; }
 .membre .aide { margin: 0; }
+
+/* Ajouter PLUSIEURS personnes d'un coup (demande de l'utilisateur, 09/10/2026) : on coche qui
+   l'on veut dans une liste, on choisit un rôle, et tout est ajouté en un seul geste. */
+.choix-membres { display: flex; flex-direction: column; gap: 6px; margin-top: 8px;
+  max-height: 40vh; overflow: auto; }
+.choix-membres .choix-membre { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border: 1px solid var(--bord); border-radius: 10px; background: #fbfcfe; cursor: pointer;
+  font-size: 14px; }
+.choix-membres .choix-membre:hover { background: #f2f6fb; }
+.choix-membres .choix-membre input { width: 20px; height: 20px; accent-color: var(--accent); }
+.choix-membres .choix-membre span:first-of-type { font-weight: 600; }
+.choix-membres .choix-membre .aide { margin: 0; margin-left: auto; font-size: 12.5px; }
+.choix-membres > button.discret { align-self: flex-start; }
+#membre-theme-ajouter[disabled] { opacity: .55; cursor: default; }
 select.role { min-height: 38px; border-radius: 9px; border: 1px solid var(--bord);
   padding: 6px 8px; font: inherit; font-size: 13.5px; background: #fff; }
 .notifications { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }

@@ -180,6 +180,10 @@ def supprimer_projet(identifiant: str, supprimer_groupes: bool = True) -> bool:
         # La discussion et les comptes rendus DU projet lui-même.
         base.execute("delete from messages where theme = ?", (identifiant,))
         base.execute("delete from documents where theme = ?", (identifiant,))
+        # Les invitations du projet (et celles de ses groupes) partent avec lui : sans cela
+        # leurs liens restaient valables pour un projet qui n'existe plus (constat du
+        # 09/10/2026, en éprouvant l'ajout de plusieurs membres).
+        base.execute("delete from invitations where projet = ?", (identifiant,))
         base.execute("delete from projets where id = ?", (identifiant,))
     return True
 
@@ -302,18 +306,23 @@ def role_du_projet(projet: str, compte: str | None) -> str | None:
 def role_effectif(projet: str, theme: str | None, compte: str | None) -> str | None:
     """Le rôle qui s'applique : celui du GROUPE s'il existe, sinon celui du PROJET.
 
-    L'administrateur du projet administre tous ses groupes.
+    L'administrateur du projet administre TOUS ses groupes — quoi qu'indique son rôle dans
+    le groupe. Sans cette garantie, se donner un rôle de simple membre dans un groupe (par
+    exemple en cochant tout le monde d'un coup) retirait l'administration : le défaut a été
+    constaté le 09/10/2026, l'application répondant alors « interdit » pour le reste.
     """
     if not compte:
         return None
+    role = role_du_projet(projet, compte)
+    if role == "admin":
+        return "admin"
     if theme:
         with connexion() as base:
             ligne = base.execute("select role from theme_membres where theme = ? and compte = ?",
                                  (theme, compte)).fetchone()
         if ligne:
             return ligne["role"]
-    role = role_du_projet(projet, compte)
-    return "admin" if role == "admin" else role
+    return role
 
 
 def peut_ecrire(role: str | None) -> bool:

@@ -267,3 +267,28 @@ Le service tourne depuis `/home/ubuntu/synergie` :
 sudo systemctl restart synergie.service
 sudo systemctl status synergie.service
 ```
+
+## Ajouter plusieurs membres à la volée (9 octobre 2026)
+
+Demande de l'utilisateur : « la possibilité d'ajouter plusieurs membres à la volée dans
+Synergie ».
+
+- **Au projet** — le panneau « Membres du projet » accepte désormais **plusieurs adresses d'un
+  seul geste** : on les colle ou on les tape (une par ligne, ou séparées par des virgules),
+  on choisit **un rôle pour toutes**, et un clic crée toutes les invitations. Un bouton
+  « **Copier les N liens** » met la liste complète dans le presse-papiers, prête à transmettre.
+- **Au groupe** — les personnes du projet s'affichent **à cocher** (avec « Tout cocher »), et
+  le bouton annonce combien seront ajoutées : « Ajouter au groupe (4) ». Toutes rejoignent le
+  groupe d'un coup, avec le même rôle. Le champ « Inviter des personnes qui ne sont pas encore
+  dans le projet » accepte lui aussi **plusieurs adresses**.
+- **Garantie** : l'administrateur du projet **reste administrateur de ses groupes**, même s'il
+  s'y inscrit comme simple membre (auparavant, cocher tout le monde — lui compris — lui retirait
+  l'administration et l'application répondait « interdit » pour le reste).
+
+Vérifications : `python3 tests/tester_membres_a_la_volee.py` → **10 contrôles, 0 échec**
+(trois adresses collées d'un coup, trois invitations vérifiées en base, bouton de copie
+collective, trois personnes cochées et ajoutées au groupe d'un seul geste — dans un vrai
+navigateur, essai entièrement effacé) ; `python3 tests/tester_synergie.py` → **88 tests,
+0 échec**.
+
+Version **CACHE_VERSION 3** du service worker.

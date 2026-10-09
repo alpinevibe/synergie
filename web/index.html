@@ -298,16 +298,18 @@
       participant ou visiteur.</p>
     <div id="membres-liste" class="liste-membres"></div>
     <div id="membres-inviter" class="carte cache">
-      <h3>Inviter quelqu'un</h3>
+      <h3>Ajouter des personnes</h3>
+      <label class="sr-only" for="membres-emails">Adresses de courriel</label>
+      <textarea id="membres-emails" rows="3" spellcheck="false"
+        placeholder="Une adresse par ligne — ou séparées par des virgules :&#10;camille@hopital.fr, sofia@hopital.fr&#10;nadia@hopital.fr"></textarea>
       <div class="ligne-depot">
-        <input id="membre-email" type="email" placeholder="Adresse de courriel professionnelle"
-          maxlength="120">
         <select id="membre-role"></select>
-        <button id="membre-ajouter" class="principal petit">Envoyer l'invitation</button>
+        <button id="membre-ajouter" class="principal petit">Ajouter ces personnes</button>
       </div>
-      <p class="aide fin">Synergie vous donne un <strong>lien personnel</strong> à copier et à
-        transmettre par vous-même (courriel, message) : la personne y choisit son prénom et
-        son identifiant, puis entre avec cet identifiant.</p>
+      <p class="aide fin">Plusieurs personnes d'un coup : une adresse par ligne (ou séparées par
+        des virgules). Synergie vous donne un <strong>lien personnel</strong> pour chacune, à
+        copier et à transmettre par vous-même : la personne y choisit son prénom et son
+        identifiant, puis entre avec cet identifiant.</p>
       <div id="invitations-en-cours" class="liste-membres"></div>
     </div>
     <div class="barre-boutons">
@@ -339,23 +341,28 @@
     <h3>Membres de ce groupe</h3>
     <p class="aide">Le rôle donné ici l'emporte sur le rôle du projet.</p>
     <div id="liste-membres-theme" class="liste-membres"></div>
-    <div id="inviter-theme" class="ligne-depot cache">
-      <select id="membre-theme-compte"></select>
-      <select id="membre-theme-role"></select>
-      <button id="membre-theme-ajouter" class="principal petit">Ajouter au groupe</button>
+    <div id="inviter-theme" class="carte cache">
+      <p class="aide" id="inviter-theme-question">Qui ajouter à ce groupe ? Cochez autant de
+        personnes que vous voulez, puis choisissez leur rôle.</p>
+      <div id="membre-theme-comptes" class="choix-membres"></div>
+      <div class="ligne-depot">
+        <select id="membre-theme-role"></select>
+        <button id="membre-theme-ajouter" class="principal petit">Ajouter au groupe</button>
+      </div>
     </div>
     <p class="aide fin" id="inviter-theme-note">On choisit ici, parmi les membres du projet, ceux
       qui ont un rôle particulier dans ce groupe.</p>
     <details class="replie" id="inviter-theme-externe">
-      <summary>Inviter quelqu'un qui n'est pas encore dans le projet</summary>
+      <summary>Inviter des personnes qui ne sont pas encore dans le projet</summary>
+      <label class="sr-only" for="invitation-theme-email">Leurs adresses de courriel</label>
+      <textarea id="invitation-theme-email" rows="2" spellcheck="false"
+        placeholder="Une adresse par ligne — ou séparées par des virgules"></textarea>
       <div class="ligne-depot">
-        <input id="invitation-theme-email" type="email" placeholder="Son adresse de courriel"
-          maxlength="120">
         <select id="invitation-theme-role"></select>
-        <button id="invitation-theme-creer" class="principal petit">Créer le lien d'invitation</button>
+        <button id="invitation-theme-creer" class="principal petit">Créer les liens d'invitation</button>
       </div>
-      <p class="aide fin">Un lien personnel à copier et à lui transmettre : en l'ouvrant, la
-        personne choisit son identifiant et rejoint ce groupe.</p>
+      <p class="aide fin">Un lien personnel par personne, à copier et à lui transmettre : en
+        l'ouvrant, la personne choisit son identifiant et rejoint ce groupe.</p>
       <div id="invitations-theme" class="liste-membres"></div>
     </details>
     <div class="barre-boutons">

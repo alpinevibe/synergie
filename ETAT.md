@@ -1,5 +1,38 @@
 # Synergie — état du projet
 
+## 9 octobre 2026 — ajouter plusieurs membres à la volée
+
+Demande de l'utilisateur : « la possibilité d'ajouter plusieurs membres à la volée dans
+Synergie ».
+
+- **Au projet** (`web/index.html`, `web/synergie.js`) : le panneau des membres remplace le champ
+  « une adresse » par une **zone de plusieurs adresses** (une par ligne, ou séparées par des
+  virgules), un rôle commun et un bouton « Ajouter ces personnes ». Les invitations sont créées
+  d'affilée ; celles qui sont refusées sont **nommées** dans le compte rendu, jamais tues. Un
+  bouton « **Copier les N liens** » (`boutonCopierLiens`) met toute la liste dans le
+  presse-papiers.
+- **Au groupe** : les personnes du projet s'affichent **à cocher** (`.choix-membres`, bouton
+  « Tout cocher »), le bouton indique combien seront ajoutées — « Ajouter au groupe (4) » — et
+  toutes entrent d'un coup avec le même rôle. Le bloc « personnes qui ne sont pas encore dans le
+  projet » accepte lui aussi plusieurs adresses.
+- **Défaut corrigé** (`moteur/projets.py`) : `role_effectif` laissait le rôle de GROUPE écraser
+  celui du PROJET, si bien qu'un administrateur qui se donnait un rôle de simple membre dans un
+  groupe perdait l'administration de ce groupe — avec « Tout cocher », l'ajout s'arrêtait sur
+  « interdit ». L'administrateur du projet administre désormais **toujours** ses groupes
+  (`estAdministrateurTheme()` côté navigateur suit la même règle).
+- **Défauts de ménage corrigés** (constatés en éprouvant la nouveauté) : `supprimer_theme`
+  laissait derrière lui les **pages**, les **membres du groupe**, le **journal** et les
+  **invitations** ; `supprimer_projet` laissait les **invitations** du projet et de ses groupes
+  (liens encore valables pour un projet disparu).
+- **Contrôle de bout en bout** : `python3 tests/tester_membres_a_la_volee.py` — compte, projet,
+  trois membres et un groupe d'essai créés puis **effacés** : trois adresses collées d'un coup,
+  trois invitations vérifiées par l'API, bouton de copie collective, trois personnes cochées
+  (« Tout cocher ») et ajoutées au groupe d'un seul geste → **10 contrôles, 0 échec**.
+  Captures `captures/synergie-membres-projet.png` et `synergie-membres-groupe.png`.
+- **Non-régression** : `python3 tests/tester_synergie.py` → **88 tests, 0 échec** (dont quatre
+  nouveaux : plusieurs membres d'un coup, administrateur jamais rétrogradé, et le ménage d'un
+  groupe et d'un projet) ; `python3 tests/tester_chat_a_droite.py` → **9/9**.
+
 ## 9 octobre 2026 — la discussion du groupe passe à droite
 
 Demande de l'utilisateur : « retire l'onglet discussion dans les groupes et mets la fenêtre de

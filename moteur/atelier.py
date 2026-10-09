@@ -367,9 +367,14 @@ def supprimer_theme(identifiant: str) -> bool:
         base.execute("delete from votes where decision in"
                      " (select id from decisions where theme = ?)", (identifiant,))
         # Les MESSAGES du groupe partent avec lui (constat du 09/10/2026 : ils restaient
-        # orphelins en base, invisibles mais conservés pour rien).
-        for table in ("notes", "decisions", "documents", "messages"):
+        # orphelins en base, invisibles mais conservés pour rien). Comme les PAGES de
+        # travail, les MEMBRES du groupe et son JOURNAL : « tout son contenu » veut dire tout.
+        for table in ("notes", "decisions", "documents", "messages", "pages",
+                      "theme_membres", "journal"):
             base.execute(f"delete from {table} where theme = ?", (identifiant,))
+        # Les invitations faites POUR ce groupe ne servent plus à rien : elles partent aussi
+        # (constat du 09/10/2026 : leurs liens restaient valables après la suppression).
+        base.execute("delete from invitations where theme = ?", (identifiant,))
         base.execute("delete from themes where id = ?", (identifiant,))
     dossier = DOCUMENTS / identifiant
     if dossier.is_dir():

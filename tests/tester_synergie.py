@@ -473,6 +473,48 @@ def test_equipe():
         with m_atelier.connexion() as base:
             base.execute("update themes set projet = '' where id = ?", (theme["id"],))
 
+        # --- PLusieurs membres d'un coup, et l'administrateur qui reste administrateur ----
+        projet_essai = m_projets.creer_projet("Projet d'essai membres", auteur="Tests",
+                                              admin=compte["compte"]["id"], qui="Tests")
+        groupe = m_atelier.creer_theme("Groupe d'essai membres", "", "", projet_essai["id"],
+                                       "Tests")
+        arrives = [m_equipe.creer_compte(prenom)["compte"]["id"]
+                   for prenom in ("Camille", "Sofia", "Nadia")]
+        for identifiant in arrives:
+            m_projets.definir_membre_theme(groupe["id"], identifiant, "membre",
+                                           ajoute_par="Tests")
+        verifie(len(m_projets.membres_du_theme(groupe["id"])) == 3,
+                "plusieurs personnes entrent dans un groupe d'un coup")
+        # L'administrateur du projet se donne un rôle de simple membre : il reste administrateur
+        m_projets.definir_membre_theme(groupe["id"], compte["compte"]["id"], "membre",
+                                       ajoute_par="Tests")
+        verifie(m_projets.role_effectif(projet_essai["id"], groupe["id"],
+                                        compte["compte"]["id"]) == "admin",
+                "l'administrateur du projet administre le groupe, même inscrit comme membre")
+
+        # --- supprimer un groupe ne laisse RIEN derrière lui -------------------------------
+        m_invitations.creer_invitation("groupe@exemple.fr", "", projet_essai["id"], "membre",
+                                       theme=groupe["id"], role_theme="membre")
+        m_projets.definir_membre_theme(groupe["id"], arrives[0], "membre", ajoute_par="Tests")
+        m_atelier.journaliser(groupe["id"], "Tests", "note_ajoutee", groupe["id"], "essai")
+        m_equipe.creer_page(groupe["id"], "Page d'essai", "<p>texte</p>", "Tests")
+        m_equipe.envoyer_message(groupe["id"], "Quelqu'un", "Message du groupe d'essai")
+        m_atelier.supprimer_theme(groupe["id"])
+        with m_atelier.connexion() as base:
+            restes = {table: base.execute(
+                f"select count(*) from {table} where theme = ?", (groupe["id"],)).fetchone()[0]
+                for table in ("invitations", "theme_membres", "pages", "journal", "messages",
+                              "notes")}
+        verifie(all(nombre == 0 for nombre in restes.values()),
+                "supprimer un groupe ne laisse ni invitation, ni membre, ni page, ni journal"
+                + ("" if all(nombre == 0 for nombre in restes.values()) else f" — {restes}"))
+        m_invitations.creer_invitation("projet@exemple.fr", "", projet_essai["id"], "membre")
+        m_projets.supprimer_projet(projet_essai["id"])
+        with m_atelier.connexion() as base:
+            restantes = base.execute("select count(*) from invitations where projet = ?",
+                                     (projet_essai["id"],)).fetchone()[0]
+        verifie(restantes == 0, "supprimer un projet efface ses invitations")
+
         # --- la MODÉRATION : retirer un message non adapté -------------------------------
         message = m_equipe.envoyer_message(theme["id"], "Quelqu'un", "Message à modérer")
         verifie(m_equipe.supprimer_message(theme["id"], message["id"], "Collegue de test") is True
