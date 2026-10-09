@@ -43,6 +43,9 @@ def appel(chemin, corps=None, jeton=None, methode=None):
     requete = urllib.request.Request(BASE + chemin, data=donnees,
                                      method=methode or ("POST" if donnees else "GET"))
     requete.add_header("Content-Type", "application/json")
+    # Le site public refuse les requêtes qui ne ressemblent pas à un navigateur.
+    requete.add_header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                                     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
     if jeton:
         requete.add_header("X-Synergie-Jeton", jeton)
     with urllib.request.urlopen(requete, timeout=30) as reponse:
