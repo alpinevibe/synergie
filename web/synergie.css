@@ -807,6 +807,9 @@ body[data-vue="mobile"] .actions-mobile {
   display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 12px;
 }
 body[data-vue="mobile"] #btn-membres { display: none; }
+/* « Mon compte » est déjà dans la barre du bas du téléphone : on ne le remet pas en haut de
+   l'écran (demande de l'utilisateur, 09/10/2026). */
+body[data-vue="mobile"] #btn-compte { display: none; }
 body[data-vue="mobile"] header { gap: 8px; min-width: 0; }
 body[data-vue="mobile"] header .marque { min-width: 0; }
 body[data-vue="mobile"] header .marque h1 { display: none; }

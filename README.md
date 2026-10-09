@@ -346,3 +346,16 @@ son identifiant ; refus clair d'un identifiant déjà pris, sans panne ; déconn
 nouveau avec l'identifiant et retour à ses projets).
 
 Version **CACHE_VERSION 6** du service worker.
+
+## L'entête du téléphone s'allège (9 octobre 2026)
+
+Sur téléphone, « Mon compte » ne s'affiche plus en haut de l'écran : il est déjà dans la
+**barre du bas**. L'entête ne garde que l'essentiel — la marque et le **choix du projet** ;
+les personnes, l'installation et le compte vivent dans la barre du bas et les boutons de
+l'écran. Sur ordinateur, rien ne change.
+
+Vérifications : `python3 tests/tester_entete_mobile.py` → **6 contrôles, 0 échec** (téléphone :
+« Mon compte » absent de l'entête, onglet « Compte » présent et fonctionnel ; ordinateur :
+bouton toujours dans l'entête).
+
+Version **CACHE_VERSION 7** du service worker.

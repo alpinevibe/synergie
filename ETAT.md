@@ -1,5 +1,24 @@
 # Synergie — état du projet
 
+## 9 octobre 2026 — l'entête du téléphone s'allège
+
+Demande de l'utilisateur : « dans l'affichage téléphone, n'affiche pas mon compte en haut de
+l'écran puisqu'il est déjà dans le menu ».
+
+- `web/synergie.css` : `body[data-vue="mobile"] #btn-compte { display: none; }` — sur téléphone,
+  l'entête ne porte plus « Mon compte » (ni « Membres », déjà retiré le même jour) : ces actions
+  sont dans la **barre du bas** (Projet · Groupes · Discussion · Votes · Compte) et dans les
+  boutons de l'écran. L'entête ne garde que l'essentiel : la marque et le **choix du projet**.
+- Sur ordinateur, rien ne change : « Mon compte » reste dans l'entête.
+- **Contrôle automatisé ajouté** : `python3 tests/tester_entete_mobile.py` → **6 contrôles,
+  0 échec** (téléphone 390 × 740 : l'application se présente en version téléphone, « Mon compte »
+  n'est plus en haut, la barre du bas propose « Compte » et l'ouvre ; ordinateur 1100 × 800 :
+  le bouton reste dans l'entête). Capture `captures/synergie-entete-telephone.png`.
+- **Non-régression** : `tester_synergie.py` **96**, `tester_comptes_identifiant.py` **8/8**,
+  `tester_invitations_envoi.py` **11/11**, `tester_membres_a_la_volee.py` **10/10**,
+  `tester_chat_a_droite.py` **9/9**, `tester_fenetres.py` **10/10**.
+  `CACHE_VERSION` du service worker → **7**.
+
 ## 9 octobre 2026 — identifiant personnel : message clair, et déconnexion
 
 Défaut rapporté par l'utilisateur : « dans l'application synergie, je n'arrive pas à me
