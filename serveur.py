@@ -99,6 +99,20 @@ def _prevenir(identifiant: str, resume: str) -> None:
                           theme.get("projet") or "")
 
 
+def _prevenir_arrivee(invitation: dict, compte: dict, projet: dict | None, prenom: str) -> None:
+    """Prévient les administrateurs qu'une personne vient d'utiliser son lien d'inscription.
+
+    Demande de l'utilisateur (09/10/2026) : « active de me prévenir par mail lorsqu'un agent
+    utilise son lien d'inscription et s'inscrit ». La règle (qui prévenir, quel message) vit
+    dans le moteur — `moteur/equipe.py` — pour être éprouvée par les tests.
+    """
+    groupe = ""
+    if invitation.get("theme"):
+        groupe = (m_atelier.lire_theme(invitation["theme"]) or {}).get("titre") or ""
+    m_equipe.prevenir_arrivee(invitation, compte, (projet or {}).get("nom") or "votre projet",
+                              prenom, groupe)
+
+
 def _theme(identifiant: str, ecriture: bool = False) -> dict:
     """Le groupe demandé, après vérification des droits de la personne qui agit.
 
@@ -534,7 +548,7 @@ def api_invitations(identifiant):
         invitations = m_invitations.lister_invitations(identifiant)
         for invitation in invitations:
             invitation["lien"] = m_invitations.lien_invitation(invitation["jeton"])
-        return jsonify({"invitations": invitations})
+        return jsonify({"invitations": invitations, "envoi_actif": m_equipe.envoi_actif()})
     corps = request.get_json(silent=True) or {}
     role = corps.get("role") or "membre"
     if role not in m_projets.ROLES:
@@ -545,15 +559,77 @@ def api_invitations(identifiant):
             corps.get("note", ""), _qui())
     except ValueError as erreur:
         return jsonify({"erreur": str(erreur)}), 400
-    envoye = False
-    if m_equipe.envoi_actif():
-        sujet, texte = m_invitations.courriel_invitation(invitation, projet["nom"])
-        envoye = m_equipe.envoyer_courriel(invitation["email"], sujet, texte)
+    envoye = m_equipe.envoi_actif() and _envoyer_invitation(invitation)
     m_atelier.journaliser("", _qui(), "invitation", identifiant,
-                          f"{invitation['email']} · {m_projets.LIBELLES_ROLES[role]}",
+                          f"{invitation['email']} · {m_projets.LIBELLES_ROLES[role]}"
+                          + (" · envoyée" if envoye else " · lien à transmettre"),
                           diffuser_aussi=False)
     return jsonify({"invitation": invitation, "envoye": envoye,
                     "lien": m_invitations.lien_invitation(invitation["jeton"])}), 201
+
+
+@app.route("/api/projets/<identifiant>/invitations/envoi", methods=["POST"])
+def api_invitations_envoi(identifiant):
+    """Envoyer (ou RENVOYER) par courriel les invitations encore en attente.
+
+    Demande de l'utilisateur (09/10/2026) : « réactive l'envoi des mails […] lance l'invitation
+    pour les 12 rajouts ». Les invitations créées pendant la suspension des envois ont gardé
+    leur lien : ce point d'entrée les expédie maintenant, une par une."""
+    _projet(identifiant, ecriture=True)
+    return jsonify(_envoyer_invitations(identifiant, groupe=None))
+
+
+@app.route("/api/themes/<identifiant>/invitations/envoi", methods=["POST"])
+def api_invitations_theme_envoi(identifiant):
+    """Même chose pour les invitations faites POUR un groupe."""
+    theme = _theme(identifiant, ecriture=True)
+    if not m_projets.peut_administrer(getattr(request, "role_theme", None)):
+        return jsonify({"erreur": "Seul un administrateur du groupe peut envoyer."}), 403
+    return jsonify(_envoyer_invitations(theme.get("projet") or "", groupe=identifiant))
+
+
+def _envoyer_invitation(invitation: dict) -> bool:
+    """Expédie le courriel d'une invitation (objet, lien personnel)."""
+    projet = m_projets.lire_projet(invitation.get("projet") or "")
+    if not projet:
+        return False
+    groupe = ""
+    if invitation.get("theme"):
+        groupe = (m_atelier.lire_theme(invitation["theme"]) or {}).get("titre") or ""
+    return m_invitations.envoyer_invitation(invitation, projet["nom"], groupe)
+
+
+def _envoyer_invitations(projet: str, groupe: str | None) -> dict:
+    """Expédie les invitations EN ATTENTE d'un projet (ou d'un seul groupe).
+
+    `invitations` (facultatif dans le corps de la requête) permet de n'en renvoyer que
+    quelques-unes : c'est ce que fait le bouton « Envoyer » d'une ligne."""
+    if not m_equipe.envoi_actif():
+        return {"erreur": "Les envois de courriel sont suspendus (réglage SYNERGIE_ENVOI).",
+                "envoi_actif": False, "envoyes": 0}
+    corps = request.get_json(silent=True) or {}
+    choisies = corps.get("invitations") or []
+    envoyees, ignorees = [], []
+    for invitation in m_invitations.lister_invitations(projet):
+        if choisies and invitation["id"] not in choisies:
+            continue
+        if groupe and invitation.get("theme") != groupe:
+            continue
+        if not groupe and invitation.get("theme"):
+            continue                              # les invitations de groupe ont leur envoi
+        if invitation.get("utilise_le") or not m_invitations.invitation_utilisable(invitation):
+            ignorees.append(invitation["email"])
+            continue
+        if _envoyer_invitation(invitation):
+            envoyees.append(invitation["email"])
+        else:
+            ignorees.append(invitation["email"])
+    if envoyees:
+        m_atelier.journaliser(groupe or "", _qui(), "invitations_envoyees",
+                              groupe or projet, f"{len(envoyees)} invitation(s)",
+                              diffuser_aussi=False)
+    return {"envoyes": len(envoyees), "emails": envoyees, "ignores": ignorees,
+            "envoi_actif": True}
 
 
 @app.route("/api/themes/<identifiant>/invitations", methods=["GET", "POST"])
@@ -568,7 +644,7 @@ def api_invitations_theme(identifiant):
                        if i.get("theme") == identifiant]
         for invitation in invitations:
             invitation["lien"] = m_invitations.lien_invitation(invitation["jeton"])
-        return jsonify({"invitations": invitations})
+        return jsonify({"invitations": invitations, "envoi_actif": m_equipe.envoi_actif()})
     corps = request.get_json(silent=True) or {}
     role_theme = corps.get("role") or "membre"
     if role_theme not in m_projets.ROLES:
@@ -580,12 +656,10 @@ def api_invitations_theme(identifiant):
             theme=identifiant, role_theme=role_theme)
     except ValueError as erreur:
         return jsonify({"erreur": str(erreur)}), 400
-    envoye = False
-    if m_equipe.envoi_actif():
-        sujet, texte = m_invitations.courriel_invitation(invitation, projet, theme["titre"])
-        envoye = m_equipe.envoyer_courriel(invitation["email"], sujet, texte)
+    envoye = m_equipe.envoi_actif() and _envoyer_invitation(invitation)
     m_atelier.journaliser(identifiant, _qui(), "invitation", theme["titre"],
-                          f"{invitation['email']} · {m_projets.LIBELLES_ROLES[role_theme]}",
+                          f"{invitation['email']} · {m_projets.LIBELLES_ROLES[role_theme]}"
+                          + (" · envoyée" if envoye else " · lien à transmettre"),
                           diffuser_aussi=False)
     return jsonify({"invitation": invitation, "envoye": envoye,
                     "lien": m_invitations.lien_invitation(invitation["jeton"])}), 201
@@ -625,6 +699,7 @@ def api_invitation(jeton):
     m_invitations.marquer_utilisee(jeton)
     m_atelier.journaliser("", prenom, "invitation_activee", invitation["projet"],
                           invitation["email"], diffuser_aussi=False)
+    _prevenir_arrivee(invitation, resultat["compte"], projet, prenom)
     return _avec_cookie(
         jsonify({"compte": resultat["compte"], "jeton": resultat["jeton"],
                  "projet": {"id": projet["id"], "nom": projet["nom"]} if projet else None}),

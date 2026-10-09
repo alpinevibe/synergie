@@ -345,6 +345,22 @@ def destinataires_projet(projet: str) -> list[dict]:
         return [dict(l) for l in lignes]
 
 
+def administrateurs_projet(projet: str) -> list[dict]:
+    """Les administrateurs du projet qui ont une adresse de courriel.
+
+    Sert à prévenir « quelqu'un vient d'utiliser son lien d'inscription » (demande de
+    l'utilisateur, 09/10/2026) : un administrateur doit savoir qui entre, même s'il n'a pas
+    coché « me prévenir » pour les changements ordinaires.
+    """
+    with connexion() as base:
+        lignes = base.execute(
+            "select c.id, c.prenom, c.email, m.role from projet_membres m"
+            " join comptes c on c.id = m.compte"
+            " where m.projet = ? and m.role = 'admin'"
+            " and c.email is not null and c.email <> ''", (projet,))
+        return [dict(l) for l in lignes]
+
+
 def destinataires_theme(theme: str, projet: str = "") -> list[dict]:
     """Les personnes à prévenir d'un changement de groupe : abonnés au groupe et au projet."""
     with connexion() as base:

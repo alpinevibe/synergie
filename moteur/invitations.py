@@ -75,10 +75,12 @@ create index if not exists invitations_projet on invitations (projet);
 def initialiser() -> None:
     with connexion() as base:
         base.executescript(SCHEMA)
-        # Colonnes ajoutées après coup : une invitation peut viser UN GROUPE.
+        # Colonnes ajoutées après coup : une invitation peut viser UN GROUPE, et l'on garde
+        # la trace de son ENVOI par courriel (« envoyée le … »).
         colonnes = {l[1] for l in base.execute("pragma table_info(invitations)")}
         for nom, definition in (("theme", "text default ''"),
-                                ("role_theme", "text default ''")):
+                                ("role_theme", "text default ''"),
+                                ("envoyee_le", "text default ''")):
             if nom not in colonnes:
                 base.execute(f"alter table invitations add column {nom} {definition}")
 
@@ -147,6 +149,30 @@ def lien_invitation(jeton: str) -> str:
     from . import equipe as m_equipe
 
     return f"{m_equipe.adresse_site()}/#invitation={jeton}"
+
+
+def envoyer_invitation(invitation: dict, nom_projet: str, nom_groupe: str = "") -> bool:
+    """Met le courriel d'une invitation dans la file d'envoi (objet + lien personnel).
+
+    Rendu inutile quand les envois sont suspendus : `equipe.envoi_actif()` décide, et le
+    journal d'envoi dit alors « envois suspendus » — rien n'est perdu. L'invitation retient la
+    date de son envoi, pour qu'on le voie dans l'application.
+    """
+    from . import equipe as m_equipe
+
+    sujet, corps = courriel_invitation(invitation, nom_projet, nom_groupe)
+    parti = m_equipe.envoyer_courriel(invitation["email"], sujet, corps)
+    if parti:
+        marquer_envoyee(invitation["id"])
+        invitation["envoyee_le"] = _iso(maintenant())
+    return parti
+
+
+def marquer_envoyee(identifiant: str) -> None:
+    """Retient qu'une invitation vient de partir par courriel."""
+    with connexion() as base:
+        base.execute("update invitations set envoyee_le = ? where id = ?",
+                     (_iso(maintenant()), identifiant))
 
 
 def courriel_invitation(invitation: dict, nom_projet: str,

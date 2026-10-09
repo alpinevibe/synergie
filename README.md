@@ -308,3 +308,24 @@ de sept membres, écran d'ordinateur 1024 × 700 et écran de téléphone 390 ×
 contenue dans l'écran, barre « Fermer » et croix visibles, croix qui ferme bien).
 
 Version **CACHE_VERSION 4** du service worker.
+
+## Invitations par courriel et alerte à l'inscription (9 octobre 2026)
+
+Les envois de Synergie sont **ouverts** : les invitations **partent par courriel** (réglage
+`SYNERGIE_ENVOI` dans `/srv/bases/config/mail.conf`). Quand les envois sont suspendus,
+l'application le dit et laisse les liens à copier ; rouvrir les envois n'expédie pas
+rétroactivement les invitations déjà créées — l'outil `scripts/envoyer-invitations.py` le fait
+(il attend que la file d'envoi soit vide), et la fenêtre des membres offre désormais un bouton
+**« Envoyer »** par invitation et un bouton **« Envoyer les N invitations »**. Chaque invitation
+affiche sa date d'envoi.
+
+Quand quelqu'un ouvre son lien personnel et **s'inscrit**, les **administrateurs du projet**
+reçoivent un courriel : qui vient de rejoindre, avec quel rôle. C'est automatique et ne demande
+aucun réglage.
+
+Vérifications : `python3 tests/tester_invitations_envoi.py` → **11 contrôles, 0 échec** (envoi
+d'une invitation, envoi global, boutons dans l'application, courriel à l'administrateur à
+l'inscription, connexion de la personne inscrite ; adresses d'essai en `.invalid`, donc aucun
+courriel réellement envoyé pendant les tests).
+
+Version **CACHE_VERSION 5** du service worker.

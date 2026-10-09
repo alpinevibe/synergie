@@ -150,6 +150,24 @@ def test_invitations_et_votes():
         verifie(m_invitations.invitation_utilisable(invitation),
                 "le lien est utilisable tant qu'il n'a pas servi")
 
+        # --- l'envoi (re)lancé depuis le moteur, et l'alerte à l'inscription ------------
+        envois.clear()
+        verifie(m_invitations.envoyer_invitation(invitation, projet["nom"]) and envois
+                and envois[-1][0] == "collegue@exemple.fr",
+                "une invitation peut être (re)envoyée par le moteur — le bouton « Envoyer »")
+        verifie(invitation["jeton"] in m_invitations.courriel_invitation(
+                    invitation, projet["nom"])[1],
+                "l'invitation renvoyée porte bien le même lien personnel")
+        envois.clear()
+        prevenus = m_equipe.prevenir_arrivee(
+            invitation, {"id": "cp-essai", "prenom": "Collegue"}, projet["nom"], "Collegue")
+        verifie(prevenus == ["admin@exemple.fr"],
+                "l'administrateur du projet est prévenu par courriel quand quelqu'un s'inscrit"
+                + (f" — {prevenus}" if prevenus != ["admin@exemple.fr"] else ""))
+        verifie(envois and "rejoindre" in envois[-1][1] and "Collegue" in envois[-1][1],
+                "le message dit qui vient de rejoindre le projet"
+                + ("" if (envois and "rejoindre" in envois[-1][1]) else f" — {envois[-1:] }"))
+
         # --- 2. l'activation : prénom + identifiant, sur un seul et même compte ---------
         resultat = {}
         sujet, corps = m_invitations.courriel_invitation(invitation, projet["nom"])

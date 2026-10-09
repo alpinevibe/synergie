@@ -18,6 +18,7 @@
   let roleTheme = null;                  // mon rôle dans le groupe ouvert
   let roles = [];                        // les rôles possibles (libellés du serveur)
   let membresProjet = [];
+  let envoiCourriel = true;              // les envois de courriel sont-ils ouverts ?
   let cadreProjet = null;
   let invitationEnCours = null;        // invitation ouverte depuis un lien de courriel
   let jetonVote = null;                // lien de vote en cours (venu du courriel)
@@ -2220,7 +2221,9 @@
         || (roles.find((r) => r.cle === (invitation.role_theme || invitation.role)) || {}).libelle
         || '' }),
       element('span', { classe: 'aide', texte: 'créé ' + quand(invitation.cree_le)
-        + (invitation.theme ? ' · pour ce groupe' : '') }));
+        + (invitation.theme ? ' · pour ce groupe' : '')
+        + (invitation.envoyee_le ? ' · envoyée par courriel ' + quand(invitation.envoyee_le)
+                                 : ' · pas encore envoyée') }));
     ligne.append(infos);
     if (message) ligne.append(element('p', { classe: 'aide fin', texte: message }));
     const champ = element('input', { classe: 'lien-invitation',
@@ -2231,7 +2234,48 @@
       catch (e) { champ.select(); document.execCommand('copy'); toast('Lien copié.'); }
     });
     poser(ligne, champ, copier);
+    // Le courriel peut être EXPÉDIÉ (ou renvoyé) sans quitter la fenêtre : c'est ce qu'on veut
+    // quand les envois viennent d'être rouverts (demande de l'utilisateur, 09/10/2026).
+    if (envoiCourriel) {
+      const envoyer = element('button', { classe: 'principal petit', texte: 'Envoyer' });
+      envoyer.addEventListener('click', async () => {
+        envoyer.disabled = true;
+        try {
+          const resultat = await appel(cheminEnvoiInvitations(), { methode: 'POST',
+            corps: { invitations: [invitation.id] } });
+          toast(resultat.envoyes
+            ? 'Invitation envoyée à ' + invitation.email + '.'
+            : 'Envoi impossible : le lien reste à copier ci-dessus.');
+          if (!resultat.envoyes) envoyer.disabled = false;
+        } catch (erreur) {
+          toast(erreur.message);
+          envoyer.disabled = false;
+        }
+      });
+      ligne.append(envoyer);
+    }
     return ligne;
+  }
+
+  /** Où envoyer les invitations : au projet, ou au groupe ouvert dans la fenêtre. */
+  function cheminEnvoiInvitations() {
+    return theme && !$('#zone-membres-theme').classList.contains('cache')
+      ? '/api/themes/' + theme.id + '/invitations/envoi'
+      : '/api/projets/' + projet.id + '/invitations/envoi';
+  }
+
+  /** Envoyer d'un geste toutes les invitations encore en attente. */
+  async function envoyerInvitationsEnAttente(invitations) {
+    const auGroupe = cheminEnvoiInvitations().includes('/themes/');
+    try {
+      const resultat = await appel(cheminEnvoiInvitations(), { methode: 'POST', corps: {} });
+      toast(resultat.envoyes
+        ? resultat.envoyes + ' invitation(s) envoyée(s) par courriel.'
+        : 'Aucune invitation à envoyer : les liens restent à copier.');
+      if (auGroupe) await afficherInvitationsTheme(); else await afficherInvitations();
+    } catch (erreur) {
+      toast(erreur.message);
+    }
   }
 
   /** Les invitations en attente (celles dont le lien n'a pas encore été utilisé). */
@@ -2240,8 +2284,11 @@
     if (!zone) return;
     zone.innerHTML = '';
     let invitations = [];
-    try { invitations = (await appel('/api/projets/' + projet.id + '/invitations')).invitations || []; }
-    catch (erreur) { return; }
+    try {
+      const donnees = await appel('/api/projets/' + projet.id + '/invitations');
+      invitations = donnees.invitations || [];
+      envoiCourriel = donnees.envoi_actif !== false;
+    } catch (erreur) { return; }
     const maintenant_ = new Date().toISOString().slice(0, 19) + 'Z';
     const attente = invitations.filter((i) => !i.utilise_le && i.expire_le > maintenant_
                                              && !i.theme);
@@ -2250,6 +2297,17 @@
       texte: attente.length + ' invitation(s) en attente — copiez le lien et transmettez-le :' }));
     attente.forEach((invitation) => zone.append(ligneInvitation(invitation)));
     zone.append(boutonCopierLiens(attente));
+    if (envoiCourriel) {
+      const envoyer = element('button', { classe: 'principal petit',
+        texte: attente.length > 1 ? 'Envoyer les ' + attente.length + ' invitations'
+                                  : 'Envoyer l\'invitation' });
+      envoyer.addEventListener('click', () => envoyerInvitationsEnAttente(attente));
+      zone.append(envoyer);
+    } else {
+      zone.append(element('p', { classe: 'aide fin', texte:
+        'Envois de courriel suspendus : les liens ci-dessus restent à transmettre à la main '
+        + '(ils seront envoyés dès que les envois seront rouverts).' }));
+    }
   }
 
   /** Copier d'un geste les liens de plusieurs invitations (un par ligne). */
@@ -2285,13 +2343,25 @@
     if (!zone || !theme) return;
     zone.innerHTML = '';
     let invitations = [];
-    try { invitations = (await appel('/api/themes/' + theme.id + '/invitations')).invitations || []; }
-    catch (erreur) { return; }
+    try {
+      const donnees = await appel('/api/themes/' + theme.id + '/invitations');
+      invitations = donnees.invitations || [];
+      envoiCourriel = donnees.envoi_actif !== false;
+    } catch (erreur) { return; }
     const attente = invitations.filter((i) => !i.utilise_le);
     attente.forEach((invitation) => zone.append(ligneInvitation(invitation,
       'Ce lien ne sert qu\'une fois : en l\'ouvrant, la personne choisit son identifiant et '
       + 'rejoint ce groupe.')));
-    if (attente.length) zone.append(boutonCopierLiens(attente));
+    if (attente.length) {
+      zone.append(boutonCopierLiens(attente));
+      if (envoiCourriel) {
+        const envoyer = element('button', { classe: 'principal petit',
+          texte: attente.length > 1 ? 'Envoyer les ' + attente.length + ' invitations'
+                                    : 'Envoyer l\'invitation' });
+        envoyer.addEventListener('click', () => envoyerInvitationsEnAttente(attente));
+        zone.append(envoyer);
+      }
+    }
   }
 
   function afficherMembresTheme() {

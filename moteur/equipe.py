@@ -540,3 +540,36 @@ def test_alerte(destinataire: str) -> bool:
     return _envoyer(destinataire, "[Synergie] essai d'alerte",
                     "Ceci est un essai : si vous recevez ce message, les alertes de Synergie "
                     "fonctionnent.")
+
+
+def prevenir_arrivee(invitation: dict, compte: dict, nom_projet: str,
+                     prenom: str, nom_groupe: str = "") -> list[str]:
+    """Prévient les administrateurs qu'une personne vient d'utiliser son lien d'inscription.
+
+    Demande de l'utilisateur (09/10/2026) : « active de me prévenir par mail lorsqu'un agent
+    utilise son lien d'inscription et s'inscrit ». On écrit aux ADMINISTRATEURS du projet —
+    même s'ils ne suivent pas les changements ordinaires — et aux personnes abonnées. Rend la
+    liste des adresses prévenues (vide si personne n'a d'adresse).
+    """
+    from . import projets as m_projets
+
+    projet_id = invitation.get("projet") or ""
+    destinataires = list(m_projets.administrateurs_projet(projet_id))
+    connus = {d["id"] for d in destinataires}
+    for personne in m_projets.destinataires_projet(projet_id):
+        if personne["id"] not in connus:
+            destinataires.append(personne)
+    if not destinataires:
+        return []
+    role = m_projets.LIBELLES_ROLES.get(invitation.get("role") or "membre", "Membre participant")
+    sujet = f"[Synergie] {prenom} vient de rejoindre « {nom_projet} »"
+    corps = (f"Bonjour,\n\n"
+             f"{prenom} ({invitation.get('email', '')}) vient d'utiliser son lien d'inscription : "
+             f"son accès est actif.\n\n"
+             f"Rôle reçu : {role}"
+             + (f"\nGroupe : {nom_groupe}" if nom_groupe else "") + "\n\n"
+             f"Voir les membres et les rôles : {adresse_site()}/#p={projet_id}\n\n"
+             "Vous recevez ce message parce que vous administrez ce projet dans Synergie.\n")
+    for personne in destinataires:
+        envoyer_courriel(personne["email"], sujet, corps)
+    return [personne["email"] for personne in destinataires]

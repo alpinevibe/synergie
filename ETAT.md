@@ -1,5 +1,36 @@
 # Synergie — état du projet
 
+## 9 octobre 2026 — les courriels sont rouverts : invitations et alerte d'inscription
+
+Demandes de l'utilisateur : « réactive l'envoi des mails car ils ont été débloqués par mon
+service informatique […] lance l'invitation pour les 12 rajouts » et « active de me prévenir
+par mail lorsqu'un agent utilise son lien d'inscription et s'inscrit ».
+
+- **Envois rouverts** : `SYNERGIE_ENVOI=oui` dans `/srv/bases/config/mail.conf` (fichier copié
+  avant modification : `mail.conf.avant-synergie-20261009-123051`). Message d'essai expédié vers
+  `pnicolas@chu-grenoble.fr` : accepté par `ssl0.ovh.net` (250, « queued »).
+- **Les 12 invitations en attente ont été expédiées** (`scripts/envoyer-invitations.py`, qui
+  attend que la file d'envoi soit vide) : 12 réponses `250` d'OVH, journal d'expédition dans
+  `donnees/journal-alertes.log`. Chaque invitation retient désormais sa date d'envoi
+  (`envoyee_le`, colonne ajoutée par migration) et l'affiche : « envoyée par courriel il y a … ».
+- **Envoi depuis l'application** : deux points d'entrée nouveaux —
+  `POST /api/projets/<id>/invitations/envoi` et `POST /api/themes/<id>/invitations/envoi`. La
+  fenêtre des membres montre **un bouton « Envoyer » par invitation** et un bouton
+  « **Envoyer les N invitations** » ; quand les envois sont suspendus, l'application le dit et
+  n'affiche pas ces boutons (les liens restent à copier).
+- **Alerte à l'inscription** (`moteur/equipe.py` → `prevenir_arrivee`) : quand quelqu'un ouvre
+  son lien et s'inscrit, les **administrateurs du projet** (même sans abonnement aux
+  changements ordinaires) et les personnes abonnées reçoivent un courriel : qui vient de
+  rejoindre, avec quel rôle, et où voir les membres.
+- **Contrôle de bout en bout** : `python3 tests/tester_invitations_envoi.py` → **11 contrôles,
+  0 échec** (envois ouverts, envoi d'une invitation puis de toutes, boutons présents dans la
+  fenêtre des membres, courriel à l'administrateur à l'activation d'un lien, connexion de la
+  personne inscrite). Les adresses d'essai sont en `.invalid` : **rien ne peut partir quelque
+  part** ; on lit dans le journal d'expédition la trace de la tentative.
+- **Non-régression** : `tester_synergie.py` **92** (dont l'envoi par le moteur et l'alerte),
+  `tester_chat_a_droite.py` **9/9**, `tester_membres_a_la_volee.py` **10/10**,
+  `tester_fenetres.py` **10/10**. `CACHE_VERSION` du service worker → **5**.
+
 ## 9 octobre 2026 — le bouton « Fermer » des fenêtres reste visible
 
 Défaut rapporté par l'utilisateur : « problème d'affichage de la fenêtre membre, je ne vois pas
