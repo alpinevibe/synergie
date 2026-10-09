@@ -29,6 +29,7 @@ from .atelier import (DONNEES, _identifiant, connexion, diffuser, journaliser, m
 
 CONFIG_MAIL = "/srv/bases/config/mail.conf"
 CONFIG_MSMTP = "/srv/bases/config/synergie-msmtp.conf"
+VALEUR_COFFRE = "/srv/coffre/valeur.sh"          # lecture des secrets (jamais affichés)
 JOURNAL_MAIL = str(DONNEES / "journal-alertes.log")
 DELAI_ENTRE_ALERTES = 600          # 10 minutes entre deux alertes pour le même thème
 
@@ -405,10 +406,26 @@ def _config_mail() -> dict | None:
         return None
 
 
+def _mot_de_passe_du_coffre() -> str:
+    """Le mot de passe SMTP, lu dans le coffre à secrets — jamais affiché ni recopié.
+
+    Il n'est PAS dans mail.conf : msmtp le demande au coffre à chaque connexion
+    (« passwordeval »), donc aucun mot de passe n'existe en clair sur le disque.
+    """
+    try:
+        resultat = subprocess.run([VALEUR_COFFRE, "smtp_mot_de_passe"],
+                                  capture_output=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    if resultat.returncode != 0:
+        return ""
+    return resultat.stdout.decode().strip()
+
+
 def _ecrire_config_msmtp(config: dict) -> str:
     """Fabrique la configuration msmtp de Synergie à partir de celle du serveur."""
     mode = config.get("SMTP_TLS", "starttls")
-    authentification = "on" if config.get("SMTP_MOTDEPASSE") else "off"
+    authentification = "on" if _mot_de_passe_du_coffre() else "off"
     lignes = ["defaults", f"auth {authentification}",
               f"tls {'off' if mode == 'off' else 'on'}",
               "tls_starttls " + ("off" if mode in ("off", "ssl") else "on"),
@@ -417,7 +434,10 @@ def _ecrire_config_msmtp(config: dict) -> str:
               f"user {config.get('SMTP_UTILISATEUR', '')}",
               f"from {config.get('EXPEDITEUR', 'contact@alpinevibe.fr')}"]
     if authentification == "on":
-        lignes.append(f"password {config.get('SMTP_MOTDEPASSE')}")
+        # « passwordeval » : msmtp exécute la commande et prend sa sortie comme mot de
+        # passe. Le secret reste au coffre (chiffré au repos) : ce fichier n'en contient
+        # aucun, et le changer ne demande aucune retouche du code.
+        lignes.append(f"passwordeval {VALEUR_COFFRE} smtp_mot_de_passe")
     lignes.append("account default : synergie")
     os.makedirs(os.path.dirname(CONFIG_MSMTP), exist_ok=True)
     with open(CONFIG_MSMTP, "w", encoding="utf-8") as fichier:
