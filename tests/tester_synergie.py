@@ -478,7 +478,7 @@ def test_equipe():
                                               admin=compte["compte"]["id"], qui="Tests")
         groupe = m_atelier.creer_theme("Groupe d'essai membres", "", "", projet_essai["id"],
                                        "Tests")
-        arrives = [m_equipe.creer_compte(prenom)["compte"]["id"]
+        arrives = [m_equipe.creer_compte(prenom, prenom.lower() + "@exemple.fr")["compte"]["id"]
                    for prenom in ("Camille", "Sofia", "Nadia")]
         for identifiant in arrives:
             m_projets.definir_membre_theme(groupe["id"], identifiant, "membre",
