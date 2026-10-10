@@ -412,9 +412,15 @@ fiche pour créer une nouvelle version, sans perdre l'ancienne.
 - **Avis et synthèse** : recueil des souhaits, résultat d'ensemble (`outils.html`).
 
 ### Technique
-- Base **SQLite** (`donnees/atelier.db`, mode WAL) : plusieurs personnes écrivent en même
-  temps ; un JSON se corromprait.
-- Diffusion par **SSE** : aucune bibliothèque supplémentaire, Flask suffit.
+- Base **PostgreSQL** (`synergie`) depuis le 10/10/2026 : plusieurs personnes écrivent en
+  même temps, et l'application doit tenir une trentaine de personnes d'abord, plusieurs
+  centaines ensuite. Connexion par socket locale (pair), donc aucun mot de passe à stocker.
+  La même couche (`moteur/base.py`) sait aussi travailler sur **SQLite**, ce qui reste le
+  moteur de l'essai local et des bancs de tests.
+- Diffusion par **SSE**, relayée entre ouvriers par `NOTIFY` PostgreSQL
+  (`moteur/diffusion.py`) : aucune bibliothèque supplémentaire, aucun courtier à administrer.
+- Serveur de production **waitress** (pool de fils, `SYNERGIE_FILS`) ; le serveur de
+  développement de Flask ne tient qu'une poignée de navigateurs.
 - `proxy_buffering off` dans le vhost nginx (sinon le flux attend dans un tampon).
 - `PUT`/`DELETE` autorisés **pour Synergie seulement** sur `/api/` (réglage de sécurité
   `nginx/00-securite-alpinevibe.conf`, étendu aux API par hôte).
@@ -455,6 +461,13 @@ Vérifications en navigateur (Playwright, sur le site en ligne, avec deux partic
   responsables par thème avec alertes par courriel et réglage des notifications ; fiches de
   poste par tranche horaire avec référentiel des codes horaires, charge par code,
   duplication et validation.
+- **10/10/2026** — **Bascule des données vers PostgreSQL** (base `synergie`, socket locale en
+  pair) : plusieurs personnes écrivent enfin en même temps, et l'application peut être servie
+  par plusieurs ouvriers. Reprise des 20 tables à l'identique, fichier SQLite gelé pour le
+  retour arrière, diffusion temps réel entre ouvriers par `NOTIFY`, service rendu par
+  waitress, limites de mémoire (la machine porte aussi le planning hospitalier). Contrôles :
+  96 tests du moteur (SQLite **et** PostgreSQL), diffusion entre deux ouvriers (6/6), 72
+  écritures simultanées sans perte, 9/9 contrôles dans un vrai navigateur sur le site public.
 - **05/10/2026 (soir)** — Prénom demandé à l'ouverture et **journal des actions** ; **votes
   anonymes** (une fois par personne) sur les décisions ; post-its déplaçables d'un simple
   glissement et modifiables au crayon ; **boîte à trames repensée** : une seule page, par

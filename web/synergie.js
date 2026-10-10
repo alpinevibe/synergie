@@ -449,6 +449,7 @@
         if (evenement.type === 'message') chargerChatGeneral();
         if (evenement.type === 'message_supprime') chargerChatGeneral();
         if (evenement.type === 'cadre') chargerCadre();
+        if (evenement.type === 'rafraichir') { chargerChatGeneral(); chargerCadre(); }
       } catch (erreur) { /* événement illisible */ }
     };
     fluxGeneral.onerror = () => { /* le navigateur retente tout seul */ };
@@ -527,6 +528,11 @@
         break;
       case 'theme_supprime':
         fermerTheme();
+        break;
+      case 'rafraichir':
+        // Événement trop gros pour la notification entre ouvriers, ou reprise après
+        // connexion perdue : on redemande simplement l'état du groupe.
+        if (theme) ouvrirTheme(theme.id, { pousser: false });
         break;
       default: break;
     }

@@ -6,12 +6,14 @@ la tête sur un tableau blanc sans limites (comme une feuille OneNote), dépose 
 de travail, et ensemble on tranche des décisions. Tous les participants voient les
 modifications des autres en direct.
 
-Les données vivent dans une base SQLite (`donnees/atelier.db`) : plusieurs personnes
-écrivent en même temps, un fichier JSON ne suffirait pas. Les documents déposés sont
-rangés dans `donnees/documents/<thème>/`.
+Les données vivent dans **PostgreSQL** en production (base `synergie`, plusieurs personnes
+qui écrivent en même temps) et dans un **fichier SQLite** pour l'essai local et les bancs de
+tests : `moteur/base.py` tient la différence, le SQL du moteur reste le même. Les documents
+déposés sont rangés dans `donnees/documents/<thème>/`.
 
-La diffusion temps réel passe par des files d'attente en mémoire : chaque navigateur
-connecté en récupère une, et toute écriture est poussée à toutes les autres (SSE).
+La diffusion temps réel passe par des files d'attente en mémoire : chaque navigateur connecté
+en récupère une, et toute écriture est poussée à toutes les autres (SSE). Entre plusieurs
+ouvriers, ces files sont reliées par un `NOTIFY` PostgreSQL (`moteur/diffusion.py`).
 """
 from __future__ import annotations
 
@@ -21,14 +23,19 @@ import os
 import queue
 import secrets
 import shutil
-import sqlite3
-from contextlib import contextmanager
 import threading
 from pathlib import Path
 
+from . import diffusion
+from .base import (
+    ERREUR_INTEGRITE,
+    Ligne,
+    connexion as _connexion_base,
+    nom_moteur,
+    source as source_base,
+)
 RACINE = Path(__file__).resolve().parent.parent
 DONNEES = RACINE / "donnees"
-BASE = DONNEES / "atelier.db"
 DOCUMENTS = DONNEES / "documents"
 
 TAILLE_MAX_DOCUMENT = 40 * 1024 * 1024          # 40 Mo : suffisant pour un dossier de travail
@@ -49,28 +56,13 @@ def _identifiant(prefixe: str) -> str:
     return f"{prefixe}-{secrets.token_urlsafe(8)}"
 
 
-@contextmanager
 def connexion():
-    """Une connexion SQLite, REFERMÉE à la sortie.
+    """Une connexion à la base, refermée à la sortie.
 
-    Sans la fermeture explicite, chaque appel à la base laissait un descripteur de
-    fichier ouvert : le service a fini par en avoir 509 ouverts et saturer la limite
-    système (« Too many open files », constat du 08/10/2026 — plus rien ne marchait :
-    ni la création d'une note, ni la suppression d'une décision).
+    Le moteur (SQLite ou PostgreSQL) et la traduction des requêtes sont dans
+    `moteur/base.py` : les modules du moteur n'ont plus à s'en soucier.
     """
-    DONNEES.mkdir(parents=True, exist_ok=True)
-    base = sqlite3.connect(BASE, timeout=15)
-    base.row_factory = sqlite3.Row
-    try:
-        base.execute("PRAGMA journal_mode=WAL")
-        base.execute("PRAGMA foreign_keys=ON")
-        yield base
-        base.commit()
-    except Exception:
-        base.rollback()
-        raise
-    finally:
-        base.close()
+    return _connexion_base()
 SCHEMA = """
 create table if not exists themes (
     id text primary key, titre text not null, description text default '',
@@ -225,7 +217,7 @@ def voter(theme: str, decision: str, nom: str, valeur: str) -> dict:
             base.execute("insert into votes (id, theme, decision, empreinte, valeur, quand)"
                          " values (?, ?, ?, ?, ?, ?)",
                          (_identifiant("vt"), theme, decision, empreinte, valeur, maintenant()))
-    except sqlite3.IntegrityError:
+    except ERREUR_INTEGRITE:
         return {"ok": False, "deja": True,
                 "erreur": "Vous avez déjà voté sur cette décision."}
     # Le vote est journalisé SANS le nom : le journal dit qu'un vote a été déposé, jamais
@@ -267,7 +259,7 @@ def supprimer_votes(theme: str, decision: str) -> None:
 
 
 # --- thèmes --------------------------------------------------------------------------
-def _theme_depuis(ligne: sqlite3.Row, comptes: dict | None = None) -> dict:
+def _theme_depuis(ligne: Ligne, comptes: dict | None = None) -> dict:
     theme = dict(ligne)
     if comptes:
         theme.update(comptes)
@@ -289,7 +281,7 @@ def lister_themes(projet: str | None = None, identifiants: list[str] | None = No
         valeurs.extend(identifiants)
     if conditions:
         requete += " where " + " and ".join(conditions)
-    requete += " order by ordre, maj_le desc, titre collate nocase"
+    requete += " order by ordre, maj_le desc, lower(titre)"
     with connexion() as base:
         themes = [dict(l) for l in base.execute(requete, valeurs)]
         for theme in themes:
@@ -388,7 +380,7 @@ CHAMPS_NOTE = ("x", "y", "largeur", "texte", "taille", "gras", "italique", "soul
                "couleur_texte", "couleur_fond", "alignement", "ordre", "auteur")
 
 
-def _note_depuis(ligne: sqlite3.Row) -> dict:
+def _note_depuis(ligne: Ligne) -> dict:
     note = dict(ligne)
     for champ in ("gras", "italique", "souligne"):
         note[champ] = bool(note.get(champ))
@@ -623,7 +615,17 @@ def participants(theme: str) -> list[str]:
 
 
 def diffuser(theme: str, evenement: dict) -> None:
-    """Pousse un événement à tous les navigateurs connectés sur ce thème."""
+    """Pousse un événement à tous les navigateurs connectés sur ce thème.
+
+    Deux étages : les navigateurs attachés à **ce** processus, puis un `NOTIFY` qui
+    prévient les autres ouvriers — chacun rediffusera chez lui (`moteur/diffusion.py`).
+    """
+    diffuser_local(theme, evenement)
+    diffusion.publier(theme, evenement)
+
+
+def diffuser_local(theme: str, evenement: dict) -> None:
+    """Pousse un événement aux navigateurs attachés à ce processus."""
     with _VERROU:
         abonnes = list((_ABONNES.get(theme) or {}).values())
     for abonne in abonnes:
@@ -649,8 +651,10 @@ def resume(theme: str, qui: str = "") -> dict:
 
 def sante() -> dict:
     try:
-        with connexion() as base:
-            base.execute("select 1").fetchone()
-        return {"ok": True, "base": str(BASE), "themes": len(lister_themes())}
+        with connexion() as base_connexion:
+            base_connexion.execute("select 1").fetchone()
+        return {"ok": True, "moteur": nom_moteur(), "base": source_base(),
+                "themes": len(lister_themes())}
     except Exception as erreur:                     # pragma: no cover - dépend du disque
-        return {"ok": False, "erreur": str(erreur)}
+        return {"ok": False, "moteur": nom_moteur(), "base": source_base(),
+                "erreur": str(erreur)}

@@ -17,14 +17,12 @@ nouveautés » — l'adresse de courriel est demandée à ce moment-là, jamais 
 from __future__ import annotations
 
 import secrets
-import sqlite3
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .base import Ligne, connexion as _connexion_base
 RACINE = Path(__file__).resolve().parent.parent
 DONNEES = RACINE / "donnees"
-BASE = DONNEES / "atelier.db"
 
 ROLES = ("admin", "membre", "visiteur")
 LIBELLES_ROLES = {
@@ -48,28 +46,13 @@ def _identifiant(prefixe: str) -> str:
     return prefixe + "-" + "".join(secrets.choice(alphabet) for _ in range(11))
 
 
-@contextmanager
 def connexion():
-    """Une connexion SQLite, REFERMÉE à la sortie.
+    """Une connexion à la base, refermée à la sortie.
 
-    Sans la fermeture explicite, chaque appel à la base laissait un descripteur de
-    fichier ouvert : le service a fini par en avoir 509 ouverts et saturer la limite
-    système (« Too many open files », constat du 08/10/2026 — plus rien ne marchait :
-    ni la création d'une note, ni la suppression d'une décision).
+    Le moteur (SQLite ou PostgreSQL) et la traduction des requêtes sont dans
+    `moteur/base.py` : les modules du moteur n'ont plus à s'en soucier.
     """
-    DONNEES.mkdir(parents=True, exist_ok=True)
-    base = sqlite3.connect(BASE, timeout=15)
-    base.row_factory = sqlite3.Row
-    try:
-        base.execute("PRAGMA journal_mode=WAL")
-        base.execute("PRAGMA foreign_keys=ON")
-        yield base
-        base.commit()
-    except Exception:
-        base.rollback()
-        raise
-    finally:
-        base.close()
+    return _connexion_base()
 SCHEMA = """
 create table if not exists projets (
     id text primary key, nom text not null, description text default '',
@@ -97,7 +80,7 @@ def role_valide(role: str) -> str:
 
 
 # ------------------------------------------------------------------ projets
-def _projet_depuis(ligne: sqlite3.Row) -> dict:
+def _projet_depuis(ligne: Ligne) -> dict:
     return dict(ligne)
 
 
@@ -108,7 +91,7 @@ def lister_projets(compte: str | None = None) -> list[dict]:
             lignes = base.execute(
                 "select p.*, m.role, m.notifier from projets p"
                 " join projet_membres m on m.projet = p.id"
-                " where m.compte = ? order by p.maj_le desc, p.nom collate nocase", (compte,))
+                " where m.compte = ? order by p.maj_le desc, lower(p.nom)", (compte,))
             projets = [dict(l) for l in lignes]
             for projet in projets:
                 projet["groupes"] = base.execute(
@@ -118,7 +101,7 @@ def lister_projets(compte: str | None = None) -> list[dict]:
                     "select count(*) from projet_membres where projet = ?", (projet["id"],)
                 ).fetchone()[0]
             return projets
-        lignes = base.execute("select * from projets order by maj_le desc, nom collate nocase")
+        lignes = base.execute("select * from projets order by maj_le desc, lower(nom)")
         return [_projet_depuis(l) for l in lignes]
 
 
@@ -189,10 +172,10 @@ def supprimer_projet(identifiant: str, supprimer_groupes: bool = True) -> bool:
 
 
 # ------------------------------------------------------------------ membres
-def _avec_compte(base: sqlite3.Connection, ligne: sqlite3.Row) -> dict:
+def _avec_compte(connexion, ligne: Ligne) -> dict:
     membre = dict(ligne)
-    compte = base.execute("select id, prenom, email, poste from comptes where id = ?",
-                          (membre["compte"],)).fetchone()
+    compte = connexion.execute("select id, prenom, email, poste from comptes where id = ?",
+                               (membre["compte"],)).fetchone()
     membre["prenom"] = compte["prenom"] if compte else "(compte supprimé)"
     membre["email"] = (compte["email"] if compte else "") or ""
     membre["poste"] = (compte["poste"] if compte else "") or ""

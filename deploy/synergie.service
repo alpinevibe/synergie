@@ -1,11 +1,25 @@
+# /etc/systemd/system/synergie.service
 # ============================================================================
-#  Synergie — application de réorganisation de service
+#  Synergie — atelier collaboratif (projets, groupes, tableau blanc, votes)
 #  Service local (127.0.0.1) ; l'accès public passe par le vhost nginx
 #  synergie.alpinevibe.fr (proxy inverse).
+#
+#  Depuis le 10/10/2026 :
+#    • les données sont dans PostgreSQL (« postgresql:///synergie »), en
+#      authentification par pair sur la socket locale : aucun mot de passe à
+#      stocker, et plusieurs personnes peuvent écrire en même temps ;
+#    • le service est rendu par waitress, qui répartit sur un pool de fils —
+#      indispensable, car chaque navigateur en temps réel occupe un fil ;
+#    • le fichier SQLite d'avant la bascule est conservé pour le retour arrière
+#      (donnees/atelier.db.avant-postgres) ; il n'est plus utilisé par le service.
+#
+#  Les limites (MemoryMax, TasksMax) protègent le reste de la machine, dont le
+#  planning hospitalier : si Synergie s'emballe, c'est Synergie qui redémarre.
 # ============================================================================
 [Unit]
-Description=Synergie — réorganisation de service (trames + avis)
-After=network.target
+Description=Synergie — atelier collaboratif
+After=network.target postgresql@18-main.service
+Wants=postgresql@18-main.service
 
 [Service]
 Type=simple
@@ -13,8 +27,14 @@ User=ubuntu
 Group=ubuntu
 WorkingDirectory=/home/ubuntu/synergie
 Environment=SYNERGIE_PORT=8077
+Environment=SYNERGIE_BASE=postgresql:///synergie
+Environment=SYNERGIE_FILS=64
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/home/ubuntu/synergie-venv/bin/python /home/ubuntu/synergie/serveur.py --hote 127.0.0.1 --port 8077
+LimitNOFILE=8192
+TasksMax=1024
+MemoryHigh=1500M
+MemoryMax=2G
 Restart=always
 RestartSec=4
 StandardOutput=append:/home/ubuntu/synergie/donnees/synergie.log

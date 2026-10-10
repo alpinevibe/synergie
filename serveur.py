@@ -18,7 +18,9 @@ RACINE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, RACINE)
 
 from moteur import atelier as m_atelier                 # noqa: E402
+from moteur import base as m_base                       # noqa: E402
 from moteur import consultations as m_consultations     # noqa: E402
+from moteur import diffusion as m_diffusion             # noqa: E402
 from moteur import equipe as m_equipe                   # noqa: E402
 from moteur import invitations as m_invitations         # noqa: E402
 from moteur import projets as m_projets                 # noqa: E402
@@ -1169,16 +1171,31 @@ def principal():
     analyseur = argparse.ArgumentParser(description="Synergie — serveur")
     analyseur.add_argument("--port", type=int, default=int(os.environ.get("SYNERGIE_PORT", 8077)))
     analyseur.add_argument("--hote", default="127.0.0.1")
+    analyseur.add_argument("--fils", type=int, default=int(os.environ.get("SYNERGIE_FILS", "16")),
+                           help="nombre de fils de travail (serveur de production)")
     arguments = analyseur.parse_args()
-    m_atelier.initialiser()
-    m_projets.initialiser()
-    m_invitations.initialiser()
-    m_consultations.initialiser()
-    m_equipe.initialiser()
+    # Le schéma se crée sous verrou : deux ouvriers qui démarrent ensemble ne se gênent pas.
+    with m_base.verrou_installation():
+        m_atelier.initialiser()             # le schéma se crée sur le moteur configuré
+        m_projets.initialiser()
+        m_invitations.initialiser()
+        m_consultations.initialiser()
+        m_equipe.initialiser()
     m_equipe.demarrer_le_facteur()          # les alertes partent en arrière-plan
-    # `threaded=True` : indispensable — une connexion temps réel occupe un fil, et les autres
-    # participants doivent pouvoir continuer d'écrire pendant ce temps.
-    app.run(host=arguments.hote, port=arguments.port, debug=False, threaded=True)
+    m_diffusion.demarrer(m_atelier.diffuser_local)   # les autres ouvriers nous parlent
+    print(f"Synergie : {m_base.nom_moteur()} — {m_base.source()} — "
+          f"{arguments.hote}:{arguments.port}, {arguments.fils} fils", flush=True)
+
+    # Le serveur de développement de Flask tient quelques navigateurs, pas plusieurs
+    # centaines : en production on sert avec « waitress », qui répartit sur un pool de
+    # fils et encaisse les connexions temps réel qui restent ouvertes.
+    try:
+        from waitress import serve
+    except ImportError:                     # essai local sans waitress installé
+        app.run(host=arguments.hote, port=arguments.port, debug=False, threaded=True)
+        return
+    serve(app, host=arguments.hote, port=arguments.port, threads=arguments.fils,
+          channel_timeout=120, ident="Synergie")
 
 
 if __name__ == "__main__":

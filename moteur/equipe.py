@@ -215,7 +215,7 @@ def lire_compte(jeton: str | None = None, identifiant: str | None = None) -> dic
 
 def lister_comptes() -> list[dict]:
     with connexion() as base:
-        lignes = base.execute("select * from comptes order by prenom collate nocase").fetchall()
+        lignes = base.execute("select * from comptes order by lower(prenom)").fetchall()
     return [_compte_public(l) for l in lignes]
 
 
@@ -243,7 +243,7 @@ def maj_compte(identifiant: str, champs: dict) -> dict | None:
 
 def trouver_par_prenom(prenom: str) -> dict | None:
     with connexion() as base:
-        ligne = base.execute("select * from comptes where prenom = ? collate nocase limit 1",
+        ligne = base.execute("select * from comptes where lower(prenom) = lower(?) limit 1",
                              ((prenom or "").strip(),)).fetchone()
     return _compte_public(ligne) if ligne else None
 

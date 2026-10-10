@@ -15,14 +15,12 @@ Un lien d'invitation est valable 30 jours et ne sert qu'une fois.
 from __future__ import annotations
 
 import secrets
-import sqlite3
-from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from .base import connexion as _connexion_base
 RACINE = Path(__file__).resolve().parent.parent
 DONNEES = RACINE / "donnees"
-BASE = DONNEES / "atelier.db"
 
 DUREE_JOURS = 30
 
@@ -40,27 +38,13 @@ def _identifiant(prefixe: str) -> str:
     return prefixe + "-" + "".join(secrets.choice(alphabet) for _ in range(22))
 
 
-@contextmanager
 def connexion():
-    """Une connexion SQLite, REFERMÉE à la sortie.
+    """Une connexion à la base, refermée à la sortie.
 
-    Sans la fermeture explicite, chaque appel à la base laissait un descripteur de
-    fichier ouvert : le service a fini par en avoir 509 ouverts et saturer la limite
-    système (« Too many open files », constat du 08/10/2026 — plus rien ne marchait :
-    ni la création d'une note, ni la suppression d'une décision).
+    Le moteur (SQLite ou PostgreSQL) et la traduction des requêtes sont dans
+    `moteur/base.py` : les modules du moteur n'ont plus à s'en soucier.
     """
-    DONNEES.mkdir(parents=True, exist_ok=True)
-    base = sqlite3.connect(BASE, timeout=15)
-    base.row_factory = sqlite3.Row
-    try:
-        base.execute("PRAGMA journal_mode=WAL")
-        yield base
-        base.commit()
-    except Exception:
-        base.rollback()
-        raise
-    finally:
-        base.close()
+    return _connexion_base()
 SCHEMA = """
 create table if not exists invitations (
     id text primary key, email text not null, prenom text default '',

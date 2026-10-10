@@ -6,9 +6,12 @@ donnees/*.log
 __pycache__/
 *.pyc
 
-# Base de l'atelier : donnée de travail, jamais versionnée (les fichiers -wal et -shm sont
-# des fichiers temporaires de SQLite, ils n'ont rien à faire dans le dépôt).
-donnees/atelier.db
-donnees/atelier.db-shm
-donnees/atelier.db-wal
+# Base de l'atelier : donnée de travail, jamais versionnée (SQLite crée aussi des fichiers
+# temporaires -wal et -shm, et le fichier d'avant la bascule est conservé à part).
+donnees/*.db
+donnees/*.db-shm
+donnees/*.db-wal
+donnees/*.avant-postgres
+donnees/*.avant-postgres-shm
+donnees/*.avant-postgres-wal
 donnees/documents/

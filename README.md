@@ -158,19 +158,47 @@ moteur/equipe.py      comptes, discussions, pages, cadre de travail, alertes par
 moteur/projets.py     projets, membres, rôles, notifications
 moteur/invitations.py invitations par courriel (liens personnels à usage unique)
 moteur/consultations.py votes et sondages : questions, bulletins, réponses, dépouillement
+moteur/base.py        la couche base : SQLite pour l'essai local, PostgreSQL en production
+moteur/diffusion.py   diffusion temps réel entre ouvriers (NOTIFY PostgreSQL)
 web/index.html        l'application (projets, groupes, outils)
 web/synergie.js       logique de l'application et du temps réel
 web/synergie.css      habillage (lisibilité, accessibilité)
-donnees/atelier.db    base SQLite (projets, membres, groupes, notes, documents, comptes)
 donnees/documents/    fichiers déposés
-scripts/migrer-v2-projets.py   migration vers les projets et les rôles (08/10/2026)
+scripts/migrer-v2-projets.py     migration vers les projets et les rôles (08/10/2026)
+scripts/migrer-vers-postgres.py  reprise des données SQLite → PostgreSQL (10/10/2026)
 ```
 
-### Pourquoi SQLite ici ?
+### Où vivent les données
 
-Plusieurs personnes écrivent **en même temps** : un fichier JSON se corromprait. SQLite en
-mode WAL encaisse les écritures concurrentes sans configuration, tient dans un fichier, et
-se sauvegarde comme n'importe quel fichier.
+En production, **PostgreSQL** (base `synergie`) : plusieurs personnes écrivent **en même
+temps** — l'atelier réunit une trentaine de personnes d'abord, plusieurs centaines ensuite —
+et PostgreSQL gère les écritures concurrentes ligne par ligne, là où SQLite n'en accepte
+qu'une à la fois. La connexion passe par la **socket locale en authentification par pair** :
+aucun mot de passe à stocker, aucun port ouvert. Sauvegarde : le dump quotidien de la pile
+(`dump-quotidien.sh`, 03 h 30 UTC) et la copie hors VPS.
+
+Le **fichier SQLite** reste le moteur de l'essai local et des bancs de tests — rien à
+installer pour travailler :
+
+```bash
+SYNERGIE_BASE=donnees/essai.db python3 tests/tester_synergie.py          # SQLite, local
+SYNERGIE_BASE=postgresql:///synergie_essai python3 tests/tester_synergie.py   # PostgreSQL
+```
+
+`moteur/base.py` tient la différence (liaisons `?`, lignes lisibles par nom ou par position,
+transactions, `pragma`) pour que le moteur de l'application écrive le **même SQL** dans les
+deux cas. Le fichier d'avant la bascule (`donnees/atelier.db.avant-postgres`, 10/10/2026) est
+conservé pour le retour arrière, et copié à part dans la pile de sauvegardes.
+
+Le **temps réel** passe par `NOTIFY` PostgreSQL (`moteur/diffusion.py`) : chaque ouvrier
+rediffuse chez lui ce que publient les autres, si bien que l'application peut être servie par
+plusieurs processus — un navigateur attaché à l'un voit ce qu'écrit un participant passé par
+l'autre (`tests/tester_diffusion.py` le vérifie). Un événement trop gros pour une
+notification part en version courte « rafraîchir », et le navigateur redemande l'état.
+
+Le service est rendu par **waitress** (pool de fils, `SYNERGIE_FILS`, 64 par défaut), et non
+plus par le serveur de développement de Flask : chaque navigateur en temps réel occupe un fil,
+et le serveur de développement n'en tient qu'une poignée.
 
 ---
 
@@ -240,10 +268,20 @@ Toutes les routes exigent le **jeton du navigateur** (`X-Synergie-Jeton`, ou le 
 ## Tests
 
 ```bash
+# le moteur, sans réseau (SQLite par défaut : donnees/essai.db)
 /home/ubuntu/synergie-venv/bin/python tests/tester_synergie.py
+
+# le même banc, sur PostgreSQL (base d'essai dédiée)
+SYNERGIE_BASE=postgresql:///synergie_essai /home/ubuntu/synergie-venv/bin/python tests/tester_synergie.py
+
+# deux ouvriers sur la même base : la diffusion doit traverser l'un vers l'autre
+SYNERGIE_BASE=postgresql:///synergie_essai /home/ubuntu/synergie-venv/bin/python tests/tester_diffusion.py
+
+# 24 écrivains en parallèle : aucune écriture perdue
+SYNERGIE_BASE=postgresql:///synergie_essai /home/ubuntu/synergie-venv/bin/python tests/tester_ecritures_simultanees.py
 ```
 
-83 contrôles, sans réseau : projets, membres, rôles et droits, notifications, invitations
+96 contrôles, sans réseau : projets, membres, rôles et droits, notifications, invitations
 par courriel (lien personnel, activation, identifiant unique), votes et sondages (questions
 de tous types, liens personnels, une réponse par personne, dépouillement anonyme), atelier
 (groupes, notes et mise en forme, documents, diffusion temps réel) et équipe (comptes,

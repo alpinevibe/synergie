@@ -19,14 +19,12 @@ from __future__ import annotations
 
 import json
 import secrets
-import sqlite3
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .base import connexion as _connexion_base
 RACINE = Path(__file__).resolve().parent.parent
 DONNEES = RACINE / "donnees"
-BASE = DONNEES / "atelier.db"
 
 TYPES = ("vote", "sondage")
 TYPES_QUESTION = ("oui_non", "unique", "multiple", "liste", "likert", "mot")
@@ -50,20 +48,13 @@ def _identifiant(prefixe: str) -> str:
     return prefixe + "-" + "".join(secrets.choice(alphabet) for _ in range(11))
 
 
-@contextmanager
 def connexion():
-    DONNEES.mkdir(parents=True, exist_ok=True)
-    base = sqlite3.connect(BASE, timeout=15)
-    base.row_factory = sqlite3.Row
-    try:
-        base.execute("PRAGMA journal_mode=WAL")
-        yield base
-        base.commit()
-    except Exception:
-        base.rollback()
-        raise
-    finally:
-        base.close()
+    """Une connexion à la base, refermée à la sortie.
+
+    Le moteur (SQLite ou PostgreSQL) et la traduction des requêtes sont dans
+    `moteur/base.py` : les modules du moteur n'ont plus à s'en soucier.
+    """
+    return _connexion_base()
 
 
 SCHEMA = """
@@ -298,7 +289,7 @@ def consultations_en_attente(comptes: list[str], projet: str = "") -> list[dict]
             f" join bulletins b on b.consultation = c.id"
             f" join themes t on t.id = c.theme"
             f" where b.compte in ({marques}) and b.repondu_le = '' and c.statut = 'ouverte'"
-            f" group by c.id order by c.ouverte_le desc", comptes).fetchall()
+            f" group by c.id, t.titre, t.projet order by c.ouverte_le desc", comptes).fetchall()
     attentes = []
     for ligne in lignes:
         consultation = dict(ligne)
