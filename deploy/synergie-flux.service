@@ -1,0 +1,40 @@
+# /etc/systemd/system/synergie-flux.service
+# ============================================================================
+#  Synergie — le service de flux temps réel (Server-Sent Events, asynchrone)
+#
+#  Chaque navigateur en direct occupe une connexion. Servi par le serveur
+#  applicatif (WSGI), chaque connexion coûtait un fil : une soixantaine au
+#  maximum. Ici le même travail est fait par des tâches asynchrones (uvicorn) :
+#  plusieurs centaines de navigateurs tiennent dans ce seul processus, mesuré le
+#  10/10/2026 — 150 connexions pour 15 fils.
+#
+#  nginx lui envoie /api/themes/<id>/evenements et /api/projets/<id>/evenements.
+#  Le service parle à PostgreSQL par la socket locale, et reçoit les écritures de
+#  l'application par le canal `NOTIFY` : il n'y a rien d'autre entre les deux.
+# ============================================================================
+[Unit]
+Description=Synergie — service de flux temps réel (SSE asynchrone)
+After=network.target postgresql@18-main.service
+Wants=postgresql@18-main.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/synergie
+Environment=SYNERGIE_BASE=postgresql:///synergie
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ubuntu/synergie-venv/bin/python -m uvicorn flux:app \
+    --host 127.0.0.1 --port 8078 --log-level warning
+# Une connexion = un descripteur de fichier : la limite doit rester large.
+LimitNOFILE=16384
+TasksMax=2048
+MemoryHigh=800M
+MemoryMax=1500M
+Restart=always
+RestartSec=4
+StandardOutput=append:/home/ubuntu/synergie/donnees/synergie-flux.log
+StandardError=append:/home/ubuntu/synergie/donnees/synergie-flux.log
+
+[Install]
+WantedBy=multi-user.target

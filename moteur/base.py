@@ -33,6 +33,7 @@ import atexit
 import os
 import re
 import sqlite3
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -55,6 +56,7 @@ class ErreurPortabilite(RuntimeError):
     """
 
 _pool = None  # rempli au premier usage PostgreSQL
+_verrou_pool = threading.Lock()
 
 #: Les erreurs d'intégrité de chaque moteur (clé déjà prise, contrainte violée…), pour
 #: que le moteur puisse écrire `except base.ERREUR_INTEGRITE` quel que soit le moteur.
@@ -287,29 +289,44 @@ class Resultat:
         return getattr(self._curseur, "lastrowid", None)
 
 
-def _connexion_postgres():
-    """Une connexion PostgreSQL, prise dans le pool (créé au premier besoin)."""
+def _connexion_postgres() -> "ConnexionPostgres":
+    """Une connexion PostgreSQL, prise dans le pool.
+
+    Le pool se crée **une seule fois**, sous verrou : sans cela, cent cinquante connexions
+    qui arrivent en même temps (le service de flux) en créaient plusieurs, et une connexion
+    prise dans l'un ne pouvait plus être rendue à l'autre — « can't return connection to
+    pool », constaté le 10/10/2026 sous charge.
+    """
     global _pool
     if _pool is None:
-        from psycopg_pool import ConnectionPool
+        with _verrou_pool:
+            if _pool is None:
+                from psycopg_pool import ConnectionPool
 
-        _pool = ConnectionPool(
-            os.environ.get("SYNERGIE_BASE", ""),
-            min_size=1,
-            max_size=int(os.environ.get("SYNERGIE_CONNEXIONS", "12")),
-            timeout=15,
-            max_idle=300,
-            kwargs={"autocommit": False},
-            name="synergie",
-        )
-    return _pool.getconn()
+                _pool = ConnectionPool(
+                    os.environ.get("SYNERGIE_BASE", ""),
+                    min_size=1,
+                    max_size=int(os.environ.get("SYNERGIE_CONNEXIONS", "12")),
+                    timeout=15,
+                    max_idle=300,
+                    kwargs={"autocommit": False},
+                    # Une connexion rendue au pool est vérifiée avant d'être réutilisée :
+                    # sans cela, un redémarrage de PostgreSQL laissait l'application avec des
+                    # connexions mortes (« the connection is lost »), jusqu'à son redémarrage
+                    # à elle — constaté le 10/10/2026, avec une fausse alerte à la clé.
+                    check=ConnectionPool.check_connection,
+                    name="synergie",
+                )
+    pool = _pool
+    return ConnexionPostgres(pool.getconn(), pool)
 
 
 class ConnexionPostgres:
     """Une connexion PostgreSQL qui se lit comme une connexion SQLite."""
 
-    def __init__(self, brute) -> None:
+    def __init__(self, brute, pool=None) -> None:
         self._brute = brute
+        self._pool = pool
 
     def execute(self, sql: str, parametres=()) -> Resultat:
         requete = traduire(sql)
@@ -347,14 +364,15 @@ class ConnexionPostgres:
         self._brute.rollback()
 
     def close(self) -> None:
-        """Remet la connexion au pool (le pool la réinitialise avant réemploi)."""
-        global _pool
+        """Remet la connexion au pool **d'où elle vient** (le pool la réinitialise)."""
         try:
             self._brute.rollback()
         except Exception:  # noqa: BLE001 - connexion déjà fermée : sans importance
             pass
-        if _pool is not None:
-            _pool.putconn(self._brute)
+        if self._pool is not None:
+            self._pool.putconn(self._brute)
+        else:
+            self._brute.close()
 
 
 class _CurseurVide:
@@ -386,7 +404,7 @@ def connexion():
     files », constat du 08/10/2026).
     """
     if est_postgres():
-        base = ConnexionPostgres(_connexion_postgres())
+        base = _connexion_postgres()
         try:
             yield base
             base.commit()

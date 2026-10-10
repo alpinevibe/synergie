@@ -460,6 +460,26 @@ def api_curseurs(identifiant):
     return jsonify({"ok": True})
 
 
+@app.route("/api/themes/<identifiant>/gestes", methods=["POST"])
+def api_gestes(identifiant):
+    """Les gestes en cours — une note qu'on déplace, qu'on étire — relayés **sans écriture**.
+
+    Un glissement continu produisait une écriture toutes les 350 ms ; la position définitive
+    est de toute façon enregistrée une seule fois au relâchement (PUT sur la note). Ici, on
+    ne fait que prévenir les autres participants : la base n'est plus le chemin du direct.
+    """
+    _theme(identifiant, ecriture=True)
+    corps = request.get_json(silent=True) or {}
+    if not corps.get("id"):
+        return jsonify({"erreur": "geste sans note."}), 400
+    evenement = {"type": "note_geste", "id": corps.get("id"), "qui": _qui()}
+    for champ in ("x", "y", "largeur"):
+        if corps.get(champ) is not None:
+            evenement[champ] = corps[champ]
+    m_atelier.diffuser(identifiant, evenement)
+    return jsonify({"ok": True})
+
+
 @app.route("/api/themes/<identifiant>/evenements")
 def api_evenements(identifiant):
     """Flux temps réel (Server-Sent Events) : tout ce qui se passe dans le thème arrive ici
@@ -478,6 +498,9 @@ def api_evenements(identifiant):
                 try:
                     evenement = file.get(timeout=15)
                 except queue.Empty:
+                    # Le souffle sert aussi de battement de cœur : sans lui, une connexion
+                    # longue finirait par passer pour absente dans la liste des participants.
+                    m_atelier.presence_marquer(identifiant, f"srv-{numero}", nom)
                     yield ": souffle\n\n"          # garde la connexion ouverte
                     continue
                 yield "data: " + json.dumps(evenement, ensure_ascii=False) + "\n\n"
@@ -1143,6 +1166,7 @@ def api_evenements_generaux(identifiant):
                 try:
                     evenement = file.get(timeout=15)
                 except queue.Empty:
+                    m_atelier.presence_marquer(identifiant, f"srv-{numero}", nom)
                     yield ": souffle\n\n"
                     continue
                 yield "data: " + json.dumps(evenement, ensure_ascii=False) + "\n\n"

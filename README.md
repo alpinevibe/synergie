@@ -153,6 +153,7 @@ worker ne met en cache que les fichiers de l'application, **jamais** `/api/` ni 
 
 ```
 serveur.py            API + interface (Flask) ; contrôle des rôles
+flux.py               service de flux : le temps réel en asynchrone (uvicorn), à part
 moteur/atelier.py     groupes, notes, décisions, documents, journal, diffusion temps réel
 moteur/equipe.py      comptes, discussions, pages, cadre de travail, alertes par courriel
 moteur/projets.py     projets, membres, rôles, notifications
@@ -199,6 +200,28 @@ notification part en version courte « rafraîchir », et le navigateur redemand
 Le service est rendu par **waitress** (pool de fils, `SYNERGIE_FILS`, 64 par défaut), et non
 plus par le serveur de développement de Flask : chaque navigateur en temps réel occupe un fil,
 et le serveur de développement n'en tient qu'une poignée.
+
+### Le temps réel à part : le service de flux
+
+Servir les connexions en direct par le serveur applicatif coûtait **un fil par navigateur**
+(une soixantaine au maximum, et le fil restait occupé tout le temps où la page était ouverte).
+`flux.py` est donc un **service à part** (uvicorn, asynchrone, `127.0.0.1:8078`) : nginx lui
+envoie `/api/themes/<id>/evenements` et `/api/projets/<id>/evenements`, et les connexions y
+sont des tâches, pas des fils. Mesuré le 10/10/2026 : **150 navigateurs en direct pour 15 fils**
+(`tests/tester_flux.py`). Le service écoute le canal `NOTIFY` de PostgreSQL : c'est le seul
+lien avec l'application qui écrit — donc plusieurs ouvriers de flux, ou plusieurs serveurs
+applicatifs, peuvent tourner côte à côte.
+
+« Qui est en ligne » vit dans la table `presences` : renseignée par la connexion qui regarde le
+groupe, rafraîchie par le souffle du flux (toutes les 15 s) et oubliée au départ — ainsi
+l'information est la même quel que soit l'ouvrier qui sert le navigateur.
+
+### Les gestes n'écrivent plus
+
+Déplacer une note, l'étirer : la position part aux autres participants par
+`POST /api/themes/<id>/gestes`, qui **ne touche pas à la base**. Seule la position définitive
+est enregistrée, une fois, au relâchement du doigt. Un glissement de trois secondes ne coûte
+donc plus une dizaine d'écritures — et les autres voient toujours la note bouger en direct.
 
 ---
 
@@ -279,6 +302,13 @@ SYNERGIE_BASE=postgresql:///synergie_essai /home/ubuntu/synergie-venv/bin/python
 
 # 24 écrivains en parallèle : aucune écriture perdue
 SYNERGIE_BASE=postgresql:///synergie_essai /home/ubuntu/synergie-venv/bin/python tests/tester_ecritures_simultanees.py
+
+# le flux asynchrone : 150 navigateurs en direct pour une poignée de fils
+SYNERGIE_BASE=postgresql:///synergie_essai /home/ubuntu/synergie-venv/bin/python tests/tester_flux.py
+
+# bout en bout, dans un vrai navigateur, sur le site public (playwright)
+SYNERGIE_SITE=https://synergie.alpinevibe.fr \
+    /home/ubuntu/.venv-scan/bin/python tests/tester_temps_reel.py
 ```
 
 96 contrôles, sans réseau : projets, membres, rôles et droits, notifications, invitations

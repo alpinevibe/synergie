@@ -461,6 +461,17 @@ Vérifications en navigateur (Playwright, sur le site en ligne, avec deux partic
   responsables par thème avec alertes par courriel et réglage des notifications ; fiches de
   poste par tranche horaire avec référentiel des codes horaires, charge par code,
   duplication et validation.
+- **10/10/2026 (étape ②)** — **Le temps réel passe à part et ne coûte plus un fil par
+  navigateur** : `flux.py` (service asynchrone, uvicorn, 127.0.0.1:8078) sert les flux SSE,
+  nginx lui envoie les deux routes `/evenements`, et PostgreSQL `NOTIFY` relie ce service à
+  l'application qui écrit (150 navigateurs en direct pour 15 fils, éprouvé). « Qui est en
+  ligne » vit dans la table `presences` (même réponse quel que soit l'ouvrier). Les **gestes**
+  (note déplacée, étirée) partent par `/gestes` **sans écrire en base** : seule la position
+  finale est enregistrée, au relâchement. Au passage : le pool de connexions **vérifie** ses
+  connexions avant de les réutiliser (un redémarrage de PostgreSQL laissait l'application avec
+  des connexions mortes) et sa création est protégée par un verrou (sous 150 connexions
+  simultanées, il s'en créait plusieurs). Côté sauvegarde : **copie de base hebdomadaire
+  vérifiée + journaux WAL archivés en continu** (retour à un instant précis, répété et conforme).
 - **10/10/2026** — **Bascule des données vers PostgreSQL** (base `synergie`, socket locale en
   pair) : plusieurs personnes écrivent enfin en même temps, et l'application peut être servie
   par plusieurs ouvriers. Reprise des 20 tables à l'identique, fichier SQLite gelé pour le

@@ -586,6 +586,10 @@ def test_equipe():
 
 
 def main():
+    # Le schéma se crée ici comme au démarrage de l'application : le banc peut ainsi
+    # tourner sur une base neuve (un fichier vide, ou une base d'essai PostgreSQL).
+    for module in (m_atelier, m_projets, m_invitations, m_consultations, m_equipe):
+        module.initialiser()
     test_projets()
     test_invitations_et_votes()
     test_consultations()

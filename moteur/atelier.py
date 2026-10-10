@@ -92,6 +92,14 @@ create table if not exists votes (
     id text primary key, theme text not null, decision text not null,
     empreinte text not null, valeur text not null, quand text not null,
     unique (decision, empreinte));
+-- Qui regarde quoi, en ce moment. Renseigné par les connexions temps réel — celles du
+-- serveur applicatif comme celles du service de flux — pour que « qui est en ligne » soit
+-- le même pour tout le monde, quel que soit l'ouvrier qui sert le navigateur. Les lignes
+-- sont rafraîchies par le souffle du flux et oubliées dès qu'elles vieillissent.
+create table if not exists presences (
+    theme text not null, numero text not null, nom text default '',
+    vu_le text not null, primary key (theme, numero));
+create index if not exists presences_theme on presences (theme);
 create index if not exists notes_theme on notes (theme);
 create index if not exists decisions_theme on decisions (theme);
 create index if not exists documents_theme on documents (theme);
@@ -593,6 +601,7 @@ def abonner(theme: str, nom: str) -> tuple[int, queue.Queue]:
         numero = _COMPTEUR[0]
         _ABONNES.setdefault(theme, {})[numero] = {
             "file": file, "nom": nom or "Anonyme", "arrive": maintenant()}
+    presence_marquer(theme, f"srv-{numero}", nom)   # « qui est en ligne » se lit en base
     diffuser(theme, {"type": "presence", "participants": participants(theme)})
     return numero, file
 
@@ -600,14 +609,48 @@ def abonner(theme: str, nom: str) -> tuple[int, queue.Queue]:
 def desabonner(theme: str, numero: int) -> None:
     with _VERROU:
         (_ABONNES.get(theme) or {}).pop(numero, None)
+    presence_retirer(theme, f"srv-{numero}")
     diffuser(theme, {"type": "presence", "participants": participants(theme)})
 
 
+#: Au-delà de ce délai sans souffle, une présence n'est plus comptée (le flux souffle
+#: toutes les 15 s : trois souffles manqués signifient un navigateur parti sans dire au revoir).
+FRAICHEUR_PRESENCE = 45
+
+
+def presence_marquer(theme: str, numero: str, nom: str) -> None:
+    """Note qu'un navigateur regarde ce thème (ligne rafraîchie à chaque souffle)."""
+    with connexion() as base:
+        base.execute(
+            "insert into presences (theme, numero, nom, vu_le) values (?, ?, ?, ?)"
+            " on conflict (theme, numero) do update set nom = excluded.nom,"
+            " vu_le = excluded.vu_le",
+            (theme, numero, nom or "Anonyme", maintenant()))
+
+
+def presence_retirer(theme: str, numero: str) -> None:
+    with connexion() as base:
+        base.execute("delete from presences where theme = ? and numero = ?", (theme, numero))
+
+
+def presence_nettoyer(theme: str) -> None:
+    """Oublie les présences trop vieilles (navigateur fermé sans prévenir)."""
+    limite = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=FRAICHEUR_PRESENCE)
+    with connexion() as base:
+        base.execute("delete from presences where theme = ? and vu_le < ?",
+                     (theme, limite.isoformat(timespec="seconds").replace("+00:00", "Z")))
+
+
 def participants(theme: str) -> list[str]:
-    with _VERROU:
-        noms = [a["nom"] for a in (_ABONNES.get(theme) or {}).values()]
+    """Qui regarde ce thème maintenant : les noms uniques, dans l'ordre d'arrivée."""
+    limite = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=FRAICHEUR_PRESENCE)
+    with connexion() as base:
+        lignes = base.execute(
+            "select nom from presences where theme = ? and vu_le >= ? order by vu_le",
+            (theme, limite.isoformat(timespec="seconds").replace("+00:00", "Z"))).fetchall()
     vus, uniques = set(), []
-    for nom in noms:
+    for ligne in lignes:
+        nom = ligne["nom"] or "Anonyme"
         if nom not in vus:
             vus.add(nom)
             uniques.append(nom)

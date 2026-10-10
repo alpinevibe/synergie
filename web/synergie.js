@@ -486,6 +486,18 @@
         notes = notes.filter((n) => n.id !== evenement.id);
         retirerNote(evenement.id);
         break;
+      case 'note_geste': {
+        // Un geste en cours chez quelqu'un d'autre : on le montre, sans rien enregistrer
+        // (la position définitive arrivera par « note_maj » au relâchement).
+        const geste = notes.find((n) => n.id === evenement.id);
+        if (geste) {
+          if (evenement.x !== undefined) geste.x = evenement.x;
+          if (evenement.y !== undefined) geste.y = evenement.y;
+          if (evenement.largeur !== undefined) geste.largeur = evenement.largeur;
+          poserNote(geste, { forcer: false });
+        }
+        break;
+      }
       case 'message_supprime':
         chargerChatTheme();
         break;
@@ -750,7 +762,7 @@
         note.y = depart.oy + dy;
         noeud.style.left = note.x + 'px';
         noeud.style.top = note.y + 'px';
-        programmer('pos-' + note.id, () => sauver(note.id, { x: note.x, y: note.y }), 350);
+        programmer('pos-' + note.id, () => envoyerGeste(note), 120);
       };
       const relacher = () => {
         noeud.removeEventListener('pointermove', deplacer);
@@ -790,7 +802,7 @@
       const etirer = (e) => {
         note.largeur = Math.max(160, depart.largeur + (e.clientX - depart.x) / vue.z);
         noeud.style.width = note.largeur + 'px';
-        programmer('larg-' + note.id, () => sauver(note.id, { largeur: note.largeur }), 350);
+        programmer('larg-' + note.id, () => envoyerGeste(note, { largeur: note.largeur }), 120);
       };
       const relacher = () => {
         poigneeTaille.removeEventListener('pointermove', etirer);
@@ -959,6 +971,16 @@
         { methode: 'PUT', corps: champs });
     } catch (erreur) { /* la note reste à l'écran, une nouvelle tentative suivra */ }
     return annulable;
+  }
+
+  /** Prévenir les autres d'un geste en cours (position, largeur) : **aucune écriture**.
+
+   * La base n'est pas le chemin du direct : un glissement n'écrit plus rien tant qu'il
+   * dure, et la position définitive est enregistrée une seule fois au relâchement. */
+  function envoyerGeste(note, champs = {}) {
+    if (!theme) return;
+    appel('/api/themes/' + theme.id + '/gestes', { methode: 'POST',
+      corps: Object.assign({ id: note.id, x: note.x, y: note.y }, champs) }).catch(() => {});
   }
 
   function envoyerCurseur(noteId) {
