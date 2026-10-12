@@ -25,7 +25,7 @@ _CODE = (
     "with atelier.connexion() as base:\n"
     "    for identifiant in sys.argv[1:]:\n"
     "        for table in ('projet_membres', 'theme_membres', 'abonnements',\n"
-    "                      'responsables'):\n"
+    "                      'responsables', 'alertes_categories'):\n"
     "            base.execute(f'delete from {table} where compte = ?', (identifiant,))\n"
     "        base.execute('delete from comptes where id = ?', (identifiant,))\n"
 )

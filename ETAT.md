@@ -520,6 +520,15 @@ Vérifications en navigateur (Playwright, sur le site en ligne, avec deux partic
 
 ## Journal
 
+- **12/10/2026** — **Gestion du projet et des groupes** (nom, description, membres) réservée aux
+  administrateurs, et **les personnes visibles** sur l'accueil du projet et de chaque groupe
+  avec leur statut ; affichage des membres corrigé (lignes superposées).
+- **12/10/2026** — **Les notifications se règlent sur son propre compte** : quatre catégories
+  (messages du chat, nouveaux documents, changements du projet, changements des groupes), en
+  plus du choix des projets et des groupes suivis. On reçoit tout par défaut ; le projet avait
+  un trou (sa discussion n'alertait personne). La barre de boutons collée au bas des grandes
+  fenêtres était translucide et recouvrait la moitié de l'écran : elle est opaque et courte.
+
 - **05/10/2026 (nuit)** — Deux thèmes fixes (Rythme de travail, Fiches de poste) ; comptes
   (prénom + courriel) en base ; chat général et chat par thème ; cadre de travail (contexte
   et comptes rendus de réunion) ; pages de travail avec traitement de texte simple ;

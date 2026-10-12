@@ -93,12 +93,28 @@ def _avec_cookie(reponse, jeton: str):
     return reponse
 
 
-def _prevenir(identifiant: str, resume: str) -> None:
-    """Prévient par courriel les personnes qui suivent ce groupe — ou tout le projet."""
+def _prevenir(identifiant: str, resume: str, categorie: str = "") -> None:
+    """Prévient par courriel les personnes qui suivent ce groupe — ou tout le projet.
+
+    `categorie` (« chat », « documents », « groupe »…) ne garde que les personnes qui
+    n'ont pas décoché cette catégorie dans « Mon compte » (demande de l'utilisateur,
+    12/10/2026 : « gérer les notifications liées à son propre compte »).
+    """
     theme = m_atelier.lire_theme(identifiant)
     if theme:
         m_equipe.prevenit(identifiant, theme["titre"], resume, _qui(),
-                          theme.get("projet") or "")
+                          theme.get("projet") or "", categorie)
+
+
+def _prevenir_projet(identifiant: str, resume: str, categorie: str = "") -> None:
+    """Prévient par courriel les membres d'un PROJET (et non d'un groupe).
+
+    Le projet n'est pas un groupe : sans cette fonction, la discussion du projet et les
+    changements du projet lui-même n'écrivaient à personne (constat du 12/10/2026).
+    """
+    projet = m_projets.lire_projet(identifiant)
+    if projet:
+        m_equipe.prevenit_projet(identifiant, projet["nom"], resume, _qui(), categorie)
 
 
 def _prevenir_arrivee(invitation: dict, compte: dict, projet: dict | None, prenom: str) -> None:
@@ -203,8 +219,10 @@ def api_projet(identifiant):
         return jsonify({"ok": True})
     if request.method == "PUT":
         _projet(identifiant, ecriture=True)
-        return jsonify(m_projets.maj_projet(identifiant, request.get_json(silent=True) or {},
-                                            _qui()))
+        resultat = m_projets.maj_projet(identifiant, request.get_json(silent=True) or {},
+                                        _qui())
+        _prevenir_projet(identifiant, f"Le projet a été modifié par {_qui()}.", "projet")
+        return jsonify(resultat)
     projet = _projet(identifiant)
     compte = _compte(requis=True)
     return jsonify({
@@ -233,6 +251,8 @@ def api_projet_membre(identifiant):
     m_atelier.journaliser("", _qui(), "projet_membre", identifiant,
                           f"{compte['prenom']} · {m_projets.LIBELLES_ROLES[role]}",
                           diffuser_aussi=False)
+    _prevenir_projet(identifiant, f"{compte['prenom']} est maintenant dans le projet "
+                                  f"({m_projets.LIBELLES_ROLES[role]}).", "projet")
     return jsonify(membre), 201
 
 
@@ -242,15 +262,21 @@ def api_projet_membre_un(identifiant, membre):
     try:
         if request.method == "DELETE":
             m_projets.retirer_membre_projet(identifiant, membre)
+            _prevenir_projet(identifiant, f"Une personne a quitté le projet.", "projet")
             return jsonify({"ok": True})
         corps = request.get_json(silent=True) or {}
         role = corps.get("role")
         if role is not None and role not in m_projets.ROLES:
             return jsonify({"erreur": "Rôle inconnu."}), 400
         notifier = corps.get("notifier")
-        return jsonify(m_projets.definir_membre_projet(
+        membre_pose = m_projets.definir_membre_projet(
             identifiant, membre, role, None if notifier is None else bool(notifier),
-            ajoute_par=_qui()))
+            ajoute_par=_qui())
+        if role is not None:
+            _prevenir_projet(identifiant, "Le rôle d'une personne du projet a changé "
+                                          f"({m_projets.LIBELLES_ROLES.get(role, role)}).",
+                             "projet")
+        return jsonify(membre_pose)
     except ValueError as erreur:                   # dernier administrateur : on refuse
         return jsonify({"erreur": str(erreur)}), 400
 
@@ -305,8 +331,9 @@ def api_theme(identifiant):
                 m_projets.role_effectif(theme_a_modifier.get("projet") or "", identifiant,
                                         (_compte(requis=True) or {})["id"])):
             abort(403, description="Seul un administrateur du groupe peut le modifier.")
-        return jsonify(m_atelier.maj_theme(identifiant, request.get_json(silent=True) or {},
-                                           _qui()))
+        groupe = m_atelier.maj_theme(identifiant, request.get_json(silent=True) or {}, _qui())
+        _prevenir(identifiant, f"Le groupe a été modifié par {_qui()}.", "groupe")
+        return jsonify(groupe)
     theme = _theme(identifiant)
     contenu = m_atelier.resume(identifiant, _qui())
     # Le JOURNAL d'un groupe est réservé à ses administrateurs (consigne du 08/10/2026) :
@@ -341,6 +368,8 @@ def api_theme_membres(identifiant):
         return jsonify({"erreur": "Rôle inconnu."}), 400
     membre = m_projets.definir_membre_theme(identifiant, compte["id"], role,
                                             bool(corps.get("notifier")), ajoute_par=_qui())
+    _prevenir(identifiant, f"{compte['prenom']} est maintenant dans ce groupe "
+                           f"({m_projets.LIBELLES_ROLES[role]}).", "groupe")
     return jsonify(membre), 201
 
 
@@ -353,15 +382,20 @@ def api_theme_membre_un(identifiant, membre):
         abort(403, description="Seul un administrateur du groupe peut modifier les rôles.")
     if request.method == "DELETE":
         m_projets.retirer_membre_theme(identifiant, membre)
+        _prevenir(identifiant, "Une personne a quitté ce groupe.", "groupe")
         return jsonify({"ok": True})
     corps = request.get_json(silent=True) or {}
     role = corps.get("role")
     if role is not None and role not in m_projets.ROLES:
         return jsonify({"erreur": "Rôle inconnu."}), 400
     notifier = corps.get("notifier")
-    return jsonify(m_projets.definir_membre_theme(
+    membre_pose = m_projets.definir_membre_theme(
         identifiant, membre, role, None if notifier is None else bool(notifier),
-        ajoute_par=_qui()))
+        ajoute_par=_qui())
+    if role is not None:
+        _prevenir(identifiant, "Le rôle d'une personne du groupe a changé "
+                               f"({m_projets.LIBELLES_ROLES.get(role, role)}).", "groupe")
+    return jsonify(membre_pose)
 
 
 @app.route("/api/themes/<identifiant>/notes", methods=["POST"])
@@ -434,6 +468,8 @@ def api_document_ajouter(identifiant):
             request.form.get("note", ""), request.form.get("auteur") or _qui())
     except ValueError as erreur:
         return jsonify({"erreur": str(erreur)}), 413
+    _prevenir(identifiant, f"Nouveau document : {document.get('nom') or 'un fichier'}",
+              "documents")
     return jsonify(document), 201
 
 
@@ -522,7 +558,11 @@ def api_evenements(identifiant):
 # L'ÉQUIPE : comptes, discussions, pages de travail, cadre général, fiches de poste
 # ====================================================================================
 def _mes_notifications(compte_id: str) -> dict:
-    """Ce que je suis : mes projets et mes groupes, avec mes rôles et mes alertes."""
+    """Ce que je suis : mes projets et mes groupes, avec mes rôles et mes alertes.
+
+    `categories` dit CE QUE je veux recevoir (chat, documents, projet, groupe) : c'est le
+    réglage porté par mon propre compte, en tête de l'écran « Notifications ».
+    """
     projets = []
     for projet in m_projets.lister_projets(compte_id):
         miens = [m for m in m_projets.membres_du_projet(projet["id"])
@@ -538,7 +578,9 @@ def _mes_notifications(compte_id: str) -> dict:
         projets.append({"id": projet["id"], "nom": projet["nom"], "role": projet["role"],
                         "notifier": bool(miens[0]["notifier"]) if miens else False,
                         "groupes": groupes})
-    return {"projets": projets}
+    return {"projets": projets,
+            "categories": m_equipe.lire_categories(compte_id),
+            "libelles": {cle: entree[1] for cle, entree in m_projets.CATEGORIES_ALERTE.items()}}
 
 
 @app.route("/api/comptes", methods=["GET", "POST"])
@@ -991,9 +1033,17 @@ def api_vote(jeton):
 
 @app.route("/api/notifications", methods=["PUT"])
 def api_notifications():
-    """Régler mes alertes : par projet entier, ou groupe par groupe."""
+    """Régler mes alertes : CE QUE je reçois (chat, documents, projet, groupe) et OÙ je le
+    reçois (tout un projet, ou un groupe en particulier).
+
+    Demande de l'utilisateur (12/10/2026) : « pouvoir gérer les notifications liées à son
+    propre compte — se voir un mail lorsqu'il y a un nouveau message dans le chat, de
+    nouveaux documents, des modifications liées au projet, liées au groupe ».
+    """
     compte = _compte(requis=True)
     corps = request.get_json(silent=True) or {}
+    if isinstance(corps.get("categories"), dict):
+        m_equipe.regler_categories(compte["id"], corps["categories"])
     for projet in corps.get("projets") or []:
         if m_projets.role_du_projet(projet.get("id") or "", compte["id"]) is None:
             continue
@@ -1026,7 +1076,8 @@ def api_messages_projet(identifiant):
             message = m_equipe.envoyer_message(identifiant, _qui(), corps.get("texte", ""))
         except ValueError as erreur:
             return jsonify({"erreur": str(erreur)}), 400
-        _prevenir(identifiant, f"Nouveau message de {_qui()} : " + corps.get("texte", "")[:120])
+        _prevenir_projet(identifiant, f"Nouveau message de {_qui()} : "
+                                      + corps.get("texte", "")[:120], "chat")
         return jsonify(message), 201
     return jsonify({"messages": m_equipe.lister_messages(identifiant)})
 
@@ -1056,7 +1107,8 @@ def api_messages(identifiant):
             message = m_equipe.envoyer_message(identifiant, _qui(), corps.get("texte", ""))
         except ValueError as erreur:
             return jsonify({"erreur": str(erreur)}), 400
-        _prevenir(identifiant, f"Nouveau message de {_qui()} : " + corps.get("texte", "")[:120])
+        _prevenir(identifiant, f"Nouveau message de {_qui()} : " + corps.get("texte", "")[:120],
+                  "chat")
         return jsonify(message), 201
     return jsonify({"messages": m_equipe.lister_messages(identifiant)})
 
@@ -1085,7 +1137,7 @@ def api_pages(identifiant):
         corps = request.get_json(silent=True) or {}
         page = m_equipe.creer_page(identifiant, corps.get("titre", ""),
                                    corps.get("contenu", ""), _qui())
-        _prevenir(identifiant, f"Nouvelle page : {page['titre']}")
+        _prevenir(identifiant, f"Nouvelle page : {page['titre']}", "documents")
         return jsonify(page), 201
     return jsonify({"pages": m_equipe.lister_pages(identifiant)})
 
@@ -1101,7 +1153,7 @@ def api_page(identifiant, page):
                                      _qui())
         if resultat is None:
             return jsonify({"erreur": "Page inconnue"}), 404
-        _prevenir(identifiant, f"Page modifiée : {resultat['titre']}")
+        _prevenir(identifiant, f"Page modifiée : {resultat['titre']}", "documents")
         return jsonify(resultat)
     resultat = m_equipe.lire_page(identifiant, page)
     if resultat is None:
@@ -1136,6 +1188,8 @@ def api_cadre_documents(identifiant):
                                                   request.form.get("auteur") or _qui())
         except ValueError as erreur:
             return jsonify({"erreur": str(erreur)}), 413
+        _prevenir_projet(identifiant, f"Nouveau document : "
+                                      f"{document.get('nom') or 'un fichier'}", "documents")
         return jsonify(document), 201
     return jsonify({"documents": m_atelier.lister_documents(identifiant)})
 

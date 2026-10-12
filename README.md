@@ -280,8 +280,8 @@ Toutes les routes exigent le **jeton du navigateur** (`X-Synergie-Jeton`, ou le 
 | POST | `/api/consultations/<id>/fermer` | clore la consultation |
 | GET | `/api/consultations/<id>/resultats` | le dépouillement, question par question |
 | GET / POST | `/api/votes/<jeton>` | le lien personnel : lire les questions / **répondre une fois** |
-| GET / PUT | `/api/comptes/moi` | mon compte, mes projets, mes rôles |
-| PUT | `/api/notifications` | mes alertes (projet et groupes) |
+| GET / PUT | `/api/comptes/moi` | mon compte, mes projets, mes rôles, et **mes catégories d'alerte** |
+| PUT | `/api/notifications` | mes alertes : **ce que** je reçois (`categories`) et **où** (projets, groupes) |
 | POST | `/api/alertes/essai` | essai d'envoi de courriel |
 
 **Un visiteur ne modifie rien** : toute route d'écriture répond `403` avec un message clair.
@@ -350,6 +350,43 @@ Indiquer leur statut (Admin, membre, visiteur). »
 
 Vérifications : `python3 tests/tester_gestion_projet_groupe.py` → **28 contrôles, 0 échec** ;
 `python3 tests/tester_synergie.py` → **96 tests, 0 échec**.
+
+---
+
+## Les notifications réglées sur son propre compte (12 octobre 2026)
+
+Demande de l'utilisateur : « pouvoir gérer les notifications liées à son propre compte. Se
+voir un mail lorsqu'il y a un nouveau message dans le chat, de nouveaux documents, des
+modifications liées au projet, liées au groupe. »
+
+Avant, on ne pouvait dire que « oui ou non, je suis ce projet / ce groupe » : un seul
+interrupteur par projet, un par groupe. On choisit maintenant **ce que** l'on reçoit, en plus
+de **où** on le reçoit.
+
+- **Quatre catégories**, en tête de l'écran « Mon compte » → « Notifications » :
+  **Nouveaux messages dans le chat**, **Nouveaux documents**, **Changements des groupes**,
+  **Changements du projet**. Chacune se coche séparément (`PUT /api/notifications`,
+  table `alertes_categories`).
+- **On reçoit tout par défaut** : la table est vide au départ, seule une ligne « actif = 0 »,
+  posée par la personne elle-même, retire une catégorie. Les réglages déjà en place ne
+  changent donc pas de comportement.
+- **Ce que chaque catégorie couvre** : `chat` = discussion d'un groupe **et** du projet ;
+  `documents` = documents déposés (groupe et projet) et pages de travail ; `projet` = nom,
+  description et membres du projet ; `groupe` = nom, description et membres d'un groupe.
+- **Le projet avait un trou** : la discussion du projet et ses modifications n'écrivaient à
+  personne (`prevenit` ne savait lire qu'un groupe). `prevenit_projet` le règle, et chaque
+  catégorie est limitée à **dix minutes** par personne et par sujet, comme pour un groupe.
+- **Un défaut d'affichage corrigé au passage** : la barre de boutons collée au bas des grandes
+  fenêtres était **translucide** (on voyait les cases au travers) et très haute (quatre boutons
+  empilés) : elle recouvrait la moitié de la fenêtre. Elle est désormais **opaque** et courte,
+  et l'en-tête collant de ces fenêtres est opaque lui aussi.
+
+Vérifications : `python3 tests/tester_notifications.py` → **20 contrôles, 0 échec** (moteur sur
+une base d'essai, puis l'écran dans un vrai navigateur) ; `python3 tests/tester_synergie.py`
+→ **96 tests, 0 échec** ; `tester_gestion_projet_groupe.py` 28/28, `tester_fenetres.py` 10/10,
+`tester_chat_a_droite.py` 9/9, `tester_membres_a_la_volee.py` 10/10,
+`tester_comptes_identifiant.py` 8/8, `tester_membres_affichage.py` 10/10,
+`tester_entete_mobile.py` 6/6.
 
 ---
 

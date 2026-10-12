@@ -291,11 +291,17 @@ header button.clair:hover { background: rgba(255, 255, 255, .3); }
    en interne, et sa barre de fermeture reste collée en bas — on la voit sans chercher
    (défaut rapporté par l'utilisateur le 09/10/2026 : « je ne vois pas le bouton fermé »). */
 .boite-nom.large { position: relative; max-height: 90svh; overflow: auto; }
-.boite-nom.large > h2 { position: sticky; top: 0; z-index: 4; background: var(--carte);
+.boite-nom.large > h2 { position: sticky; top: 0; z-index: 4; background: var(--carte-pleine);
   padding: 6px 52px 8px 0; }
 .boite-nom.large > .barre-boutons { position: sticky; bottom: 0; z-index: 4;
-  background: var(--carte); padding: 10px 0 2px; border-top: 1px solid var(--bord);
+  background: var(--carte-pleine); padding: 10px 0 2px; border-top: 1px solid var(--bord);
   box-shadow: 0 -10px 14px -12px rgba(30, 42, 58, .45); }
+
+/* La barre de boutons colle au bas de la fenêtre : elle doit être OPAQUE (avec la carte
+   translucide, les cases de « Mes notifications » se voyaient au travers — défaut constaté
+   le 12/10/2026) et rester courte, sinon elle recouvre la moitié de l'écran. */
+#vue-compte .barre-boutons { justify-content: flex-end; }
+#vue-compte .barre-boutons button { width: auto; flex: 1 1 auto; min-width: 130px; }
 .croix-fermeture { position: absolute; top: 8px; right: 10px; width: auto; padding: 6px 11px;
   font-size: 15px; line-height: 1; border-radius: 9px; z-index: 5; }
 .boite-nom .etiquette-champ { display: block; margin: 10px 0 4px; font-size: 13px;
@@ -509,6 +515,8 @@ details.replie > *:last-child { margin-bottom: 16px; }
 select.role { min-height: 38px; border-radius: 9px; border: 1px solid var(--bord);
   padding: 6px 8px; font: inherit; font-size: 13.5px; background: #fff; }
 .notifications { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.titre-notif { font-size: 14px; margin: 14px 0 2px; }
+#c-categories { border: 1px solid var(--bord); border-radius: 10px; padding: 8px 10px; }
 .notif-projet { border: 1px solid var(--bord); border-radius: 10px; padding: 8px 10px; }
 .case { font-size: 14px; }
 .case.sous { margin-left: 20px; font-size: 13.5px; }

@@ -317,14 +317,56 @@ def peut_administrer(role: str | None) -> bool:
 
 
 # ------------------------------------------------------------------ notifications
-def destinataires_projet(projet: str) -> list[dict]:
-    """Les membres du projet qui veulent être prévenus ET ont une adresse : qui, quoi."""
+#: Les CATÉGORIES d'alerte que chacun règle sur son propre compte (demande de l'utilisateur,
+#: 12/10/2026) : « se voir un mail lorsqu'il y a un nouveau message dans le chat, de nouveaux
+#: documents, des modifications liées au projet, liées au groupe ». Le second élément est le
+#: libellé montré dans l'écran « Mon compte ».
+CATEGORIES_ALERTE = {
+    "chat": ("notifier_chat", "Nouveaux messages dans le chat"),
+    "documents": ("notifier_documents", "Nouveaux documents"),
+    "projet": ("notifier_projet", "Changements du projet"),
+    "groupe": ("notifier_groupe", "Changements des groupes"),
+}
+
+
+def colonne_alerte(categorie: str | None) -> str | None:
+    """La catégorie reconnue, ou None : aucune restriction.
+
+    Le nom vient de la table ci-dessus (jamais de la requête) : une catégorie inconnue est
+    simplement ignorée, elle ne peut pas se transformer en injection SQL.
+    """
+    propre = (categorie or "").strip()
+    return propre if propre in CATEGORIES_ALERTE else None
+
+
+def _filtre_categorie(categorie: str | None) -> tuple[str, list]:
+    """Le fragment SQL qui écarte les personnes ayant DÉCOCHÉ cette catégorie.
+
+    On reçoit tout par défaut : seule une ligne « actif = 0 », posée par la personne
+    elle-même depuis « Mon compte », retire une catégorie. Sans catégorie (invitations,
+    arrivées), aucune restriction.
+    """
+    propre = colonne_alerte(categorie)
+    if not propre:
+        return "", []
+    return (" and not exists (select 1 from alertes_categories a"
+            " where a.compte = c.id and a.categorie = ? and a.actif = 0)", [propre])
+
+
+def destinataires_projet(projet: str, categorie: str | None = "") -> list[dict]:
+    """Les membres du projet qui veulent être prévenus ET ont une adresse : qui, quoi.
+
+    `categorie` ne garde que les personnes qui n'ont pas décoché CETTE catégorie dans
+    « Mon compte ». Sans catégorie (invitations, arrivées), on ne filtre pas.
+    """
+    filtre, params = _filtre_categorie(categorie)
     with connexion() as base:
         lignes = base.execute(
             "select c.id, c.prenom, c.email, m.role from projet_membres m"
             " join comptes c on c.id = m.compte"
-            " where m.projet = ? and m.notifier = 1 and c.email is not null and c.email <> ''",
-            (projet,))
+            " where m.projet = ? and m.notifier = 1 and c.email is not null and c.email <> ''"
+            + filtre,
+            (projet, *params))
         return [dict(l) for l in lignes]
 
 
@@ -344,21 +386,29 @@ def administrateurs_projet(projet: str) -> list[dict]:
         return [dict(l) for l in lignes]
 
 
-def destinataires_theme(theme: str, projet: str = "") -> list[dict]:
-    """Les personnes à prévenir d'un changement de groupe : abonnés au groupe et au projet."""
+def destinataires_theme(theme: str, projet: str = "",
+                        categorie: str | None = "") -> list[dict]:
+    """Les personnes à prévenir d'un changement de groupe : abonnés au groupe et au projet.
+
+    `categorie` ne garde que ceux qui n'ont pas décoché cette catégorie dans « Mon compte »
+    (« chat », « documents »…) ; sans catégorie, on ne filtre pas.
+    """
+    filtre, params = _filtre_categorie(categorie)
     with connexion() as base:
         lignes = base.execute(
             "select c.id, c.prenom, c.email, 'groupe' as niveau from theme_membres m"
             " join comptes c on c.id = m.compte"
-            " where m.theme = ? and m.notifier = 1 and c.email is not null and c.email <> ''",
-            (theme,))
+            " where m.theme = ? and m.notifier = 1 and c.email is not null and c.email <> ''"
+            + filtre,
+            (theme, *params))
         trouves = {l["id"]: dict(l) for l in lignes}
         if projet:
             lignes = base.execute(
                 "select c.id, c.prenom, c.email, 'projet' as niveau from projet_membres m"
                 " join comptes c on c.id = m.compte"
-                " where m.projet = ? and m.notifier = 1 and c.email is not null and c.email <> ''",
-                (projet,))
+                " where m.projet = ? and m.notifier = 1 and c.email is not null and c.email <> ''"
+                + filtre,
+                (projet, *params))
             for ligne in lignes:
                 trouves.setdefault(ligne["id"], dict(ligne))
     return list(trouves.values())

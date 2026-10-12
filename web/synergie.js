@@ -1765,12 +1765,28 @@
     $('#vue-compte').classList.remove('cache');
   }
 
-  /** Mes projets et mes groupes, avec une case « me prévenir » pour chacun. */
+  /** Mes projets et mes groupes, avec une case « me prévenir » pour chacun.
+      En tête : CE QUE je veux recevoir (chat, documents, projet, groupe) — un réglage porté
+      par mon propre compte (demande de l'utilisateur, 12/10/2026). */
   async function chargerNotifications() {
     const zone = $('#c-notifications');
     zone.innerHTML = '';
     const donnees = await appel('/api/comptes/moi');
     compte.notifications = donnees.notifications || { projets: [] };
+    const libelles = compte.notifications.libelles || {};
+    const categories = compte.notifications.categories || {};
+    const zoneCategories = $('#c-categories');
+    if (zoneCategories) {
+      zoneCategories.innerHTML = '';
+      Object.keys(libelles).forEach((cle) => {
+        const box = element('input', { attrs: { type: 'checkbox' } });
+        box.checked = categories[cle] !== false;      // tout est reçu par défaut
+        box.dataset.categorie = cle;
+        const ligne = element('label', { classe: 'case' });
+        poser(ligne, box, element('span', { texte: libelles[cle] }));
+        zoneCategories.append(ligne);
+      });
+    }
     const liste = compte.notifications.projets || [];
     if (!liste.length) {
       zone.append(element('p', { classe: 'aide', texte: 'Vous ne participez à aucun projet.' }));
@@ -1813,8 +1829,13 @@
       document.querySelectorAll('#c-notifications input[data-theme]').forEach((c) => {
         groupes_.push({ id: c.dataset.theme, notifier: c.checked });
       });
+      const categories_ = {};
+      document.querySelectorAll('#c-categories input[data-categorie]').forEach((c) => {
+        categories_[c.dataset.categorie] = c.checked;
+      });
       compte.notifications = await appel('/api/notifications',
-        { methode: 'PUT', corps: { projets: projets_, groupes: groupes_ } });
+        { methode: 'PUT', corps: { categories: categories_, projets: projets_,
+                                   groupes: groupes_ } });
       retenirNom(compte.prenom);
       $('#c-etat').textContent = 'Enregistré.';
       if (projet) brancherFlux();

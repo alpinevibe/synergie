@@ -39,6 +39,9 @@ create table if not exists comptes (
     poste text default '', appareil text default '', derniere_connexion text default '',
     identifiant text, identifiant_min text,
     jeton text unique, notifier_tout integer default 0, cree_le text, maj_le text);
+create table if not exists alertes_categories (
+    compte text not null, categorie text not null, actif integer default 1,
+    primary key (compte, categorie));
 create table if not exists responsables (
     theme text not null, compte text not null, cree_le text,
     primary key (theme, compte));
@@ -519,15 +522,52 @@ def _noter(texte: str) -> None:
         pass
 
 
+def lire_categories(compte_id: str) -> dict[str, bool]:
+    """Ce que cette personne veut recevoir : une entrée par catégorie (vrai par défaut).
+
+    Demande de l'utilisateur (12/10/2026) : « pouvoir gérer les notifications liées à son
+    propre compte ». On reçoit TOUT par défaut : seule une ligne « actif = 0 », posée depuis
+    « Mon compte », retire une catégorie — les personnes déjà inscrites ne changent donc rien
+    à ce qu'elles reçoivent aujourd'hui.
+    """
+    from . import projets as m_projets
+    with connexion() as base:
+        lignes = base.execute(
+            "select categorie, actif from alertes_categories where compte = ?", (compte_id,))
+        etats = {l["categorie"]: bool(l["actif"]) for l in lignes}
+    return {cle: etats.get(cle, True) for cle in m_projets.CATEGORIES_ALERTE}
+
+
+def regler_categories(compte_id: str, valeurs: dict) -> dict[str, bool]:
+    """Enregistre les cases cochées : une ligne par catégorie, « actif » 1 ou 0.
+
+    Les catégories absentes du corps de la requête sont laissées telles quelles : la même
+    fonction sert donc au réglage complet comme à un seul interrupteur.
+    """
+    from . import projets as m_projets
+    with connexion() as base:
+        for cle in m_projets.CATEGORIES_ALERTE:
+            if not isinstance(valeurs, dict) or cle not in valeurs:
+                continue
+            base.execute(
+                "insert into alertes_categories (compte, categorie, actif) values (?, ?, ?)"
+                " on conflict (compte, categorie) do update set actif = excluded.actif",
+                (compte_id, cle, 1 if valeurs[cle] else 0))
+    return lire_categories(compte_id)
+
+
 def prevenit(theme: str, titre_theme: str, resume: str, qui: str = "",
-             projet: str = "") -> list[str]:
+             projet: str = "", categorie: str = "") -> list[str]:
     """Prévient les personnes qui suivent ce groupe — ou tout le projet — qu'il a changé.
+
+    `categorie` (« chat », « documents », « groupe »…) restreint aux personnes qui n'ont pas
+    décoché cette catégorie dans « Mon compte » (demande de l'utilisateur, 12/10/2026).
 
     Un seul envoi par personne et par groupe toutes les dix minutes : quand plusieurs
     personnes travaillent en même temps, la boîte aux lettres ne se remplit pas.
     """
     from . import projets as m_projets
-    destinataires_ = m_projets.destinataires_theme(theme, projet)
+    destinataires_ = m_projets.destinataires_theme(theme, projet, categorie)
     if not destinataires_:
         return []
     adresse_site = os.environ.get("SYNERGIE_ADRESSE", "https://synergie.alpinevibe.fr")
@@ -536,9 +576,7 @@ def prevenit(theme: str, titre_theme: str, resume: str, qui: str = "",
     auteur = qui or "quelqu'un"
     corps = (f"{titre_theme or 'Un groupe de travail'} : du nouveau, par {auteur}.\n\n"
              f"{resume}\n\nOuvrir : {lien}\n\n"
-             "Vous recevez ce message parce que vous suivez ce groupe — ou tout le projet. "
-             "Vous pouvez régler vos notifications dans Synergie : « Mon compte », puis "
-             "« Notifications ».")
+             + pied_de_page())
     enveloppes = []
     for compte in destinataires_:
         with _VERROU:
@@ -550,6 +588,45 @@ def prevenit(theme: str, titre_theme: str, resume: str, qui: str = "",
     for enveloppe in enveloppes:
         _FILE.put(enveloppe)
     return [e[0] for e in enveloppes]
+
+
+def prevenit_projet(projet: str, nom_projet: str, resume: str, qui: str = "",
+                    categorie: str = "") -> list[str]:
+    """Prévient les membres d'un PROJET qu'il a changé (nom, description, membres, documents).
+
+    Le projet n'est pas un groupe : ce message-là n'avait aucun chemin d'alerte avant le
+    12/10/2026 (la discussion du projet, notamment, n'écrivait à personne). Même limite de
+    dix minutes que pour un groupe, mais comptée à part.
+    """
+    from . import projets as m_projets
+    destinataires_ = m_projets.destinataires_projet(projet, categorie)
+    if not destinataires_:
+        return []
+    adresse_site = os.environ.get("SYNERGIE_ADRESSE", "https://synergie.alpinevibe.fr")
+    sujet = f"[Synergie] {nom_projet or 'Projet'} : du nouveau"
+    auteur = qui or "quelqu'un"
+    corps = (f"{nom_projet or 'Un projet'} : du nouveau, par {auteur}.\n\n"
+             f"{resume}\n\nOuvrir : {adresse_site}/#p={projet}\n\n"
+             + pied_de_page())
+    cle = f"projet:{projet}"
+    enveloppes = []
+    for compte in destinataires_:
+        with _VERROU:
+            derniere = _DERNIERE.get((cle, compte["id"]), 0)
+            if time.time() - derniere < DELAI_ENTRE_ALERTES:
+                continue
+            _DERNIERE[(cle, compte["id"])] = time.time()
+        enveloppes.append((compte["email"], sujet, corps))
+    for enveloppe in enveloppes:
+        _FILE.put(enveloppe)
+    return [e[0] for e in enveloppes]
+
+
+def pied_de_page() -> str:
+    """Le rappel, au bas de chaque alerte, de l'endroit où l'on règle ce qu'on reçoit."""
+    return ("Vous recevez ce message parce que vous suivez ce projet ou ce groupe. "
+            "Vous pouvez régler vos notifications, catégorie par catégorie, dans Synergie : "
+            "« Mon compte », puis « Notifications ».")
 
 
 def _facteur():                                        # pragma: no cover - fil de fond
