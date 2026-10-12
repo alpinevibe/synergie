@@ -74,10 +74,12 @@ def test_projets():
         verifie(all(m["prenom"] for m in m_projets.membres_du_projet(projet["id"])),
                 "les membres sont listés avec leur prénom (pour les inviter)")
 
-        # Le rôle de GROUPE l'emporte sur le rôle de projet ; l'admin du projet reste admin.
+        # Le rôle de GROUPE l'emporte sur le rôle de projet ; l'admin du projet reste admin ;
+        # un simple membre du projet est VISITEUR dans les groupes (règle du 12/10/2026).
         theme = m_atelier.creer_theme("Groupe de test", "", projet=projet["id"], auteur="Tests")
-        verifie(m_projets.role_effectif(projet["id"], theme["id"], membre["id"]) == "membre",
-                "sans rôle de groupe, le rôle du projet s'applique")
+        verifie(m_projets.role_effectif(projet["id"], theme["id"], membre["id"]) == "visiteur",
+                "sans rôle de groupe, un simple membre du projet est VISITEUR : appartenir au "
+                "projet ne donne pas le droit d'écrire dans ses groupes")
         m_projets.definir_membre_theme(theme["id"], membre["id"], "visiteur")
         verifie(m_projets.role_effectif(projet["id"], theme["id"], membre["id"]) == "visiteur",
                 "un rôle donné dans le groupe l'emporte sur celui du projet")

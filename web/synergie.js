@@ -2188,22 +2188,39 @@
     });
   }
 
+  /** Le rôle qu'un membre du PROJET a dans ses groupes quand rien ne lui y est donné — même
+      règle que le serveur (12/10/2026) : l'administrateur du projet y est administrateur ;
+      un simple membre du projet y est VISITEUR ; un visiteur du projet y reste visiteur. */
+  function roleParDefautAuGroupe(roleProjet) {
+    if (roleProjet === 'admin') return 'admin';
+    if (roleProjet === 'membre') return 'visiteur';
+    return roleProjet || 'visiteur';
+  }
+
   /** Qui participe vraiment à ce groupe : les membres du PROJET, avec le rôle donné DANS le
       groupe quand il y en a un (il l'emporte), plus ceux qui n'ont été ajoutés qu'au groupe.
-      L'administrateur du projet reste administrateur partout (même règle que le serveur). */
+      L'administrateur du projet reste administrateur partout (même règle que le serveur) ;
+      un simple membre du projet est VISITEUR ici tant qu'aucun rôle ne lui y a été donné. */
   function personnesDuGroupe() {
     const index = new Map();
-    (membresProjet || []).forEach((membre) => index.set(membre.compte, { ...membre }));
+    (membresProjet || []).forEach((membre) => {
+      index.set(membre.compte, { ...membre, role_projet: membre.role, role_groupe: null });
+    });
     (membresTheme || []).forEach((membre) => {
-      const projetDuMembre = index.get(membre.compte) || {};
-      index.set(membre.compte,
-        { ...membre, role_projet: projetDuMembre.role || null,
-          email: projetDuMembre.email || membre.email || '' });
+      const duProjet = index.get(membre.compte) || {};
+      index.set(membre.compte, {
+        ...membre,
+        role_projet: duProjet.role_projet || duProjet.role || null,
+        role_groupe: membre.role,
+        email: duProjet.email || membre.email || ''
+      });
     });
     const ordre = { admin: 0, membre: 1, visiteur: 2 };
     return [...index.values()].map((personne) => ({
       ...personne,
-      role: personne.role_projet === 'admin' ? 'admin' : (personne.role || 'membre'),
+      role: personne.role_projet === 'admin'
+        ? 'admin'
+        : (personne.role_groupe || roleParDefautAuGroupe(personne.role_projet)),
     })).sort((a, b) => (ordre[a.role] ?? 3) - (ordre[b.role] ?? 3)
       || (a.prenom || '').localeCompare(b.prenom || ''));
   }
@@ -2257,8 +2274,12 @@
     tete.append(element('span', { classe: 'membre-chevron', texte: '⋯', attrs: { 'aria-hidden': 'true' } }));
 
     // --- ce que l'on peut faire : le rôle, puis le retrait ---------------------------------
+    /* SEUL L'ADMINISTRATEUR DU PROJET NOMME UN ADMINISTRATEUR DE GROUPE (demande du
+       12/10/2026). L'administrateur d'un groupe gère ses participants (membre participant,
+       visiteur, retrait), mais le choix « Administrateur » ne lui est pas proposé. */
+    const nommeAdmin = portee === 'projet' || roleProjet === 'admin';
     const choix = element('div', { classe: 'roles-choix' });
-    roles.forEach((r) => {
+    roles.filter((r) => r.cle !== 'admin' || nommeAdmin).forEach((r) => {
       const pastille = element('button', { classe: 'role-choix' + (r.cle === membre.role ? ' actif' : ''),
         texte: r.libelle, attrs: { type: 'button', title: r.description || '' } });
       pastille.addEventListener('click', async () => {
@@ -2284,6 +2305,11 @@
     const actions = element('div', { classe: 'membre-actions cache' },
       element('span', { classe: 'aide', texte: 'Rôle ' + quoi }),
       choix, retirer);
+    if (portee === 'theme' && !nommeAdmin) {
+      // Dire POURQUOI le choix n'est pas là : sans cela, on croit à un oubli.
+      actions.append(element('p', { classe: 'aide fin',
+        texte: "Seul l'administrateur du projet nomme un administrateur de groupe." }));
+    }
 
     tete.addEventListener('click', () => {
       const ouvert = !actions.classList.contains('cache');
@@ -2596,7 +2622,9 @@
     const menu = $('#membre-theme-role');
     if (menu.options.length !== roles.length) {
       menu.innerHTML = '';
-      roles.forEach((r) => {
+      // « Administrateur » n'est proposé qu'à l'administrateur du projet (12/10/2026) :
+      // nommer un administrateur de groupe lui revient.
+      roles.filter((r) => r.cle !== 'admin' || roleProjet === 'admin').forEach((r) => {
         const option = element('option', { texte: r.libelle,
           attrs: { value: r.cle, title: r.description } });
         if (r.cle === 'membre') option.selected = true;
@@ -2605,7 +2633,8 @@
     }
     if (!membresTheme.length) {
       zone.append(element('p', { classe: 'aide', texte:
-        'Personne n\'a de rôle particulier ici : tous les membres du projet participent.' }));
+        'Personne n\'a de rôle particulier ici : les membres du projet y sont visiteurs. '
+        + 'Donnez un rôle à ceux qui doivent y écrire.' }));
     } else {
       membresTheme.forEach((membre) => {
         zone.append(ligneMembre(membre, { portee: 'theme', identifiant: theme.id, administre }));

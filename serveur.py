@@ -358,14 +358,21 @@ def api_theme_membres(identifiant):
         return jsonify({"membres": m_projets.membres_du_theme(identifiant)})
     theme = _theme(identifiant)
     projet = theme.get("projet") or ""
+    acteur = _compte(requis=True)
     if not m_projets.peut_administrer(
-            m_projets.role_effectif(projet, identifiant, (_compte(requis=True) or {})["id"])):
+            m_projets.role_effectif(projet, identifiant, acteur["id"])):
         abort(403, description="Seul un administrateur du groupe peut inviter.")
     corps = request.get_json(silent=True) or {}
     compte = _compte_a_ajouter(corps)
     role = corps.get("role") or "membre"
     if role not in m_projets.ROLES:
         return jsonify({"erreur": "Rôle inconnu."}), 400
+    # SEUL L'ADMINISTRATEUR DU PROJET NOMME UN ADMINISTRATEUR DE GROUPE (demande de
+    # l'utilisateur, 12/10/2026). L'administrateur du groupe, lui, gère les participants.
+    if role == "admin" and not m_projets.peut_nommer_admin_de_groupe(
+            m_projets.role_du_projet(projet, acteur["id"])):
+        abort(403, description="Seul l'administrateur du projet peut nommer un "
+                               "administrateur de groupe.")
     membre = m_projets.definir_membre_theme(identifiant, compte["id"], role,
                                             bool(corps.get("notifier")), ajoute_par=_qui())
     _prevenir(identifiant, f"{compte['prenom']} est maintenant dans ce groupe "
@@ -377,8 +384,9 @@ def api_theme_membres(identifiant):
 def api_theme_membre_un(identifiant, membre):
     theme = _theme(identifiant)
     projet = theme.get("projet") or ""
+    acteur = _compte(requis=True)
     if not m_projets.peut_administrer(
-            m_projets.role_effectif(projet, identifiant, (_compte(requis=True) or {})["id"])):
+            m_projets.role_effectif(projet, identifiant, acteur["id"])):
         abort(403, description="Seul un administrateur du groupe peut modifier les rôles.")
     if request.method == "DELETE":
         m_projets.retirer_membre_theme(identifiant, membre)
@@ -388,6 +396,18 @@ def api_theme_membre_un(identifiant, membre):
     role = corps.get("role")
     if role is not None and role not in m_projets.ROLES:
         return jsonify({"erreur": "Rôle inconnu."}), 400
+    # DONNER OU RETIRER L'ADMINISTRATION D'UN GROUPE revient à l'administrateur du PROJET
+    # (demande de l'utilisateur, 12/10/2026 : « seul l'administrateur d'un projet peut nommer
+    # un administrateur de groupe »). Un administrateur de groupe ne peut donc ni nommer un
+    # autre administrateur, ni retirer l'administration à quelqu'un.
+    nomme = m_projets.peut_nommer_admin_de_groupe(
+        m_projets.role_du_projet(projet, acteur["id"]))
+    deja_admin = next((m["role"] == "admin"
+                       for m in m_projets.membres_du_theme(identifiant)
+                       if m["compte"] == membre), False)
+    if not nomme and ((role == "admin" and not deja_admin) or (deja_admin and role != "admin")):
+        abort(403, description="Seul l'administrateur du projet peut nommer — ou retirer — "
+                               "un administrateur de groupe.")
     notifier = corps.get("notifier")
     membre_pose = m_projets.definir_membre_theme(
         identifiant, membre, role, None if notifier is None else bool(notifier),

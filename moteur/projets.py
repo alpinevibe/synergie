@@ -293,6 +293,11 @@ def role_effectif(projet: str, theme: str | None, compte: str | None) -> str | N
     le groupe. Sans cette garantie, se donner un rôle de simple membre dans un groupe (par
     exemple en cochant tout le monde d'un coup) retirait l'administration : le défaut a été
     constaté le 09/10/2026, l'application répondant alors « interdit » pour le reste.
+
+    Règle du 12/10/2026 (demande de l'utilisateur : « les membres d'un projet en qualité de
+    membre sont d'emblée visiteurs ») : un simple MEMBRE du projet est **visiteur** dans les
+    groupes — appartenir au projet ne donne pas le droit d'y écrire. Il faut y être NOMMÉ
+    (membre participant ou administrateur du groupe) pour y écrire.
     """
     if not compte:
         return None
@@ -305,7 +310,30 @@ def role_effectif(projet: str, theme: str | None, compte: str | None) -> str | N
                                  (theme, compte)).fetchone()
         if ligne:
             return ligne["role"]
-    return role
+    return role_par_defaut_du_groupe(role)
+
+
+def role_par_defaut_du_groupe(role_projet: str | None) -> str | None:
+    """Le rôle qu'un membre du PROJET a dans ses groupes quand rien ne lui y est donné.
+
+    L'administrateur du projet y est administrateur ; un simple membre y est **visiteur**
+    (règle du 12/10/2026) ; un visiteur du projet y reste visiteur.
+    """
+    if role_projet == "admin":
+        return "admin"
+    if role_projet == "membre":
+        return "visiteur"
+    return role_projet
+
+
+def peut_nommer_admin_de_groupe(role_projet: str | None) -> bool:
+    """Seul l'administrateur du PROJET peut nommer un administrateur de groupe (12/10/2026).
+
+    Un administrateur de groupe gère les participants de son groupe (ajouter, retirer,
+    donner « membre participant » ou « visiteur »), mais il ne distribue pas l'administration :
+    la nomination d'un administrateur de groupe reste décidée au niveau du projet.
+    """
+    return role_projet == "admin"
 
 
 def peut_ecrire(role: str | None) -> bool:

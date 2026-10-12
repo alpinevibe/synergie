@@ -353,6 +353,36 @@ Vérifications : `python3 tests/tester_gestion_projet_groupe.py` → **28 contr�
 
 ---
 
+## Les rôles dans les groupes : visiteur par défaut, et qui nomme les administrateurs (12 octobre 2026)
+
+Deux règles demandées par l'utilisateur : « les membres d'un projet en qualité de membre sont
+d'emblée visiteurs » et « seul l'administrateur d'un projet peut nommer un administrateur de
+groupe ».
+
+**1. Un membre du projet est VISITEUR dans ses groupes.** Appartenir au projet ne donne plus le
+droit d'écrire dans ses groupes : il faut y être **nommé** (membre participant ou
+administrateur du groupe). Concrètement, `role_effectif` applique désormais
+`role_par_defaut_du_groupe` — l'administrateur du projet y est administrateur partout (règle
+conservée du 09/10/2026), un simple membre du projet y est **visiteur**, un visiteur du projet
+y reste visiteur. La pastille de statut affichée sur la page du groupe suit la même règle :
+« Visiteur » tant qu'aucun rôle n'a été donné dans ce groupe.
+
+**2. Seul l'administrateur du PROJET nomme un administrateur de groupe.** Un administrateur de
+groupe continue de gérer ses participants (ajouter, retirer, donner « membre participant » ou
+« visiteur »), mais il ne nomme pas d'administrateur, ne retire pas l'administration, et le
+choix « Administrateur » ne lui est pas proposé (un mot d'explication le dit à l'écran). Côté
+serveur, la règle est portée par `peut_nommer_admin_de_groupe` : toute nomination ou retrait de
+l'administration d'un groupe revient au projet (`403` explicite sinon).
+
+Vérifications : `python3 tests/tester_roles_groupes.py` → **18/18** (moteur, API et écran :
+un membre du projet ne peut pas écrire dans un groupe puis le peut une fois nommé ; un
+administrateur de groupe ne peut pas nommer d'administrateur, l'administrateur du projet le
+peut ; la pastille annonce bien « Visiteur ») ; `tester_synergie.py` 96/96 ;
+`tester_gestion_projet_groupe.py` 28/28 ; `tester_membres_a_la_volee.py` 10/10 ;
+`tester_membres_affichage.py` 10/10 ; `tester_notifications.py` 20/20 ;
+`tester_tableau_blanc.py` 13/13 ; `tester_fenetres.py` 10/10 ;
+`tester_comptes_identifiant.py` 8/8.
+
 ## Le tableau blanc reste un tableau blanc (12 octobre 2026)
 
 Demande de l'utilisateur : « je veux que tu gardes le concept de tableau blanc pour les

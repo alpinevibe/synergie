@@ -243,7 +243,7 @@ def principal() -> int:
             statuts_groupe = {x["nom"]: x["statut"] for x in (apercu or {}).get("personnes", [])}
             verifie("le statut est indiqué dans le groupe aussi",
                     statuts_groupe.get("Essai gestion") == "Admin"
-                    and statuts_groupe.get("Camille Martin") == "Membre"
+                    and statuts_groupe.get("Camille Martin") == "Visiteur"
                     and statuts_groupe.get("Bruno Petit") == "Visiteur", statuts_groupe)
             page.screenshot(path=os.path.join(CAPTURES, "synergie-accueil-groupe-membres.png"),
                             full_page=True)

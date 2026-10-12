@@ -520,6 +520,10 @@ Vérifications en navigateur (Playwright, sur le site en ligne, avec deux partic
 
 ## Journal
 
+- **12/10/2026** — **Les rôles dans les groupes** : un simple membre du projet y est désormais
+  **visiteur** (appartenir au projet ne donne pas le droit d'y écrire, il faut y être nommé) ;
+  seul l'**administrateur du projet** peut nommer — ou retirer — un administrateur de groupe.
+
 - **12/10/2026** — **Le tableau blanc reste un tableau blanc** : sur téléphone, l'application
   remplaçait le tableau par une liste de post-it empilés. Le tableau s'affiche désormais
   d'emblée, partout ; la liste reste offerte par le bouton « Revenir à la liste », et le choix
