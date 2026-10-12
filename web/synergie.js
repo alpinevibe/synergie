@@ -1169,27 +1169,99 @@
     });
   }
 
-  async function deposerDocuments() {
+  /** Dépose des documents dans le GROUPE. Plusieurs fichiers d'un coup — choisis au
+      sélecteur ou DÉPOSÉS à la souris (voir `brancherDepot`) — et l'on CONTINUE même si l'un
+      d'eux est refusé : on dit alors lesquels (demande de l'utilisateur, 12/10/2026). */
+  async function deposerDocuments(fichiers = null) {
     const champ = $('#fichier-document');
-    if (!champ.files || !champ.files.length) { $('#etat-depot').textContent = 'Choisissez un fichier.'; return; }
     const etat = $('#etat-depot');
+    const liste = [...(fichiers && fichiers.length ? fichiers : (champ.files || []))];
+    if (!liste.length) {
+      etat.textContent = 'Choisissez un fichier, ou glissez-le ici.';
+      return;
+    }
+    const note = $('#note-document').value;
+    const refuses = [];
     let envoyes = 0;
-    for (const fichier of champ.files) {
+    for (const [rang, fichier] of liste.entries()) {
       const donnees = new FormData();
       donnees.append('fichier', fichier);
-      donnees.append('note', $('#note-document').value);
+      donnees.append('note', note);
       donnees.append('auteur', monNom() || 'Anonyme');
-      etat.textContent = `Envoi de ${fichier.name}…`;
+      etat.textContent = liste.length > 1
+        ? `Envoi de ${fichier.name} (${rang + 1}/${liste.length})…`
+        : `Envoi de ${fichier.name}…`;
       try {
         await appel(`/api/themes/${theme.id}/documents`, { methode: 'POST', donnees });
         envoyes += 1;
       } catch (erreur) {
-        etat.textContent = 'Envoi impossible : ' + erreur.message;
-        return;
+        refuses.push(`${fichier.name} (${erreur.message})`);   // on CONTINUE les autres
       }
     }
-    champ.value = ''; $('#note-document').value = '';
-    etat.textContent = envoyes > 1 ? `${envoyes} documents déposés.` : 'Document déposé.';
+    if (champ) champ.value = '';
+    $('#note-document').value = '';
+    etat.textContent = bilanDepot(envoyes, refuses);
+  }
+
+  /** Le bilan d'un dépôt : ce qui est passé, et ce qui a été refusé (avec la raison). */
+  function bilanDepot(envoyes, refuses) {
+    const morceaux = [];
+    if (envoyes) {
+      morceaux.push(envoyes > 1 ? `${envoyes} documents déposés.` : 'Document déposé.');
+    }
+    if (refuses.length) {
+      morceaux.push((refuses.length > 1 ? 'Refusés : ' : 'Refusé : ') + refuses.join(' · '));
+    }
+    return morceaux.join(' ') || 'Aucun document déposé.';
+  }
+
+  /** Puis-je écrire dans le groupe ouvert ? Même règle que le serveur (12/10/2026) :
+      l'administrateur du projet y est administrateur ; un simple membre du projet y est
+      visiteur tant qu'il n'y a pas été nommé. */
+  function peutEcrireIci() {
+    const role = roleProjet === 'admin' ? 'admin'
+      : (roleTheme || roleParDefautAuGroupe(roleProjet));
+    return role === 'admin' || role === 'membre';
+  }
+
+  /** Puis-je écrire dans le PROJET lui-même ? */
+  function peutEcrireProjet() {
+    return roleProjet === 'admin' || roleProjet === 'membre';
+  }
+
+  /* DÉPÔT PAR GLISSER-DÉPOSER (demande de l'utilisateur, 12/10/2026 : « permettre l'ajout de
+     plusieurs documents en même temps et permettre le drag and drop »). On lâche des fichiers
+     venus du bureau, d'un dossier ou d'une autre fenêtre — plusieurs à la fois, et même pris
+     dans des dossiers différents, ce que le sélecteur de fichiers ne permet pas. La zone
+     s'allume quand un fichier la survole, et le navigateur n'ouvre JAMAIS le fichier lâché. */
+  function brancherDepot(zone, { deposer, interdit = () => null }) {
+    if (!zone) return;
+    let survols = 0;
+    const allumer = (oui) => zone.classList.toggle('depot-actif', oui);
+    zone.addEventListener('dragenter', (evenement) => {
+      evenement.preventDefault();
+      survols += 1;
+      allumer(true);
+    });
+    zone.addEventListener('dragover', (evenement) => {
+      evenement.preventDefault();             // sinon le navigateur ouvre le fichier lâché
+      if (evenement.dataTransfer) evenement.dataTransfer.dropEffect = 'copy';
+      allumer(true);
+    });
+    zone.addEventListener('dragleave', () => {
+      survols = Math.max(0, survols - 1);
+      if (!survols) allumer(false);
+    });
+    zone.addEventListener('drop', async (evenement) => {
+      evenement.preventDefault();
+      survols = 0;
+      allumer(false);
+      const refus = interdit();
+      if (refus) { toast(refus); return; }
+      const fichiers = [...((evenement.dataTransfer && evenement.dataTransfer.files) || [])];
+      if (!fichiers.length) return;
+      await deposer(fichiers);
+    });
   }
 
   // Les actions du journal, dites en français.
@@ -1976,23 +2048,38 @@
     toast('Cadre de travail enregistré.');
   }
 
-  async function deposerComptesRendus() {
+  /** Dépose des comptes rendus dans le PROJET. Plusieurs fichiers d'un coup, choisis au
+      sélecteur ou DÉPOSÉS à la souris, et l'on continue même si l'un d'eux est refusé. */
+  async function deposerComptesRendus(fichiers = null) {
     const champ = $('#cadre-fichier');
-    if (!champ.files || !champ.files.length) {
-      $('#cadre-depot-etat').textContent = 'Choisissez un fichier.';
+    const etat = $('#cadre-depot-etat');
+    const liste = [...(fichiers && fichiers.length ? fichiers : (champ.files || []))];
+    if (!liste.length) {
+      etat.textContent = 'Choisissez un fichier, ou glissez-le ici.';
       return;
     }
-    for (const fichier of champ.files) {
+    const note = $('#cadre-note').value;
+    const refuses = [];
+    let envoyes = 0;
+    for (const [rang, fichier] of liste.entries()) {
       const donnees = new FormData();
       donnees.append('fichier', fichier);
-      donnees.append('note', $('#cadre-note').value);
+      donnees.append('note', note);
       donnees.append('auteur', monNom() || 'Anonyme');
-      $('#cadre-depot-etat').textContent = 'Envoi de ' + fichier.name + '…';
-      await appel('/api/projets/' + projet.id + '/documents', { methode: 'POST', donnees });
+      etat.textContent = liste.length > 1
+        ? 'Envoi de ' + fichier.name + ' (' + (rang + 1) + '/' + liste.length + ')…'
+        : 'Envoi de ' + fichier.name + '…';
+      try {
+        await appel('/api/projets/' + projet.id + '/documents', { methode: 'POST', donnees });
+        envoyes += 1;
+      } catch (erreur) {
+        refuses.push(fichier.name + ' (' + erreur.message + ')');
+      }
     }
-    champ.value = ''; $('#cadre-note').value = '';
-    $('#cadre-depot-etat').textContent = 'Document(s) déposé(s).';
-    chargerCadre();
+    if (champ) champ.value = '';
+    $('#cadre-note').value = '';
+    etat.textContent = bilanDepot(envoyes, refuses);
+    await chargerCadre();
   }
 
   // ================================================================ DISCUSSIONS
@@ -2866,7 +2953,14 @@
     $('#cadre-modifier').addEventListener('click', () => afficherCadre({ enEdition: true }));
     $('#cadre-annuler').addEventListener('click', () => afficherCadre());
     $('#cadre-enregistrer').addEventListener('click', enregistrerCadre);
-    $('#cadre-deposer').addEventListener('click', deposerComptesRendus);
+    $('#cadre-deposer').addEventListener('click', () => deposerComptesRendus());
+    // … ou LÂCHER les fichiers sur « Comptes rendus et documents » du projet.
+    brancherDepot($('#cadre-documents') ? $('#cadre-documents').closest('details') : null, {
+      deposer: (fichiers) => deposerComptesRendus(fichiers),
+      interdit: () => (!projet || !peutEcrireProjet())
+        ? 'Votre rôle dans ce projet ne permet pas de déposer un document.'
+        : null
+    });
     $('#chat-general-form').addEventListener('submit', (evenement) => {
       evenement.preventDefault();
       envoyerChat('', $('#chat-general-texte'), chargerChatGeneral);
@@ -3032,7 +3126,14 @@
     });
 
     // --- documents et décisions
-    $('#btn-deposer').addEventListener('click', deposerDocuments);
+    $('#btn-deposer').addEventListener('click', () => deposerDocuments());
+    // On peut aussi LÂCHER les fichiers sur l'onglet Documents (demande du 12/10/2026).
+    brancherDepot($('#onglet-documents'), {
+      deposer: (fichiers) => deposerDocuments(fichiers),
+      interdit: () => (theme && !peutEcrireIci())
+        ? 'Votre rôle dans ce groupe ne permet pas de déposer un document.'
+        : null
+    });
     $('#btn-nouveau-vote').addEventListener('click', () =>
       ouvrirFenetreConsultation(null, 'vote'));
     $('#btn-nouveau-sondage').addEventListener('click', () =>

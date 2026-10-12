@@ -353,6 +353,32 @@ Vérifications : `python3 tests/tester_gestion_projet_groupe.py` → **28 contr�
 
 ---
 
+## Plusieurs documents d'un coup, et par glisser-déposer (12 octobre 2026)
+
+Demande de l'utilisateur : « permettre l'ajout de plusieurs documents en même temps et
+permettre le drag and drop ».
+
+- **Glisser-déposer** : on lâche des fichiers sur l'onglet **Documents** d'un groupe, ou sur
+  **« Comptes rendus et documents »** d'un projet. Plusieurs à la fois, **et même venus de
+  dossiers différents** — ce que le sélecteur de fichiers ne permet pas. La zone **s'allume**
+  (encadré bleu pointillé) quand un fichier la survole, et le navigateur n'ouvre jamais le
+  fichier lâché.
+- **Plusieurs documents en un envoi** : le sélecteur accepte plusieurs fichiers (déjà le cas) et
+  l'envoi les passe **un par un**, avec l'avancement (« Envoi de X (2/5)… »).
+- **Un refus n'arrête plus les autres** : si un fichier est refusé (trop volumineux, coupure),
+  les suivants partent quand même et le bilan le dit :
+  « 2 documents déposés. Refusé : melange-2.txt (refus simulé) ».
+- Le dépôt est **réservé à qui peut écrire** : un visiteur qui lâche un fichier reçoit un message
+  et rien n'est enregistré (le serveur refuserait de toute façon).
+
+Vérifications : `python3 tests/tester_documents_depot.py` → **8/8** dans un vrai navigateur
+(trois fichiers d'un coup ; refus simulé du deuxième sans bloquer les autres ; zone qui s'allume
+et fichiers lâchés déposés, dans le groupe **et** dans le projet ; visiteur refusé) ;
+`tester_synergie.py` 96/96 ; `tester_fenetres.py` 10/10 ; `tester_gestion_projet_groupe.py` 28/28 ;
+`tester_roles_groupes.py` 18/18 ; `tester_tableau_blanc.py` 13/13 ;
+`tester_notifications.py` 20/20 ; `tester_chat_a_droite.py` 9/9 ;
+`tester_comptes_identifiant.py` 8/8.
+
 ## Les rôles dans les groupes : visiteur par défaut, et qui nomme les administrateurs (12 octobre 2026)
 
 Deux règles demandées par l'utilisateur : « les membres d'un projet en qualité de membre sont

@@ -206,6 +206,11 @@ textarea { margin-top: 8px; resize: vertical; }
 
 /* ---- documents ---- */
 .ligne-depot { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+
+/* ---- dépôt de documents par GLISSER-DÉPOSER (12/10/2026) ----
+   La zone s'allume quand un fichier la survole : on voit OÙ il va atterrir. */
+.depot-actif { outline: 3px dashed var(--accent); outline-offset: 5px;
+  background: #eef3ff; border-radius: var(--rayon); }
 .ligne-depot .recherche { flex: 1; min-width: 200px; }
 .liste-documents .document, .liste-decisions .decision {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }

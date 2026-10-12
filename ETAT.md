@@ -520,6 +520,10 @@ Vérifications en navigateur (Playwright, sur le site en ligne, avec deux partic
 
 ## Journal
 
+- **12/10/2026** — **Dépôt de documents** : plusieurs fichiers d'un coup, et par
+  **glisser-déposer** (dans un groupe comme dans le projet), zone qui s'allume au survol ;
+  un fichier refusé n'empêche plus les autres de partir.
+
 - **12/10/2026** — **Les rôles dans les groupes** : un simple membre du projet y est désormais
   **visiteur** (appartenir au projet ne donne pas le droit d'y écrire, il faut y être nommé) ;
   seul l'**administrateur du projet** peut nommer — ou retirer — un administrateur de groupe.
