@@ -861,3 +861,55 @@ body[data-vue="mobile"] .onglets::-webkit-scrollbar { display: none; }
 body[data-vue="mobile"] .barre-tableau { gap: 6px; }
 body[data-vue="mobile"] .entete-theme { gap: 8px; }
 body[data-vue="mobile"] .entete-theme button { min-height: 40px; }
+
+/* ==================================================================================
+   GESTION DU PROJET ET DES GROUPES, ET LES PERSONNES VISIBLES (12/10/2026)
+   Demande de l'utilisateur : un bouton « Gestion du projet » (administrateur du projet)
+   et un bouton « Gestion du groupe » (administrateur du groupe) pour régler le nom, la
+   description et les membres ; et, sur la page d'accueil du projet comme dans chaque
+   groupe, la liste des personnes qui en font partie avec leur statut.
+   ================================================================================== */
+
+/* Un défaut corrigé : dans la fenêtre, la liste des membres COMPRIMAIT ses lignes (le
+   conteneur avait une hauteur maximale) et les noms se chevauchaient. Chaque personne
+   garde maintenant sa hauteur, et c'est la liste qui défile. */
+.liste-membres .membre { flex: 0 0 auto; }
+
+/* Les blocs de gestion : le nom, la description, puis les personnes d'un seul endroit. */
+.sous-carte { background: #f7f9fd; border: 1px solid var(--bord-clair); border-radius: 12px;
+  padding: 14px 16px; margin: 6px 0 14px; box-shadow: none; }
+.sous-carte h3, .sous-carte h4 { margin: 0 0 8px; font-size: 15.5px; }
+.champs-gestion { display: grid; gap: 10px; }
+.champs-gestion .etiquette-champ { display: block; font-size: 13px; color: var(--doux);
+  font-weight: 600; margin: 0; }
+.champs-gestion .etiquette-champ input { width: 100%; margin: 4px 0 0; padding: 10px 12px;
+  border: 1px solid var(--bord); border-radius: 10px; font-size: 15px; text-align: left;
+  font-family: inherit; }
+.sous-carte .barre-boutons { margin-top: 12px; }
+.sous-carte .barre-boutons button { width: auto; }
+
+.titre-liste-membres { display: flex; align-items: center; gap: 8px; margin: 16px 0 6px;
+  font-size: 16px; }
+.compteur-membres { font-size: 12.5px; font-weight: 700; color: var(--doux);
+  background: #eef1f6; border-radius: 999px; padding: 2px 9px; }
+.compteur-membres:empty { display: none; }
+
+/* Les personnes du projet et du groupe : visibles d'emblée, avec leur statut. */
+.panneau-membres .apercu-membres { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.apercu-membres .personne { display: flex; align-items: center; gap: 9px; background: #fff;
+  border: 1px solid var(--bord); border-radius: 999px; padding: 5px 12px 5px 5px;
+  min-width: 0; max-width: 100%; }
+.apercu-membres .personne .pastille-membre { width: 32px; height: 32px; font-size: 13px; }
+.apercu-membres .personne .nom-personne { font-size: 13.5px; font-weight: 600;
+  color: var(--encre); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apercu-membres .personne .statut, .statut { font-size: 11.5px; font-weight: 700;
+  border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+.statut-admin { background: #efe7fd; color: #5b2ea8; }
+.statut-membre { background: #e8f2ff; color: #1c4b8f; }
+.statut-visiteur { background: #eef1f6; color: #556173; }
+.apercu-membres .vide { font-size: 13px; color: var(--doux); }
+
+/* Téléphone : les personnes se lisent l'une sous l'autre, jamais tassées. */
+body[data-vue="mobile"] .panneau-membres .apercu-membres { gap: 6px; }
+body[data-vue="mobile"] .apercu-membres .personne { width: 100%; border-radius: 12px; }
+body[data-vue="mobile"] .apercu-membres .personne .nom-personne { flex: 1 1 auto; }

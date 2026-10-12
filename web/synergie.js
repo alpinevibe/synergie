@@ -148,7 +148,7 @@
     $('#description-projet').textContent = projet.description || '';
     $('#mon-role-projet').textContent = libelleRole(roleProjet);
     const administre = roleProjet === 'admin';
-    $('#btn-renommer-projet').classList.toggle('cache', !administre);
+    majBoutonsGestion();
     $('#btn-nouveau-theme').classList.toggle('cache', !administre);
     $('#nouveau-theme-bloc').classList.add('cache');
     afficherThemes();
@@ -305,7 +305,6 @@
     $('#titre-theme').textContent = theme.titre || '';
     $('#description-theme').textContent = theme.description || '';
     $('#mon-role-theme').textContent = libelleRole(roleTheme || roleProjet);
-    $('#btn-membres-theme').classList.toggle('cache', !estAdministrateurTheme());
     $('#zone-membres-theme').classList.add('cache');
     afficherParticipants();
     dessinerNotes();
@@ -314,7 +313,7 @@
     afficherJournal();
     afficherMembresTheme();
     $('#btn-supprimer-theme').classList.toggle('cache', !estAdministrateurTheme());
-    $('#btn-renommer-theme').classList.toggle('cache', !estAdministrateurTheme());
+    majBoutonsGestion();
     construireOnglets();
     chargerChatTheme();
     brancherFlux();
@@ -412,19 +411,6 @@
     // revient par le bouton « ← Le projet »).
     const nav = $('#nav-mobile');
     if (nav) nav.classList.toggle('cache', !estMobile() || nom !== 'projet');
-  }
-
-  async function enregistrerTheme() {
-    if (!theme || !estAdministrateurTheme()) return;
-    const titre = prompt('Titre du groupe', theme.titre);
-    if (!titre || !titre.trim()) return;
-    const description = prompt('En une phrase (facultatif)', theme.description || '');
-    await appel('/api/themes/' + theme.id, { methode: 'PUT',
-      corps: { titre: titre.trim(), description: (description || '').trim() } });
-    theme.titre = titre.trim();
-    theme.description = (description || '').trim();
-    $('#titre-theme').textContent = theme.titre;
-    $('#description-theme').textContent = theme.description;
   }
 
   /** Après un changement de prénom : journal et « ai-je déjà voté » sont rafraîchis. */
@@ -2122,6 +2108,72 @@
       attrs: { 'aria-hidden': 'true' } });
   }
 
+  /** La pastille de statut : « Admin », « Membre » ou « Visiteur » (demande du 12/10/2026). */
+  const STATUTS_COURTS = { admin: 'Admin', membre: 'Membre', visiteur: 'Visiteur' };
+
+  function pastilleStatut(role) {
+    const cle = role === 'admin' || role === 'visiteur' ? role : 'membre';
+    return element('span', { classe: 'statut statut-' + cle,
+      texte: STATUTS_COURTS[cle] });
+  }
+
+  /** Les personnes d'un projet ou d'un groupe, VISIBLES d'emblée sur la page — leur pastille,
+      leur prénom et leur statut (demande de l'utilisateur, 12/10/2026). */
+  function afficherApercuMembres(selecteur, personnes) {
+    const zone = $(selecteur);
+    if (!zone) return;
+    zone.innerHTML = '';
+    if (!personnes || !personnes.length) {
+      zone.append(element('p', { classe: 'vide', texte: 'Personne pour le moment.' }));
+      return;
+    }
+    personnes.forEach((personne) => {
+      zone.append(element('span', { classe: 'personne',
+        attrs: { title: (personne.prenom || '') + (personne.email ? ' · ' + personne.email : '') } },
+        pastilleMembre(personne.prenom),
+        element('span', { classe: 'nom-personne', texte: personne.prenom || '(sans nom)' }),
+        pastilleStatut(personne.role)));
+    });
+  }
+
+  /** Qui participe vraiment à ce groupe : les membres du PROJET, avec le rôle donné DANS le
+      groupe quand il y en a un (il l'emporte), plus ceux qui n'ont été ajoutés qu'au groupe.
+      L'administrateur du projet reste administrateur partout (même règle que le serveur). */
+  function personnesDuGroupe() {
+    const index = new Map();
+    (membresProjet || []).forEach((membre) => index.set(membre.compte, { ...membre }));
+    (membresTheme || []).forEach((membre) => {
+      const projetDuMembre = index.get(membre.compte) || {};
+      index.set(membre.compte,
+        { ...membre, role_projet: projetDuMembre.role || null,
+          email: projetDuMembre.email || membre.email || '' });
+    });
+    const ordre = { admin: 0, membre: 1, visiteur: 2 };
+    return [...index.values()].map((personne) => ({
+      ...personne,
+      role: personne.role_projet === 'admin' ? 'admin' : (personne.role || 'membre'),
+    })).sort((a, b) => (ordre[a.role] ?? 3) - (ordre[b.role] ?? 3)
+      || (a.prenom || '').localeCompare(b.prenom || ''));
+  }
+
+  /** Le bouton « Gestion du projet » ne se montre qu'à l'administrateur ; les autres voient
+      simplement « Membres » (la liste, en lecture). */
+  function majBoutonsGestion() {
+    const administre = roleProjet === 'admin';
+    const haut = $('#btn-membres');
+    if (haut) {
+      haut.textContent = administre ? 'Gestion du projet' : 'Membres';
+      haut.title = administre ? 'Gérer le projet : nom, description et membres'
+                              : 'Les personnes de ce projet';
+    }
+    const mobile = $('#btn-membres-mobile');
+    if (mobile) mobile.textContent = administre ? 'Gestion du projet' : 'Membres du projet';
+    const titre = $('#titre-membres-texte');
+    if (titre) titre.textContent = administre ? 'Gestion du projet' : 'Membres du projet';
+    $('#btn-gestion-projet').classList.toggle('cache', !administre);
+    $('#btn-gestion-groupe').classList.toggle('cache', !estAdministrateurTheme());
+  }
+
   /** Un membre, à la manière d'un groupe de discussion : sa pastille, son nom, son rôle — et
       un appui sur la ligne ouvre de quoi CHANGER SON RÔLE ou LE RETIRER.
 
@@ -2209,6 +2261,12 @@
     zone.innerHTML = '';
     const administre = roleProjet === 'admin';
     $('#membres-inviter').classList.toggle('cache', !administre);
+    $('#gestion-projet').classList.toggle('cache', !administre);
+    const nombre = $('#membres-nombre');
+    if (nombre) {
+      nombre.textContent = membresProjet.length
+        ? membresProjet.length + (membresProjet.length > 1 ? ' personnes' : ' personne') : '';
+    }
     if (!membresProjet.length) {
       zone.append(element('p', { classe: 'vide', texte: 'Personne pour le moment.' }));
     }
@@ -2219,6 +2277,35 @@
       zone.append(ligneMembre(membre, { portee: 'projet', identifiant: projet.id,
                                         administre }));
     });
+    // Les personnes du projet, visibles sur la page d'accueil (demande du 12/10/2026).
+    afficherApercuMembres('#apercu-membres-projet', membresProjet);
+  }
+
+  /** Les trois champs de « Gestion du projet » : le nom, la description et les personnes. */
+  function remplirGestionProjet() {
+    if (!projet) return;
+    $('#gestion-projet-nom').value = projet.nom || '';
+    $('#gestion-projet-description').value = projet.description || '';
+    $('#gestion-projet-etat').textContent = '';
+  }
+
+  /** Enregistrer le nom et la description du projet (administrateur seulement). */
+  async function enregistrerGestionProjet() {
+    if (!projet || roleProjet !== 'admin') return;
+    const nom = ($('#gestion-projet-nom').value || '').trim();
+    const description = ($('#gestion-projet-description').value || '').trim();
+    const etat = $('#gestion-projet-etat');
+    if (!nom) { etat.textContent = 'Le nom du projet est obligatoire.'; return; }
+    try {
+      const modifie = await appel('/api/projets/' + projet.id,
+        { methode: 'PUT', corps: { nom, description } });
+      projet = { ...projet, ...modifie };
+      $('#nom-projet').textContent = projet.nom;
+      $('#description-projet').textContent = projet.description || '';
+      etat.textContent = 'Projet enregistré.';
+      await chargerProjets();
+      toast('Le projet a été mis à jour.');
+    } catch (erreur) { etat.textContent = erreur.message; }
   }
 
   async function ouvrirMembresProjet() {
@@ -2232,6 +2319,7 @@
       menu.append(option);
     });
     if (!membresProjet.length) await rafraichirProjet(); else afficherMembresProjet();
+    remplirGestionProjet();
     $('#vue-membres').classList.remove('cache');
   }
 
@@ -2444,6 +2532,8 @@
     const zone = $('#liste-membres-theme');
     zone.innerHTML = '';
     const administre = estAdministrateurTheme();
+    $('#gestion-groupe').classList.toggle('cache', !administre);
+    if (administre) remplirGestionGroupe();
     if (administre) {
       remplirMembresThemesDisponibles();
       afficherInvitationsTheme();
@@ -2464,11 +2554,39 @@
     if (!membresTheme.length) {
       zone.append(element('p', { classe: 'aide', texte:
         'Personne n\'a de rôle particulier ici : tous les membres du projet participent.' }));
-      return;
+    } else {
+      membresTheme.forEach((membre) => {
+        zone.append(ligneMembre(membre, { portee: 'theme', identifiant: theme.id, administre }));
+      });
     }
-    membresTheme.forEach((membre) => {
-      zone.append(ligneMembre(membre, { portee: 'theme', identifiant: theme.id, administre }));
-    });
+    // Les personnes du groupe, visibles d'emblée sur la page du groupe (demande du 12/10/2026).
+    afficherApercuMembres('#apercu-membres-theme', personnesDuGroupe());
+  }
+
+  /** Les champs de « Gestion du groupe » : le nom et la description. */
+  function remplirGestionGroupe() {
+    if (!theme) return;
+    $('#gestion-groupe-titre').value = theme.titre || '';
+    $('#gestion-groupe-description').value = theme.description || '';
+    $('#gestion-groupe-etat').textContent = '';
+  }
+
+  /** Enregistrer le nom et la description du groupe (administrateur du groupe seulement). */
+  async function enregistrerGestionGroupe() {
+    if (!theme || !estAdministrateurTheme()) return;
+    const titre = ($('#gestion-groupe-titre').value || '').trim();
+    const description = ($('#gestion-groupe-description').value || '').trim();
+    const etat = $('#gestion-groupe-etat');
+    if (!titre) { etat.textContent = 'Le nom du groupe est obligatoire.'; return; }
+    try {
+      const modifie = await appel('/api/themes/' + theme.id,
+        { methode: 'PUT', corps: { titre, description } });
+      theme = { ...theme, ...modifie };
+      $('#titre-theme').textContent = theme.titre;
+      $('#description-theme').textContent = theme.description || '';
+      etat.textContent = 'Groupe enregistré.';
+      toast('Le groupe a été mis à jour.');
+    } catch (erreur) { etat.textContent = erreur.message; }
   }
 
   /** Ajouter au groupe PLUSIEURS membres du projet, avec un rôle propre au groupe. */
@@ -2657,6 +2775,7 @@
     $('#btn-cadre').addEventListener('click', ouvrirCadre);
     $('#btn-cadre-mobile').addEventListener('click', ouvrirCadre);
     $('#btn-membres-mobile').addEventListener('click', ouvrirMembresProjet);
+    $('#btn-gestion-projet').addEventListener('click', ouvrirMembresProjet);
     $('#cadre-fermer').addEventListener('click', () => $('#vue-cadre').classList.add('cache'));
     $('#cadre-modifier').addEventListener('click', () => afficherCadre({ enEdition: true }));
     $('#cadre-annuler').addEventListener('click', () => afficherCadre());
@@ -2698,14 +2817,6 @@
       await chargerProjets();
       ouvrirProjet(cree.id);
     });
-    $('#btn-renommer-projet').addEventListener('click', async () => {
-      const nom = prompt('Nom du projet', projet.nom);
-      if (!nom || !nom.trim()) return;
-      const description = prompt('En une phrase', projet.description || '');
-      await appel('/api/projets/' + projet.id, { methode: 'PUT', corps: {
-        nom: nom.trim(), description: (description || '').trim() } });
-      await ouvrirProjet(projet.id, { pousser: false });
-    });
     $('#btn-nouveau-theme').addEventListener('click', () => {
       $('#nouveau-theme-bloc').classList.remove('cache');
       $('#nouveau-theme-titre').focus();
@@ -2716,11 +2827,19 @@
 
     // --- les membres (projet et groupe)
     $('#btn-membres').addEventListener('click', ouvrirMembresProjet);
+    $('#gestion-projet-enregistrer').addEventListener('click', enregistrerGestionProjet);
+    $('#gestion-projet-nom').addEventListener('keydown', (evenement) => {
+      if (evenement.key === 'Enter') enregistrerGestionProjet();
+    });
     $('#membres-fermer').addEventListener('click', () =>
       $('#vue-membres').classList.add('cache'));
     $('#membre-ajouter').addEventListener('click', inviterAuProjet);
-    $('#btn-membres-theme').addEventListener('click', () =>
+    $('#btn-gestion-groupe').addEventListener('click', () =>
       $('#zone-membres-theme').classList.toggle('cache'));
+    $('#gestion-groupe-enregistrer').addEventListener('click', enregistrerGestionGroupe);
+    $('#gestion-groupe-titre').addEventListener('keydown', (evenement) => {
+      if (evenement.key === 'Enter') enregistrerGestionGroupe();
+    });
     $('#membres-theme-fermer').addEventListener('click', () =>
       $('#zone-membres-theme').classList.add('cache'));
     $('#membre-theme-ajouter').addEventListener('click', inviterAuTheme);
@@ -2728,7 +2847,6 @@
     $('#invitation-theme-creer').addEventListener('click', inviterDansLeGroupe);
 
     $('#btn-retour').addEventListener('click', fermerTheme);
-    $('#btn-renommer-theme').addEventListener('click', enregistrerTheme);
     $('#btn-supprimer-theme').addEventListener('click', async () => {
       if (!confirm('Supprimer ce thème, ses notes, ses documents et ses décisions ?')) return;
       await appel('/api/themes/' + theme.id, { methode: 'DELETE' });

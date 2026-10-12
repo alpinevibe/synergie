@@ -309,6 +309,10 @@ SYNERGIE_BASE=postgresql:///synergie_essai /home/ubuntu/synergie-venv/bin/python
 # bout en bout, dans un vrai navigateur, sur le site public (playwright)
 SYNERGIE_SITE=https://synergie.alpinevibe.fr \
     /home/ubuntu/.venv-scan/bin/python tests/tester_temps_reel.py
+
+# la gestion du projet et des groupes, et les personnes visibles (playwright)
+SYNERGIE_SITE=https://synergie.alpinevibe.fr \
+    /home/ubuntu/.venv-scan/bin/python tests/tester_gestion_projet_groupe.py
 ```
 
 96 contrôles, sans réseau : projets, membres, rôles et droits, notifications, invitations
@@ -316,6 +320,36 @@ par courriel (lien personnel, activation, identifiant unique), votes et sondages
 de tous types, liens personnels, une réponse par personne, dépouillement anonyme), atelier
 (groupes, notes et mise en forme, documents, diffusion temps réel) et équipe (comptes,
 discussions, pages, cadre de travail, alertes).
+
+---
+
+## Gestion du projet et des groupes, et les personnes visibles (12 octobre 2026)
+
+Demande de l'utilisateur : « Créer un bouton “Gestion du projet” (uniquement accessible à
+l'administrateur du projet) pour gérer le nom et la description du projet ainsi que la gestion
+des membres. […] Dans chaque groupe, créer un bouton “Gestion du groupe” […] Rendre visibles
+sur la page d'accueil du projet les personnes qui en font partie. Idem pour les groupes.
+Indiquer leur statut (Admin, membre, visiteur). »
+
+- **« Gestion du projet »** — bouton de l'entête du projet, **réservé à son administrateur**
+  (un simple membre garde le même bouton, libellé « Membres », en lecture seule). La fenêtre
+  porte le **nom** et la **description** du projet (`PUT /api/projets/<id>`) puis **les
+  personnes** : rôles, retrait, ajout par adresse.
+- **« Gestion du groupe »** — même chose au niveau de chaque groupe : nom et description
+  (`PUT /api/themes/<id>`, désormais **réservé aux administrateurs du groupe** : le serveur
+  répondait auparavant à un simple membre) puis les membres.
+- **Le défaut d'affichage est corrigé** : dans la fenêtre, la liste des personnes **comprimait
+  ses lignes** (hauteur maximale + éléments flexibles) et les noms se chevauchaient. Chaque
+  personne garde sa hauteur, la liste défile.
+- **Les personnes sont visibles d'emblée** sur la page d'accueil du projet et sur celle de
+  chaque groupe, avec leur **statut** (Admin, Membre, Visiteur). Dans un groupe, ce sont les
+  participants réels : les membres du projet, avec le rôle du groupe quand il y en a un (il
+  l'emporte).
+- **Les deux boutons « Renommer »** (fenêtres `prompt()` du navigateur) sont remplacés par ces
+  deux écrans de gestion.
+
+Vérifications : `python3 tests/tester_gestion_projet_groupe.py` → **28 contrôles, 0 échec** ;
+`python3 tests/tester_synergie.py` → **96 tests, 0 échec**.
 
 ---
 

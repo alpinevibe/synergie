@@ -201,7 +201,10 @@
       <p id="description-projet" class="aide"></p>
     </div>
     <span id="mon-role-projet" class="etiquette-role"></span>
-    <button id="btn-renommer-projet" class="discret petit cache">Renommer</button>
+    <!-- « Gestion du projet » n'apparaît QUE pour l'administrateur du projet : c'est là qu'il
+         change le nom, la description et les membres (demande de l'utilisateur, 12/10/2026). -->
+    <button id="btn-gestion-projet" class="principal petit cache"
+      title="Gérer le projet : son nom, sa description et ses membres">Gestion du projet</button>
   </div>
 
   <section id="attente" class="alerte-attente cache" aria-live="polite"
@@ -229,6 +232,15 @@
           <button id="btn-theme-annuler" class="discret petit">Annuler</button>
         </div>
       </div>
+
+      <!-- Les personnes du projet : visibles d'emblée, avec leur statut (demande de
+           l'utilisateur, 12/10/2026). -->
+      <section id="panneau-membres-projet" class="carte panneau-membres" data-mobile="projet"
+        aria-labelledby="titre-panneau-membres-projet">
+        <h3 id="titre-panneau-membres-projet">Les personnes de ce projet</h3>
+        <p class="aide">Qui participe à ce projet, et avec quel rôle.</p>
+        <div id="apercu-membres-projet" class="apercu-membres"></div>
+      </section>
 
       <div class="actions-mobile" data-mobile="projet">
         <button id="btn-cadre-mobile" class="discret petit">Cadre de travail</button>
@@ -294,9 +306,28 @@
 <!-- ======================= MEMBRES DU PROJET ======================= -->
 <div id="vue-membres" class="voile cache" role="dialog" aria-modal="true" aria-labelledby="titre-membres">
   <div class="boite-nom large">
-    <h2 id="titre-membres">Membres du projet</h2>
+    <h2 id="titre-membres"><span id="titre-membres-texte">Membres du projet</span></h2>
     <p class="aide" id="membres-aide">Chaque personne a un rôle : administrateur, membre
       participant ou visiteur.</p>
+
+    <!-- Gestion du projet : visible seulement pour l'administrateur du projet. -->
+    <section id="gestion-projet" class="carte sous-carte cache" aria-labelledby="titre-gestion-projet">
+      <h3 id="titre-gestion-projet">Le projet</h3>
+      <div class="champs-gestion">
+        <label class="etiquette-champ" for="gestion-projet-nom">Nom du projet
+          <input id="gestion-projet-nom" maxlength="120"></label>
+        <label class="etiquette-champ" for="gestion-projet-description">Description
+          <input id="gestion-projet-description" maxlength="200"
+            placeholder="En une phrase (facultatif)"></label>
+      </div>
+      <p id="gestion-projet-etat" class="aide" role="status"></p>
+      <div class="barre-boutons">
+        <button id="gestion-projet-enregistrer" class="principal petit">Enregistrer</button>
+      </div>
+    </section>
+
+    <h3 class="titre-liste-membres">Les personnes <span id="membres-nombre"
+      class="compteur-membres"></span></h3>
     <div id="membres-liste" class="liste-membres"></div>
     <div id="membres-inviter" class="carte cache">
       <h3>Ajouter des personnes</h3>
@@ -333,13 +364,38 @@
       <span class="point" aria-hidden="true"></span>
       <span id="participants">—</span>
     </span>
-    <button id="btn-membres-theme" class="discret petit">Membres</button>
-    <button id="btn-renommer-theme" class="discret petit cache">Renommer</button>
+    <!-- « Gestion du groupe » n'apparaît QUE pour l'administrateur du groupe : c'est là
+         qu'il change le nom, la description et les membres (demande du 12/10/2026). -->
+    <button id="btn-gestion-groupe" class="principal petit cache"
+      title="Gérer le groupe : son nom, sa description et ses membres">Gestion du groupe</button>
     <button id="btn-supprimer-theme" class="discret danger petit cache">Supprimer</button>
   </div>
 
+  <!-- Les personnes du groupe : visibles d'emblée, avec leur statut (demande du 12/10/2026). -->
+  <section id="panneau-membres-theme" class="carte panneau-membres"
+    aria-labelledby="titre-panneau-membres-theme">
+    <h3 id="titre-panneau-membres-theme">Les personnes de ce groupe</h3>
+    <p class="aide">Qui participe à ce groupe, et avec quel rôle.</p>
+    <div id="apercu-membres-theme" class="apercu-membres"></div>
+  </section>
+
   <div id="zone-membres-theme" class="carte cache">
     <h3>Membres de ce groupe</h3>
+    <!-- Gestion du groupe : visible seulement pour ses administrateurs. -->
+    <section id="gestion-groupe" class="carte sous-carte cache" aria-labelledby="titre-gestion-groupe">
+      <h4 id="titre-gestion-groupe">Le groupe</h4>
+      <div class="champs-gestion">
+        <label class="etiquette-champ" for="gestion-groupe-titre">Nom du groupe
+          <input id="gestion-groupe-titre" maxlength="120"></label>
+        <label class="etiquette-champ" for="gestion-groupe-description">Description
+          <input id="gestion-groupe-description" maxlength="200"
+            placeholder="En une phrase (facultatif)"></label>
+      </div>
+      <p id="gestion-groupe-etat" class="aide" role="status"></p>
+      <div class="barre-boutons">
+        <button id="gestion-groupe-enregistrer" class="principal petit">Enregistrer</button>
+      </div>
+    </section>
     <p class="aide">Le rôle donné ici l'emporte sur le rôle du projet.</p>
     <div id="liste-membres-theme" class="liste-membres"></div>
     <div id="inviter-theme" class="carte cache">

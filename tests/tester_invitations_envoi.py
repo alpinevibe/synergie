@@ -82,16 +82,10 @@ def depuis(position: int) -> list[str]:
 
 
 def menage(compte_id, autres):
-    try:
-        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        from moteur import atelier
-        with atelier.connexion() as base:
-            for identifiant in [compte_id, *autres]:
-                for table in ("projet_membres", "theme_membres", "abonnements", "responsables"):
-                    base.execute(f"delete from {table} where compte = ?", (identifiant,))
-                base.execute("delete from comptes where id = ?", (identifiant,))
-    except Exception as erreur:
-        print(f"  (ménage impossible : {erreur})")
+    """Efface les comptes de l'essai — dans la VRAIE base du service (voir `menage_essai`)."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from menage_essai import effacer_comptes
+    effacer_comptes([compte_id, *autres])
 
 
 def principal() -> int:

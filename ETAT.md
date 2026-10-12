@@ -1,5 +1,70 @@
 # Synergie — état du projet
 
+## 12 octobre 2026 — gestion du projet et des groupes, et les personnes visibles
+
+Demandes de l'utilisateur : « 1. Créer un bouton “Gestion du projet” (uniquement accessible à
+l'administrateur du projet) pour gérer le nom et la description du projet ainsi que la gestion
+des membres. Améliorer l'affichage des membres, qui est superposé et tassé (affichage
+incorrect). 2. Dans chaque groupe, créer un bouton “Gestion du groupe” (uniquement accessible à
+l'administrateur du groupe) pour gérer le nom et la description du groupe ainsi que la gestion
+des membres. 3. Rendre visibles sur la page d'accueil du projet les personnes qui en font
+partie. Idem pour les groupes. Indiquer leur statut (Admin, membre, visiteur). »
+
+- **« Gestion du projet »** (`web/index.html` → `#btn-gestion-projet`, `#gestion-projet`) : un
+  bouton qui n'apparaît **que pour l'administrateur du projet**, dans l'entête du projet et dans
+  la barre du téléphone. Il ouvre la fenêtre des personnes devenue **« Gestion du projet »** :
+  le **nom** et la **description** du projet en champs (un « Enregistrer » les valide, par
+  `PUT /api/projets/<id>`), puis **les personnes** (rôles, retrait, ajout par adresse). Un
+  simple membre garde le même bouton, libellé **« Membres »**, en lecture seule : les gestion
+  sont cachées par le rôle **et** refusées par le serveur.
+- **« Gestion du groupe »** (`#btn-gestion-groupe`, `#gestion-groupe`) : le bouton des groupes
+  devient celui-là pour qui les administre, et le panneau s'ouvre sur **« Le groupe »** (nom,
+  description — `PUT /api/themes/<id>`) puis les membres. Le serveur est resserré en
+  conséquence : `PUT /api/themes/<id>` répondait « membre participant » ; il exige désormais
+  d'**administrer le groupe** (403 sinon). Les invitations et les rôles l'exigeaient déjà.
+- **Les deux boutons « Renommer »** (projet et groupe) disparaissent : ils passaient par des
+  fenêtres `prompt()` du navigateur, et faisaient doublon avec la gestion. `enregistrerTheme()`
+  est supprimée.
+- **Défaut d'affichage corrigé** — les membres « superposés et tassés » : `.liste-membres` a une
+  hauteur maximale, et ses lignes (des éléments flexibles) se **comprimaient** au lieu de
+  défiler ; les noms et les rôles se chevauchaient. `.liste-membres .membre { flex: 0 0 auto }`
+  rend à chaque personne sa hauteur, et c'est la liste qui défile.
+- **Les personnes, visibles d'emblée** (demande 3) : une carte **« Les personnes de ce projet »**
+  sur la page d'accueil du projet (`#apercu-membres-projet`) et **« Les personnes de ce
+  groupe »** sur la page de chaque groupe (`#apercu-membres-theme`) — pastille d'initiales,
+  prénom, et **statut** en pastille : **Admin**, **Membre**, **Visiteur**. Dans un groupe, la
+  liste est celle des **participants réels** : les membres du projet, avec le rôle donné **dans
+  le groupe** quand il y en a un (il l'emporte), plus ceux ajoutés directement au groupe ;
+  l'administrateur du projet reste « Admin » partout, comme le veut `role_effectif`.
+- **Contrôle automatisé ajouté** : `python3 tests/tester_gestion_projet_groupe.py` → **28
+  contrôles, 0 échec** — le bouton « Gestion du projet » pour l'administrateur et **pas** pour
+  un simple membre ; le nom et la description **réellement enregistrés** (vérifiés par l'API) ;
+  les lignes de la liste **jamais superposées ni tassées** (mesuré dans le navigateur, à
+  1280 × 900 comme à 390 × 740) ; « Gestion du groupe » pour l'administrateur du groupe,
+  **403 par l'API** pour un simple membre (le nom du groupe reste intact) ; les personnes et
+  leur statut visibles au projet comme au groupe. Captures
+  `captures/synergie-accueil-membres.png`, `synergie-gestion-projet.png`,
+  `synergie-accueil-groupe-membres.png`, `synergie-gestion-groupe.png`,
+  `synergie-membres-telephone.png`.
+- **Le ménage des essais sait enfin où est la base** : le banc de contrôle (playwright) ne
+  connaît pas PostgreSQL et effaçait une base SQLite vide — chaque essai laissait ses comptes
+  derrière lui. Nouveau module partagé `tests/menage_essai.py` : l'adresse de la base est lue
+  dans l'unité systemd du service et l'effacement est confié à l'interpréteur de l'application,
+  le seul qui ait le pilote. **Tous** les contrôles s'en servent désormais (`comptes`,
+  `fenêtres`, `membres ×2`, `invitations`, `chat`, `entête`, `temps réel`, `gestion`). Trente-et-un
+  comptes « Essai … » accumulés en production depuis le 09/10 ont été effacés : la base ne
+  contient plus que le projet réel et ses quatre groupes. Les contrôles PostgreSQL passent aussi :
+  `tester_synergie` (base `synergie_essai`) **96**, `tester_diffusion` **6/6**,
+  `tester_ecritures_simultanees` **72 écritures, aucune perdue**, `tester_flux` **8/8**.
+- **Non-régression** : `tester_synergie.py` **96**, `tester_fenetres.py` **10/10** (la mesure de
+  la barre de fermeture visait `.barre-boutons`, plusieurs fois présente maintenant : elle vise
+  la barre de la fenêtre elle-même), `tester_membres_affichage.py` **10/10**,
+  `tester_membres_a_la_volee.py` **10/10**, `tester_invitations_envoi.py` **11/11**,
+  `tester_chat_a_droite.py` **9/9**, `tester_entete_mobile.py` **6/6**,
+  `tester_comptes_identifiant.py` **8/8**, `tester_temps_reel.py` **5/5**. Deux contrôles des
+  membres cliquaient `#btn-membres-theme` : ils cliquent `#btn-gestion-groupe`.
+  `CACHE_VERSION` du service worker → **9**.
+
 ## 9 octobre 2026 — les membres, comme dans un groupe de discussion
 
 Demandes de l'utilisateur : « adopte un affichage du plus moderne des membres du projet. La case

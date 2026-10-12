@@ -56,18 +56,10 @@ def appel(chemin, corps=None, jeton=None, methode=None):
 
 
 def menage(compte_id: str, autres: list[str]) -> None:
-    """Efface tout ce que ce contrôle a créé : aucune trace dans l'application."""
-    try:
-        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        from moteur import atelier                  # noqa: E402 (même base que l'application)
-        with atelier.connexion() as base:
-            for identifiant in [compte_id, *autres]:
-                for table in ("projet_membres", "theme_membres", "abonnements",
-                              "responsables"):
-                    base.execute(f"delete from {table} where compte = ?", (identifiant,))
-                base.execute("delete from comptes where id = ?", (identifiant,))
-    except Exception as erreur:                     # le ménage ne doit jamais tout casser
-        print(f"  (ménage impossible : {erreur})")
+    """Efface les comptes de l'essai — dans la VRAIE base du service (voir `menage_essai`)."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from menage_essai import effacer_comptes
+    effacer_comptes([compte_id, *autres])
 
 
 def principal() -> int:
@@ -143,7 +135,7 @@ def principal() -> int:
             # ---- 3, 4 et 5 : plusieurs personnes d'un coup, au GROUPE -------------------
             print("\nAu groupe — trois personnes cochées d'un coup :")
             page = ouvrir(f"{BASE}/#t={groupe['id']}")
-            page.click("#btn-membres-theme")
+            page.click("#btn-gestion-groupe")
             page.wait_for_timeout(600)
             cases = page.eval_on_selector_all("#membre-theme-comptes input", "n => n.length")
             verifie("les personnes du projet se proposent au groupe", cases >= 3, cases)

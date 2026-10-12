@@ -51,6 +51,13 @@ def appel(chemin: str, corps=None, jeton=None):
         return json.loads(reponse.read().decode("utf-8"))
 
 
+def menage(compte_id: str) -> None:
+    """Efface le compte d'essai — dans la VRAIE base du service (voir `menage_essai`)."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from menage_essai import effacer_comptes
+    effacer_comptes([compte_id])
+
+
 def principal() -> int:
     try:
         compte = appel("/api/comptes", {"prenom": COMPTE})
@@ -143,6 +150,7 @@ def principal() -> int:
                 pass
         except Exception as erreur:  # noqa: BLE001 - le ménage ne masque pas le résultat
             print(f"  (ménage de {chemin} incomplet : {erreur})")
+    menage(compte["compte"]["id"])
 
     echecs = [titre for titre, ok in RESULTATS if not ok]
     print("\n" + "=" * 60)

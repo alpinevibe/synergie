@@ -298,7 +298,13 @@ def api_theme(identifiant):
         m_atelier.supprimer_theme(identifiant)
         return jsonify({"ok": True})
     if request.method == "PUT":
-        _theme(identifiant, ecriture=True)
+        # Le NOM et la DESCRIPTION du groupe se changent dans « Gestion du groupe »,
+        # réservée à ses administrateurs (demande de l'utilisateur, 12/10/2026).
+        theme_a_modifier = _theme(identifiant, ecriture=True)
+        if not m_projets.peut_administrer(
+                m_projets.role_effectif(theme_a_modifier.get("projet") or "", identifiant,
+                                        (_compte(requis=True) or {})["id"])):
+            abort(403, description="Seul un administrateur du groupe peut le modifier.")
         return jsonify(m_atelier.maj_theme(identifiant, request.get_json(silent=True) or {},
                                            _qui()))
     theme = _theme(identifiant)

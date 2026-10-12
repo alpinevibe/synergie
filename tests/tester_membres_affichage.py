@@ -54,16 +54,10 @@ def appel(chemin, corps=None, jeton=None, methode=None):
 
 
 def menage(identifiants):
-    try:
-        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        from moteur import atelier
-        with atelier.connexion() as base:
-            for identifiant in identifiants:
-                for table in ("projet_membres", "theme_membres", "abonnements", "responsables"):
-                    base.execute(f"delete from {table} where compte = ?", (identifiant,))
-                base.execute("delete from comptes where id = ?", (identifiant,))
-    except Exception as erreur:
-        print(f"  (ménage impossible : {erreur})")
+    """Efface les comptes de l'essai — dans la VRAIE base du service (voir `menage_essai`)."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from menage_essai import effacer_comptes
+    effacer_comptes(identifiants)
 
 
 MESURE = """(selecteur) => {
@@ -177,7 +171,7 @@ def principal() -> int:
             print("\nFenêtre des membres du groupe (même affichage) :")
             ctx2, page2, erreurs2 = ouvrir(jeton, "Essai affichage",
                                            route=f"#t={groupe['id']}")
-            page2.click("#btn-membres-theme")
+            page2.click("#btn-gestion-groupe")
             page2.wait_for_timeout(1000)
             g = page2.evaluate(MESURE, "#liste-membres-theme")
             verifie("le groupe présente le même affichage",

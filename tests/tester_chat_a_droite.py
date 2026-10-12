@@ -53,16 +53,10 @@ def appel(chemin, corps=None, jeton=None, methode=None):
 
 
 def menage(compte_id: str) -> None:
-    """Efface le compte d'essai de ce contrôle : aucune trace ne reste dans l'application."""
-    try:
-        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        from moteur import atelier                  # noqa: E402 (même base que l'application)
-        with atelier.connexion() as base:
-            for table in ("projet_membres", "theme_membres", "abonnements", "responsables"):
-                base.execute(f"delete from {table} where compte = ?", (compte_id,))
-            base.execute("delete from comptes where id = ?", (compte_id,))
-    except Exception as erreur:                     # le ménage ne doit jamais tout casser
-        print(f"  (ménage du compte d'essai impossible : {erreur})")
+    """Efface le compte d'essai — dans la VRAIE base du service (voir `menage_essai`)."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from menage_essai import effacer_comptes
+    effacer_comptes([compte_id])
 
 
 MESURE = """() => {
