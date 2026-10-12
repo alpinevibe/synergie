@@ -520,6 +520,11 @@ Vérifications en navigateur (Playwright, sur le site en ligne, avec deux partic
 
 ## Journal
 
+- **12/10/2026** — **Le tableau blanc reste un tableau blanc** : sur téléphone, l'application
+  remplaçait le tableau par une liste de post-it empilés. Le tableau s'affiche désormais
+  d'emblée, partout ; la liste reste offerte par le bouton « Revenir à la liste », et le choix
+  est gardé sur l'appareil.
+
 - **12/10/2026** — **Gestion du projet et des groupes** (nom, description, membres) réservée aux
   administrateurs, et **les personnes visibles** sur l'accueil du projet et de chaque groupe
   avec leur statut ; affichage des membres corrigé (lignes superposées).

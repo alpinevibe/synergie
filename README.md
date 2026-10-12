@@ -353,6 +353,31 @@ Vérifications : `python3 tests/tester_gestion_projet_groupe.py` → **28 contr�
 
 ---
 
+## Le tableau blanc reste un tableau blanc (12 octobre 2026)
+
+Demande de l'utilisateur : « je veux que tu gardes le concept de tableau blanc pour les
+post-it … tu avais modifié la disposition pour mettre les post-it les uns en dessous des
+autres, et ça n'a pas de sens de fonctionner comme ça : faut que ça reste un tableau blanc. »
+
+En **vue téléphone**, l'application affichait en effet une **liste** de notes (post-it
+empilés les uns sous les autres) à la place du tableau. Désormais :
+
+- le **tableau blanc s'affiche d'emblée**, sur téléphone comme sur ordinateur — les notes
+  restent **posées librement** à leurs coordonnées, et le tableau se déplace et se zoome ;
+- la liste reste **offerte** par le bouton « Revenir à la liste » (placé sous le tableau),
+  et son libellé dit toujours ce qu'elle fait (« Voir le tableau » / « Revenir à la liste ») ;
+- le choix est **gardé sur l'appareil** (préférence locale) : si quelqu'un préfère la liste,
+  elle revient à la réouverture — mais le tableau reste le défaut, y compris pour une
+  installation neuve.
+
+Vérifications : `python3 tests/tester_tableau_blanc.py` → **13/13** (téléphone 430 px et
+ordinateur 1280 px : tableau affiché d'emblée, post-it côte à côte et non empilés, bascule
+et retour par le bouton, choix gardé, aucune erreur JavaScript) ; `tester_synergie.py`
+96/96 ; `tester_gestion_projet_groupe.py` 28/28 ; `tester_fenetres.py` 10/10 ;
+`tester_entete_mobile.py` 6/6.
+
+---
+
 ## Les notifications réglées sur son propre compte (12 octobre 2026)
 
 Demande de l'utilisateur : « pouvoir gérer les notifications liées à son propre compte. Se

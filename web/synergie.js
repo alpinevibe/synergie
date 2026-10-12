@@ -341,6 +341,33 @@
     return mediaEtroit.matches || /Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent);
   }
 
+  /* LE TABLEAU BLANC RESTE UN TABLEAU BLANC (demande de l'utilisateur, 12/10/2026).
+     Sur téléphone, l'application remplaçait le tableau par une LISTE de notes — les post-it
+     empilés les uns sous les autres — ce qui n'a plus rien d'un tableau blanc. Le tableau
+     s'affiche donc par défaut, sur tous les appareils ; la liste reste accessible d'un
+     bouton (« Revenir à la liste »), et le choix est gardé sur l'appareil. */
+  const CLE_TABLEAU = 'synergie.tableau';
+
+  function tableauVoulu() {
+    try {
+      return localStorage.getItem(CLE_TABLEAU) !== 'non';   // tableau par défaut
+    } catch (erreur) {
+      return true;
+    }
+  }
+
+  function majBoutonTableau() {
+    const bouton = $('#btn-voir-tableau');
+    if (!bouton) return;
+    bouton.textContent = document.body.dataset.tableau === 'non'
+      ? 'Voir le tableau' : 'Revenir à la liste';
+  }
+
+  function appliquerChoixTableau() {
+    document.body.dataset.tableau = tableauVoulu() ? 'oui' : 'non';
+    majBoutonTableau();
+  }
+
   /** Première mise en place : on choisit la version adaptée à l'appareil. */
   function afficherMode() { appliquerMode(); }
 
@@ -350,6 +377,7 @@
     const barre = $('#nav-mobile');
     if (barre) barre.classList.toggle('cache', !mobile);
     if (mobile) afficherSectionMobile(sectionMobile);
+    appliquerChoixTableau();          // le tableau blanc reste le tableau blanc
     if (theme) dessinerNotes();
   }
 
@@ -929,11 +957,14 @@
     if (!ordonnees.length) {
       zone.append(element('p', { classe: 'vide',
         texte: 'Aucune note pour le moment : appuyez sur « + Note ».' }));
+      majBoutonTableau();
+      $('#btn-voir-tableau').classList.remove('cache');
       return;
     }
     ordonnees.forEach((note) => zone.append(carteNoteMobile(note)));
     const bouton = $('#btn-voir-tableau');
     if (bouton) bouton.classList.remove('cache');
+    majBoutonTableau();
   }
 
   function dessinerNotes() {
@@ -2757,10 +2788,15 @@
     });
     mediaEtroit.addEventListener('change', appliquerMode);
     $('#btn-voir-tableau').addEventListener('click', () => {
-      const tableau = document.body.dataset.tableau === 'oui';
-      document.body.dataset.tableau = tableau ? 'non' : 'oui';
-      $('#btn-voir-tableau').textContent = tableau ? 'Voir le tableau' : 'Revenir à la liste';
-      if (!tableau) appliquerVue();
+      const versListe = document.body.dataset.tableau !== 'non';
+      document.body.dataset.tableau = versListe ? 'non' : 'oui';
+      try {
+        localStorage.setItem(CLE_TABLEAU, versListe ? 'non' : 'oui');
+      } catch (erreur) {
+        // Navigation privée : on ne garde pas le choix, le tableau reste l'affichage par défaut.
+      }
+      majBoutonTableau();
+      if (!versListe) appliquerVue();
     });
     // Au clavier : Échap ferme la fenêtre ouverte et rend le focus au bouton qui l'a ouverte.
     document.addEventListener('keydown', (evenement) => {
