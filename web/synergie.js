@@ -2365,6 +2365,9 @@
        12/10/2026). L'administrateur d'un groupe gère ses participants (membre participant,
        visiteur, retrait), mais le choix « Administrateur » ne lui est pas proposé. */
     const nommeAdmin = portee === 'projet' || roleProjet === 'admin';
+    // Le prénom se corrige dans « Gestion du projet », et depuis un groupe seulement pour
+    // l'administrateur du projet (le nom vaut partout dans Synergie).
+    const renomme = portee === 'projet' || roleProjet === 'admin';
     const choix = element('div', { classe: 'roles-choix' });
     roles.filter((r) => r.cle !== 'admin' || nommeAdmin).forEach((r) => {
       const pastille = element('button', { classe: 'role-choix' + (r.cle === membre.role ? ' actif' : ''),
@@ -2392,6 +2395,29 @@
     const actions = element('div', { classe: 'membre-actions cache' },
       element('span', { classe: 'aide', texte: 'Rôle ' + quoi }),
       choix, retirer);
+    /* CORRIGER LE PRÉNOM (demande de l'utilisateur, 13/10/2026). Le prénom est le nom affiché
+       partout dans Synergie : un administrateur du projet peut donc le corriger (faute de
+       frappe, changement de nom) sans recréer le compte — la personne reste connectée et
+       garde son accès. Dans un GROUPE, le renommage reste réservé à l'administrateur du
+       projet : le nom vaut pour toute l'application, pas seulement ici. */
+    if (renomme) {
+      const champ = element('input', { attrs: { type: 'text', maxlength: '60',
+        value: membre.prenom || '', 'aria-label': 'Prénom du participant' } });
+      const bouton = element('button', { classe: 'discret petit', texte: 'Renommer',
+        attrs: { type: 'button' } });
+      bouton.addEventListener('click', async () => {
+        const nouveau = (champ.value || '').trim();
+        if (!nouveau) { toast('Indiquez le nouveau prénom.'); return; }
+        if (nouveau === membre.prenom) { toast('C\'est déjà ce prénom.'); return; }
+        try {
+          await appel(chemin, { methode: 'PUT', corps: { prenom: nouveau } });
+          await rafraichir();
+          toast(nouveau + ' : le prénom est corrigé.');
+        } catch (erreur) { toast(erreur.message); }
+      });
+      actions.append(element('div', { classe: 'renommer-membre' },
+        element('span', { classe: 'aide', texte: 'Prénom affiché' }), champ, bouton));
+    }
     if (portee === 'theme' && !nommeAdmin) {
       // Dire POURQUOI le choix n'est pas là : sans cela, on croit à un oubli.
       actions.append(element('p', { classe: 'aide fin',

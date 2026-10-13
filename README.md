@@ -353,6 +353,41 @@ Vérifications : `python3 tests/tester_gestion_projet_groupe.py` → **28 contr�
 
 ---
 
+## Corriger le prénom d'un participant (13 octobre 2026)
+
+Demande de l'utilisateur : « je veux avoir la possibilité de modifier le Prénom des
+participants dans Synergie en tant qu'administrateur ».
+
+Le prénom est le **nom affiché partout** dans Synergie : discussion, présence, listes de
+membres, alertes par courriel. Il devait donc pouvoir être corrigé (faute de frappe à
+l'inscription, changement de nom) **sans recréer le compte**.
+
+- dans **« Gestion du projet »**, la fiche d'un participant porte maintenant **« Prénom
+  affiché »** et un bouton **« Renommer »** ;
+- **on ne touche ni au jeton ni à l'identifiant personnel** : la personne reste connectée et
+  garde son accès, seul son nom change ;
+- c'est **l'administrateur du projet** qui corrige un prénom — dans un groupe, cela reste
+  réservé à lui, car le nom vaut pour toute l'application et pas seulement pour ce groupe ;
+  un administrateur de groupe gère les rôles, pas les noms ;
+- un prénom vide n'est jamais enregistré, et un prénom trop long (`> 60` signes) est refusé
+  avec un message clair ;
+- l'ancien nom reste au **journal** (« compte_renomme », avec « avant → après »).
+
+Côté serveur : `moteur/equipe.renommer_compte()` porte la règle (saisie, journal), et les deux
+routes de membre l'exposent — `PUT /api/projets/<id>/membres/<membre>` (déjà réservée à
+l'administrateur du projet) et `PUT /api/themes/<id>/membres/<membre>` (réservée à
+l'administrateur du projet pour le prénom).
+
+Vérifications : `python3 tests/tester_renommer_membre.py` → **18/18**, en local puis sur le site
+publié (moteur : jeton et identifiant conservés, saisies refusées, trace au journal ; API :
+renommage par l'administrateur, refus d'un simple membre et d'un administrateur de groupe, la
+personne renommée garde son accès ; écran : le champ n'apparaît que pour l'administrateur) ;
+`tester_synergie.py` 96/96 ; `tester_roles_groupes.py` 18/18 ;
+`tester_gestion_projet_groupe.py` 28/28 ; `tester_membres_affichage.py` 10/10 ;
+`tester_membres_a_la_volee.py` 10/10 ; `tester_notifications.py` 20/20 ;
+`tester_documents_depot.py` 8/8 ; `tester_tableau_blanc.py` 13/13 ;
+`tester_fenetres.py` 10/10 ; `tester_comptes_identifiant.py` 8/8.
+
 ## Plusieurs documents d'un coup, et par glisser-déposer (12 octobre 2026)
 
 Demande de l'utilisateur : « permettre l'ajout de plusieurs documents en même temps et

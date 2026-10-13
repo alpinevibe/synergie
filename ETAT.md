@@ -520,6 +520,11 @@ Vérifications en navigateur (Playwright, sur le site en ligne, avec deux partic
 
 ## Journal
 
+- **13/10/2026** — **Corriger le prénom d'un participant** : dans « Gestion du projet », la
+  fiche d'un membre porte « Prénom affiché » et un bouton « Renommer ». La personne garde son
+  jeton et son identifiant personnel (elle reste connectée) ; seul l'administrateur du projet
+  renomme, et l'ancien nom reste au journal.
+
 - **12/10/2026** — **Dépôt de documents** : plusieurs fichiers d'un coup, et par
   **glisser-déposer** (dans un groupe comme dans le projet), zone qui s'allume au survol ;
   un fichier refusé n'empêche plus les autres de partir.

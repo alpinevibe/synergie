@@ -268,6 +268,11 @@ def api_projet_membre_un(identifiant, membre):
         role = corps.get("role")
         if role is not None and role not in m_projets.ROLES:
             return jsonify({"erreur": "Rôle inconnu."}), 400
+        # Le PRÉNOM se corrige ici (demande de l'utilisateur, 13/10/2026). Cette route exige
+        # déjà d'administrer le projet : c'est donc bien un administrateur qui renomme.
+        prenom = corps.get("prenom")
+        if isinstance(prenom, str) and prenom.strip():
+            m_equipe.renommer_compte(membre, prenom, par=_qui())
         notifier = corps.get("notifier")
         membre_pose = m_projets.definir_membre_projet(
             identifiant, membre, role, None if notifier is None else bool(notifier),
@@ -400,12 +405,20 @@ def api_theme_membre_un(identifiant, membre):
     # (demande de l'utilisateur, 12/10/2026 : « seul l'administrateur d'un projet peut nommer
     # un administrateur de groupe »). Un administrateur de groupe ne peut donc ni nommer un
     # autre administrateur, ni retirer l'administration à quelqu'un.
-    nomme = m_projets.peut_nommer_admin_de_groupe(
+    admin_projet = m_projets.peut_nommer_admin_de_groupe(
         m_projets.role_du_projet(projet, acteur["id"]))
+    # Renommer un participant se décide aussi au niveau du PROJET (demande du 13/10/2026) :
+    # le prénom vaut pour toute l'application, pas seulement pour ce groupe.
+    prenom = corps.get("prenom")
+    if isinstance(prenom, str) and prenom.strip():
+        if not admin_projet:
+            abort(403, description="Seul l'administrateur du projet peut renommer un "
+                                   "participant.")
+        m_equipe.renommer_compte(membre, prenom, par=_qui())
     deja_admin = next((m["role"] == "admin"
                        for m in m_projets.membres_du_theme(identifiant)
                        if m["compte"] == membre), False)
-    if not nomme and ((role == "admin" and not deja_admin) or (deja_admin and role != "admin")):
+    if not admin_projet and ((role == "admin" and not deja_admin) or (deja_admin and role != "admin")):
         abort(403, description="Seul l'administrateur du projet peut nommer — ou retirer — "
                                "un administrateur de groupe.")
     notifier = corps.get("notifier")

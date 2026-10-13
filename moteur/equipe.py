@@ -251,6 +251,40 @@ def trouver_par_prenom(prenom: str) -> dict | None:
     return _compte_public(ligne) if ligne else None
 
 
+#: Longueur maximale d'un prénom : le nom s'affiche dans les listes, les messages et les
+#: pastilles — au-delà, l'affichage déborde.
+PRENOM_MAX = 60
+
+
+def renommer_compte(identifiant: str, prenom: str, par: str = "") -> dict:
+    """Corrige le PRÉNOM d'un participant (demande de l'utilisateur, 13/10/2026).
+
+    Le prénom est le nom affiché partout dans Synergie : messages, présence, listes de
+    membres, alertes par courriel. Un administrateur doit donc pouvoir le corriger (faute de
+    frappe à l'inscription, changement de nom) sans recréer le compte.
+
+    On ne touche NI au jeton NI à l'identifiant personnel : la personne reste connectée et
+    garde son accès ; seul son nom change. L'ancien nom reste au journal. C'est le serveur qui
+    vérifie le rôle de celui qui agit — cette fonction ne connaît que la règle de saisie.
+    """
+    prenom = (prenom or "").strip()
+    if not prenom:
+        raise ValueError("Le prénom est obligatoire.")
+    if len(prenom) > PRENOM_MAX:
+        raise ValueError(f"Le prénom est trop long (maximum {PRENOM_MAX} caractères).")
+    ancien = lire_compte(identifiant=identifiant)
+    if ancien is None:
+        raise KeyError("Compte inconnu.")
+    if (ancien.get("prenom") or "") == prenom:
+        return ancien
+    with connexion() as base:
+        base.execute("update comptes set prenom = ?, maj_le = ? where id = ?",
+                     (prenom, maintenant(), identifiant))
+    journaliser("", par or "un administrateur", "compte_renomme", identifiant,
+                f"{ancien.get('prenom') or ''} → {prenom}", diffuser_aussi=False)
+    return lire_compte(identifiant=identifiant)
+
+
 # Les « responsables » et « abonnements » du 05/10/2026 sont remplacés par les RÔLES et
 # les notifications portées par les projets et les groupes (moteur/projets.py, 08/10/2026).
 
