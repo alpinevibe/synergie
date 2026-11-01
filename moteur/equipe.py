@@ -29,7 +29,7 @@ from .atelier import (DONNEES, _identifiant, connexion, diffuser, journaliser, m
 
 CONFIG_MAIL = "/srv/bases/config/mail.conf"
 CONFIG_MSMTP = "/srv/bases/config/synergie-msmtp.conf"
-VALEUR_COFFRE = "/srv/coffre/valeur.sh"          # lecture des secrets (jamais affichés)
+VALEUR_COFFRE = "/srv/coffre/secret-smtp.sh"          # lecture des secrets (jamais affichés)
 JOURNAL_MAIL = str(DONNEES / "journal-alertes.log")
 DELAI_ENTRE_ALERTES = 600          # 10 minutes entre deux alertes pour le même thème
 

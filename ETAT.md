@@ -447,7 +447,7 @@ collaboratif.** Le générateur de trames devient un outil parmi d'autres, rang�
 
 ### Les fiches de poste (thème « Fiches de poste »)
 Organisation retenue : **1)** le vocabulaire d'abord (référentiel des **codes horaires**,
-couleurs d'Hermes, installé au départ : M03, S03, J13, N02, RH, DS, FEJ, RTT) ; **2)** les
+couleurs d'Horia, installé au départ : M03, S03, J13, N02, RH, DS, FEJ, RTT) ; **2)** les
 **fiches** se lisent **par tranche horaire** (libellé, code, début, fin, durée, fréquence,
 qui, remarque) ; **3)** chaque fiche a un état **à l'étude → proposée → validée** (qui,
 quand) ; **4)** la **charge par code** est calculée et affichée ; **5)** on **duplique** une
@@ -467,7 +467,7 @@ fiche pour créer une nouvelle version, sans perdre l'ancienne.
 - **Horaires variés** : la cible d'une personne est un nombre d'HEURES par semaine, pas un
   nombre de jours — on peut donc mêler des journées de 7 h 30 et de 12 h (cinq courtes ou
   trois longues reviennent au même), et n'importe quelle configuration est acceptée.
-- **Couleurs d'Hermes** : chaque poste reçoit le code et la couleur du planning habituel
+- **Couleurs d'Horia** : chaque poste reçoit le code et la couleur du planning habituel
   (M03 matin jaune, S03 après-midi cyan, J13 journée longue magenta, N02 nuit violet,
   RH repos vert) ; les cases de la grille portent le code sur sa couleur, avec une légende,
   et le code de chaque poste peut être choisi dans la page. Le dépassement des 35 h par semaine n'est pas un
